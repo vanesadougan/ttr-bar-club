@@ -891,7 +891,8 @@ function renderMenuWithCart(mc){
     <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="placeOrder()">Confirmar pedido</button>
     <button class="btn btn-ghost btn-block" style="margin-top:6px;color:var(--danger);border-color:var(--danger)" onclick="cancelCart()">Cancelar pedido</button>`;
   }
-  const hasOrders=Object.values(DB.orders).some(o=>o.tableId===C.customerTableId&&o.status!=='cobrado');
+  const recentCutoff=Date.now()-18*60*60*1000;
+  const hasOrders=Object.values(DB.orders).some(o=>o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=recentCutoff);
   if(hasOrders)cartH+=`<button class="btn btn-outline btn-block" style="margin-top:8px" onclick="goToBill()">Solicitar la cuenta</button>`;
   // 🛎 Llamar al mozo — always visible
   const tableObj=DB.tables[C.customerTableId];
@@ -974,12 +975,14 @@ function renderConfirmScreen(mc){
 window.backToMenu=()=>{C.cart={};C.custDishId=null;C.typePickerDishId=null;C.customerStep='menu';render();};
 
 window.goToBill=()=>{
-  Object.entries(DB.orders).forEach(([k,o])=>{if(o.tableId===C.customerTableId&&o.status!=='cobrado')update(ref(db,`orders/${k}`),{status:'billed',billRequested:true});});
+  const billCutoff=Date.now()-18*60*60*1000;
+  Object.entries(DB.orders).forEach(([k,o])=>{if(o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=billCutoff)update(ref(db,`orders/${k}`),{status:'billed',billRequested:true});});
   // build survey items excluding dishes from noRating categories
   const cats=getCats();
   const noRatingCatKeys=new Set(cats.filter(c=>c.noRating).map(c=>c._key));
   const seen={};
-  Object.values(DB.orders).filter(o=>o.tableId===C.customerTableId).forEach(o=>(o.items||[]).forEach(i=>{
+  const srvCutoff=Date.now()-18*60*60*1000;
+  Object.values(DB.orders).filter(o=>o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=srvCutoff).forEach(o=>(o.items||[]).forEach(i=>{
     // find dish to check its category
     const dish=Object.values(DB.dishes).find(d=>d.name===i.name);
     if(dish&&noRatingCatKeys.has(dish.cat))return; // skip noRating categories
@@ -989,7 +992,8 @@ window.goToBill=()=>{
 };
 
 function renderBillScreen(mc){
-  const tableOrders=Object.values(DB.orders).filter(o=>o.tableId===C.customerTableId);
+  const cutoff=Date.now()-18*60*60*1000;
+  const tableOrders=Object.values(DB.orders).filter(o=>o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=cutoff);
   const isIndividual=tableOrders.some(o=>o.orderMode==='individual');
   let h=`<div class="content"><div class="bill-screen"><div class="bill-title">Tu cuenta</div>`;
   if(isIndividual){
@@ -1036,7 +1040,8 @@ window.submitBill=async()=>{
   }
   // mark orders cobrado + save payment method
   const pm=C.survey.paymentMethod||'efectivo';
-  Object.entries(DB.orders).forEach(([k,o])=>{if(o.tableId===C.customerTableId&&o.status!=='cobrado')update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm});});
+  const subCutoff=Date.now()-18*60*60*1000;
+  Object.entries(DB.orders).forEach(([k,o])=>{if(o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=subCutoff)update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm});});
   C.customerStep='thanks';render();
 };
 function renderThanksScreen(mc){
