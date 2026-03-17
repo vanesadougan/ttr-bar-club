@@ -442,7 +442,7 @@ function renderDishesTab(){
     <div class="form-group"><label>Nombre</label><input placeholder="Nombre del plato" value="${f.name}" oninput="uF('dish','name',this.value)"></div>
     <div class="form-group"><label>Descripción</label><textarea oninput="uF('dish','desc',this.value)">${f.desc}</textarea></div>
     <div class="form-group"><label>Precio normal ($)</label><input type="number" placeholder="0" value="${f.price}" oninput="uF('dish','price',this.value)"></div>`;
-  if(isPromo){formH+=`<div class="promo-section"><div style="font-size:13px;font-weight:500;color:#c2410c;margin-bottom:8px">🔥 Promo del día</div><div class="form-group" style="margin-bottom:6px"><label style="color:#92400e">Descuento (%)</label><input type="number" min="0" max="99" placeholder="Ej: 20" value="${f.promoDiscount||''}" oninput="uF('dish','promoDiscount',this.value)" style="border-color:#fed7aa"></div>${finalPrice?`<div class="discount-preview"><span style="color:var(--muted)">Normal:</span><span style="text-decoration:line-through;color:var(--muted)">$${Number(f.price).toLocaleString()}</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">-${f.promoDiscount}%</span><strong style="color:var(--accent)">$${finalPrice.toLocaleString()}</strong></div>`:'<div style="font-size:12px;color:#92400e;margin-top:4px">Ingresá precio y descuento.</div>'}</div>`;}
+  if(isPromo){formH+=`<div class="promo-section"><div style="font-size:13px;font-weight:500;color:#c2410c;margin-bottom:8px">🔥 Promo del día</div><div class="form-group" style="margin-bottom:6px"><label style="color:#92400e">Descuento (%)</label><input type="number" min="0" max="99" placeholder="Ej: 20" value="${f.promoDiscount||''}" oninput="uF('dish','promoDiscount',this.value)" style="border-color:#fed7aa"></div>${finalPrice?`<div class="discount-preview" id="discount-preview"><span style="color:var(--muted)">Normal:</span><span style="text-decoration:line-through;color:var(--muted)">$${Number(f.price).toLocaleString()}</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">-${f.promoDiscount}%</span><strong style="color:var(--accent)">$${finalPrice.toLocaleString()}</strong></div>`:'<div class="discount-preview" id="discount-preview" style="font-size:12px;color:#92400e;margin-top:4px">Ingresá precio y descuento.</div>'}</div>`;}
   formH+=`<div class="ing-section"><div style="display:flex;align-items:center;gap:8px;margin-bottom:${f.customizable?'10':'0'}px"><label class="toggle-switch"><input type="checkbox" ${f.customizable?'checked':''} onchange="toggleCustomizable(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Personalizar ingredientes</span></div>${f.customizable?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">El comensal podrá destildar los ingredientes que no desea.</div><div class="ing-list">${ings.map((ing,i)=>`<div class="ing-chip">${ing}<button class="ing-chip-remove" onclick="removeIngredient(${i})">×</button></div>`).join('')}${ings.length===0?`<span style="font-size:12px;color:var(--muted)">Sin ingredientes aún</span>`:''}</div><div class="ing-add-row"><input id="ing-input" placeholder="Ej: Cebolla, Tomate..." value="${C.newIngInput}"><button class="btn btn-primary btn-sm" onclick="addIngredient()">+ Agregar</button></div>`:`<div style="font-size:12px;color:var(--muted);margin-top:8px">Activá para definir ingredientes personalizables.</div>`}</div>
   <div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="${C.editingDish?'saveEditDish()':'addDish()'}">${C.editingDish?'Guardar cambios':'Agregar plato'}</button>${C.editingDish?`<button class="btn btn-ghost" onclick="cancelEditDish()">Cancelar</button>`:''}</div></div>`;
 
@@ -508,12 +508,20 @@ function renderCategoriesTab(){
 
   let listH=`<div class="card">
     <div class="card-title">Categorías (${cats.length})</div>
-    <div style="display:flex;flex-direction:column;gap:8px;max-height:380px;overflow-y:auto">`;
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Usá las flechas para cambiar el orden en el menú</div>
+    <div style="display:flex;flex-direction:column;gap:8px;max-height:420px;overflow-y:auto">`;
   if(cats.length===0){listH+=`<div class="empty-state">No hay categorías</div>`;}
-  cats.forEach(cat=>{
+  cats.forEach((cat,idx)=>{
     const dishCount=Object.values(DB.dishes).filter(d=>d.cat===cat._key).length;
-    listH+=`<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)">
-      <div style="font-size:24px;width:36px;text-align:center">${cat.icon}</div>
+    const isFirst=idx===0;
+    const isLast=idx===cats.length-1;
+    listH+=`<div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)">
+      <!-- order arrows -->
+      <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
+        <button onclick="moveCat('${cat._key}',-1)" ${isFirst?'disabled':''} style="width:22px;height:22px;border-radius:4px;border:0.5px solid var(--border);background:${isFirst?'transparent':'var(--card)'};color:${isFirst?'var(--border)':'var(--muted)'};cursor:${isFirst?'default':'pointer'};font-size:11px;display:flex;align-items:center;justify-content:center;line-height:1">▲</button>
+        <button onclick="moveCat('${cat._key}',1)" ${isLast?'disabled':''} style="width:22px;height:22px;border-radius:4px;border:0.5px solid var(--border);background:${isLast?'transparent':'var(--card)'};color:${isLast?'var(--border)':'var(--muted)'};cursor:${isLast?'default':'pointer'};font-size:11px;display:flex;align-items:center;justify-content:center;line-height:1">▼</button>
+      </div>
+      <div style="font-size:22px;width:32px;text-align:center;flex-shrink:0">${cat.icon}</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:14px;font-weight:500">${cat.label}</div>
         <div style="font-size:12px;color:var(--muted)">${dishCount} plato${dishCount!==1?'s':''}${cat.isPromo?' · 🔥 Promo':''}</div>
@@ -624,8 +632,28 @@ function renderHistoryTab(){
 window.uF=(type,field,val)=>{
   const o=type==='dish'?(C.editingDish||C.newDish):(C.editingTable||C.newTable);
   o[field]=(field==='price'||field==='capacity'||field==='promoDiscount')?Number(val):val;
-  if(type==='dish'&&(field==='price'||field==='promoDiscount'||field==='cat'))render();
+  // only re-render on category change (dropdown); for typed fields update preview inline
+  if(type==='dish'&&field==='cat'){render();return;}
+  if(type==='dish'&&(field==='price'||field==='promoDiscount')){
+    // update discount preview without full re-render
+    updateDiscountPreview();
+  }
 };
+
+function updateDiscountPreview(){
+  const f=C.editingDish||C.newDish;
+  const cats=getCats();
+  const selCat=cats.find(c=>c._key===f.cat);
+  const isPromo=selCat&&selCat.isPromo;
+  const el=document.getElementById('discount-preview');
+  if(!el)return;
+  if(isPromo&&f.promoDiscount>0&&f.price){
+    const fp=Math.round(Number(f.price)*(1-Number(f.promoDiscount)/100));
+    el.innerHTML=`<span style="color:var(--muted)">Normal:</span><span style="text-decoration:line-through;color:var(--muted)">$${Number(f.price).toLocaleString()}</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">-${f.promoDiscount}%</span><strong style="color:var(--accent)">$${fp.toLocaleString()}</strong>`;
+  } else {
+    el.innerHTML='<div style="font-size:12px;color:#92400e">Ingresá precio y descuento.</div>';
+  }
+}
 window.toggleCustomizable=val=>{const f=C.editingDish||C.newDish;f.customizable=val;if(!f.ingredients)f.ingredients=[];render();};
 window.addIngredient=()=>{const inp=document.getElementById('ing-input');const val=(inp?inp.value:C.newIngInput).trim();if(!val)return;const f=C.editingDish||C.newDish;if(!f.ingredients)f.ingredients=[];val.split(',').map(v=>v.trim()).filter(Boolean).forEach(v=>{if(!f.ingredients.includes(v))f.ingredients.push(v);});C.newIngInput='';render();};
 window.removeIngredient=idx=>{const f=C.editingDish||C.newDish;f.ingredients.splice(idx,1);render();};
@@ -657,7 +685,8 @@ window.toggleAvailability=(key,currentlyUnavail)=>{
 window.uCat=(field,val)=>{
   const o=C.editingCat||C.newCat;
   o[field]=val;
-  render();
+  // only re-render for boolean toggle, not for text typing
+  if(typeof val==='boolean') render();
 };
 window.addCat=()=>{
   const c=C.newCat;
@@ -680,6 +709,21 @@ window.deleteCat=(key,dishCount)=>{
     return;
   }
   if(confirm('¿Eliminar esta categoría?'))remove(ref(db,`categories/${key}`));
+};
+
+window.moveCat=(key,direction)=>{
+  const cats=getCats();
+  const idx=cats.findIndex(c=>c._key===key);
+  if(idx===-1)return;
+  const swapIdx=idx+direction;
+  if(swapIdx<0||swapIdx>=cats.length)return;
+  // swap order values between the two categories
+  const a=cats[idx];
+  const b=cats[swapIdx];
+  const aOrder=a.order!==undefined?a.order:idx;
+  const bOrder=b.order!==undefined?b.order:swapIdx;
+  update(ref(db,`categories/${a._key}`),{order:bOrder});
+  update(ref(db,`categories/${b._key}`),{order:aOrder});
 };
 
 // ══════════════════════════════════════════════════
