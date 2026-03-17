@@ -600,7 +600,7 @@ function renderOrdersTab(){
   const pendingAlerts=Object.entries(DB.alerts||{}).filter(([,a])=>a.status==='pending');
   let h=`<div class="metrics">
     <div class="metric"><div class="metric-val">${orders.filter(o=>o.status==='pending').length}</div><div class="metric-lbl">Pendientes</div></div>
-    <div class="metric"><div class="metric-val">${orders.filter(o=>o.status==='ready').length}</div><div class="metric-lbl">Listos</div></div>
+    <div class="metric"><div class="metric-val">${orders.filter(o=>o.status==='delivered').length}</div><div class="metric-lbl">Entregados</div></div>
     <div class="metric"><div class="metric-val">${orders.filter(o=>o.billRequested&&o.status!=='delivered').length}</div><div class="metric-lbl">Piden cuenta</div></div>
     <div class="metric" style="${pendingAlerts.length>0?'background:#fef3c7;border-color:#fcd34d':''}"><div class="metric-val" style="${pendingAlerts.length>0?'color:#92400e':''}">${pendingAlerts.length}</div><div class="metric-lbl">🛎 Llamadas</div></div>
   </div>
