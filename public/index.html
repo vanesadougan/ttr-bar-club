@@ -259,7 +259,7 @@ let C = {
   historyFilter:'todos', survey:{items:[],ratings:{}},
   editingDish:null, editingTable:null,
   newDish:{name:'',desc:'',price:'',cat:'entrada',emoji:'🍽️',customizable:false,ingredients:[],promoDiscount:0},
-  newIngInput:'', newTable:{label:'',capacity:''},
+  newIngInput:'', newTypeInput:'', typePickerDishId:null, newTable:{label:'',capacity:''},
   newCat:{label:'',icon:'🍽️',isPromo:false}, editingCat:null,
 };
 
@@ -433,16 +433,26 @@ function renderDishesTab(){
 
   let formH=`<div class="card" style="overflow-y:auto;max-height:680px">
     <div class="card-title">${C.editingDish?'Editar plato':'Agregar plato'}</div>
-    <div class="two-col">
-      <div class="form-group"><label>Emoji</label><input value="${f.emoji}" oninput="uF('dish','emoji',this.value)"></div>
-      <div class="form-group"><label>Categoría</label><select onchange="uF('dish','cat',this.value)">
-        ${cats.length===0?'<option value="">Sin categorías</option>':cats.map(c=>`<option value="${c._key}"${f.cat===c._key?' selected':''}>${c.icon} ${c.label}</option>`).join('')}
-      </select></div>
-    </div>
+    <div class="form-group"><label>Categoría</label><select onchange="uF('dish','cat',this.value)">
+      ${cats.length===0?'<option value="">Sin categorías</option>':cats.map(c=>`<option value="${c._key}"${f.cat===c._key?' selected':''}>${c.icon} ${c.label}</option>`).join('')}
+    </select></div>
     <div class="form-group"><label>Nombre</label><input placeholder="Nombre del plato" value="${f.name}" oninput="uF('dish','name',this.value)"></div>
     <div class="form-group"><label>Descripción</label><textarea oninput="uF('dish','desc',this.value)">${f.desc}</textarea></div>
     <div class="form-group"><label>Precio normal ($)</label><input type="number" placeholder="0" value="${f.price}" oninput="uF('dish','price',this.value)"></div>`;
   if(isPromo){formH+=`<div class="promo-section"><div style="font-size:13px;font-weight:500;color:#c2410c;margin-bottom:8px">🔥 Promo del día</div><div class="form-group" style="margin-bottom:6px"><label style="color:#92400e">Descuento (%)</label><input type="number" min="0" max="99" placeholder="Ej: 20" value="${f.promoDiscount||''}" oninput="uF('dish','promoDiscount',this.value)" style="border-color:#fed7aa"></div>${finalPrice?`<div class="discount-preview" id="discount-preview"><span style="color:var(--muted)">Normal:</span><span style="text-decoration:line-through;color:var(--muted)">$${Number(f.price).toLocaleString()}</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">-${f.promoDiscount}%</span><strong style="color:var(--accent)">$${finalPrice.toLocaleString()}</strong></div>`:'<div class="discount-preview" id="discount-preview" style="font-size:12px;color:#92400e;margin-top:4px">Ingresá precio y descuento.</div>'}</div>`;}
+  // TIPOS section
+  const types=f.types||[];
+  formH+=`<div class="ing-section" style="margin-bottom:10px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:${f.hasTypes?'10':'0'}px">
+      <label class="toggle-switch"><input type="checkbox" ${f.hasTypes?'checked':''} onchange="toggleHasTypes(this.checked)"><span class="toggle-slider"></span></label>
+      <span style="font-size:13px;font-weight:500">Tiene tipos / variantes</span>
+    </div>
+    ${f.hasTypes?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">El comensal deberá elegir uno antes de agregar al pedido. Ej: Pollo, Carne, Veggie.</div>
+      <div class="ing-list">${types.map((t,i)=>`<div class="ing-chip">${t}<button class="ing-chip-remove" onclick="removeType(${i})">×</button></div>`).join('')}${types.length===0?`<span style="font-size:12px;color:var(--muted)">Sin tipos aún</span>`:''}</div>
+      <div class="ing-add-row"><input id="type-input" placeholder="Ej: Pollo, Carne..." value="${C.newTypeInput||''}"><button class="btn btn-primary btn-sm" onclick="addType()">+ Agregar</button></div>`
+    :`<div style="font-size:12px;color:var(--muted);margin-top:8px">Activá para definir variantes del plato.</div>`}
+  </div>`;
+  // INGREDIENTES section
   formH+=`<div class="ing-section"><div style="display:flex;align-items:center;gap:8px;margin-bottom:${f.customizable?'10':'0'}px"><label class="toggle-switch"><input type="checkbox" ${f.customizable?'checked':''} onchange="toggleCustomizable(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Personalizar ingredientes</span></div>${f.customizable?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">El comensal podrá destildar los ingredientes que no desea.</div><div class="ing-list">${ings.map((ing,i)=>`<div class="ing-chip">${ing}<button class="ing-chip-remove" onclick="removeIngredient(${i})">×</button></div>`).join('')}${ings.length===0?`<span style="font-size:12px;color:var(--muted)">Sin ingredientes aún</span>`:''}</div><div class="ing-add-row"><input id="ing-input" placeholder="Ej: Cebolla, Tomate..." value="${C.newIngInput}"><button class="btn btn-primary btn-sm" onclick="addIngredient()">+ Agregar</button></div>`:`<div style="font-size:12px;color:var(--muted);margin-top:8px">Activá para definir ingredientes personalizables.</div>`}</div>
   <div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="${C.editingDish?'saveEditDish()':'addDish()'}">${C.editingDish?'Guardar cambios':'Agregar plato'}</button>${C.editingDish?`<button class="btn btn-ghost" onclick="cancelEditDish()">Cancelar</button>`:''}</div></div>`;
 
@@ -461,14 +471,14 @@ function renderDishesTab(){
         const r=DB.ratings[d.name];const avg=r?r.total/r.count:null;
         const unavail=d.unavailable===true;
         listH+=`<div class="dish-row" style="${unavail?'opacity:0.55':''}">
-          <div class="dish-emoji">${d.emoji}</div>
+          <div class="dish-emoji" style="background:var(--bg);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--muted)">${(cats.find(c=>c._key===d.cat)||{}).icon||'🍽'}</div>
           <div class="dish-info">
             <div style="display:flex;align-items:center;gap:6px">
               <div class="dish-name">${d.name}</div>
               ${unavail?`<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:#fee2e2;color:#b91c1c">Sin stock</span>`:''}
             </div>
             <div class="dish-desc">${d.desc}</div>
-            <div class="dish-price-wrap">${isP?`<span class="dish-price-original">$${d.price.toLocaleString()}</span>`:''}<span class="dish-price">$${fp.toLocaleString()}</span>${isP?`<span class="promo-chip">-${d.promoDiscount}%</span>`:''}${d.customizable&&(d.ingredients||[]).length>0?`<span class="ing-tag">🧩 ${d.ingredients.length} ing.</span>`:''}</div>
+            <div class="dish-price-wrap">${isP?`<span class="dish-price-original">$${d.price.toLocaleString()}</span>`:''}<span class="dish-price">$${fp.toLocaleString()}</span>${isP?`<span class="promo-chip">-${d.promoDiscount}%</span>`:''}${d.customizable&&(d.ingredients||[]).length>0?`<span class="ing-tag">🧩 ${d.ingredients.length} ing.</span>`:''}${d.hasTypes&&(d.types||[]).length>0?`<span style="font-size:11px;padding:2px 7px;border-radius:6px;background:#fef9c3;color:#854d0e;margin-left:4px">↕ ${d.types.length} tipo${d.types.length>1?'s':''}</span>`:''}</div>
             ${avg?`<div style="display:flex;align-items:center;gap:3px;margin-top:2px">${starsHtml(avg,11)}<span style="font-size:11px;color:var(--muted)">${avg.toFixed(1)}</span></div>`:''}
           </div>
           <div class="row-btns">
@@ -655,9 +665,21 @@ function updateDiscountPreview(){
   }
 }
 window.toggleCustomizable=val=>{const f=C.editingDish||C.newDish;f.customizable=val;if(!f.ingredients)f.ingredients=[];render();};
+window.toggleHasTypes=val=>{const f=C.editingDish||C.newDish;f.hasTypes=val;if(!f.types)f.types=[];if(!val)f.types=[];render();};
+window.addType=()=>{
+  const inp=document.getElementById('type-input');
+  const val=(inp?inp.value:C.newTypeInput).trim();
+  if(!val)return;
+  const f=C.editingDish||C.newDish;
+  if(!f.types)f.types=[];
+  val.split(',').map(v=>v.trim()).filter(Boolean).forEach(v=>{if(!f.types.includes(v))f.types.push(v);});
+  C.newTypeInput='';
+  render();
+};
+window.removeType=idx=>{const f=C.editingDish||C.newDish;f.types.splice(idx,1);render();};
 window.addIngredient=()=>{const inp=document.getElementById('ing-input');const val=(inp?inp.value:C.newIngInput).trim();if(!val)return;const f=C.editingDish||C.newDish;if(!f.ingredients)f.ingredients=[];val.split(',').map(v=>v.trim()).filter(Boolean).forEach(v=>{if(!f.ingredients.includes(v))f.ingredients.push(v);});C.newIngInput='';render();};
 window.removeIngredient=idx=>{const f=C.editingDish||C.newDish;f.ingredients.splice(idx,1);render();};
-window.addDish=()=>{const d=C.newDish;if(!d.name||!d.price){alert('Completá nombre y precio');return;}const cats=getCats();if(!d.cat&&cats.length>0)d.cat=cats[0]._key;push(ref(db,'dishes'),{...d,ingredients:d.ingredients||[],unavailable:false});C.newDish={name:'',desc:'',price:'',cat:cats.length>0?cats[0]._key:'',emoji:'🍽️',customizable:false,ingredients:[],promoDiscount:0};C.newIngInput='';render();};
+window.addDish=()=>{const d=C.newDish;if(!d.name||!d.price){alert('Completá nombre y precio');return;}const cats=getCats();if(!d.cat&&cats.length>0)d.cat=cats[0]._key;push(ref(db,'dishes'),{...d,ingredients:d.ingredients||[],types:d.types||[],hasTypes:d.hasTypes||false,unavailable:false});C.newDish={name:'',desc:'',price:'',cat:cats.length>0?cats[0]._key:'',emoji:'🍽️',customizable:false,ingredients:[],types:[],hasTypes:false,promoDiscount:0};C.newIngInput='';render();};
 window.editDish=key=>{C.editingDish={...DB.dishes[key],_key:key,ingredients:[...(DB.dishes[key].ingredients||[])]};render();};
 window.saveEditDish=()=>{const {_key,...data}=C.editingDish;set(ref(db,`dishes/${_key}`),data);C.editingDish=null;render();};
 window.cancelEditDish=()=>{C.editingDish=null;render();};
@@ -800,9 +822,29 @@ function renderMenuWithCart(mc){
     const d=DB.dishes[C.custDishId];
     if(d){
       const excl=(C.cart[C.custDishId]&&C.cart[C.custDishId].excluded)||new Set();
-      menuH+=`<div class="cust-modal"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:24px">${d.emoji}</span><div><div style="font-size:16px;font-weight:500">${d.name}</div><div style="font-size:12px;color:var(--muted)">Destildá lo que no querés</div></div></div><div class="cust-ing-list">`;
+      menuH+=`<div class="cust-modal"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:20px">${(cats.find(c=>c._key===d.cat)||{}).icon||'🍽'}</span><div><div style="font-size:16px;font-weight:500">${d.name}</div><div style="font-size:12px;color:var(--muted)">Destildá lo que no querés</div></div></div><div class="cust-ing-list">`;
       (d.ingredients||[]).forEach(ing=>{const ex=excl.has(ing);menuH+=`<div class="cust-ing-row${ex?' excluded':''}" onclick="toggleIng('${C.custDishId}','${ing.replace(/'/g,"\\'")}')"><div style="display:flex;align-items:center;gap:8px"><div class="cust-check ${ex?'unchecked':'checked'}">${ex?'':'✓'}</div><span class="${ex?'strikethrough':''}">${ing}</span></div>${ex?`<span style="font-size:11px;color:#b45309">Sin esto</span>`:''}</div>`;});
       menuH+=`</div><div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="confirmCust('${C.custDishId}')">Agregar al pedido</button><button class="btn btn-ghost" onclick="cancelCust()">Cancelar</button></div></div>`;
+    }
+  }
+
+  // Type picker modal
+  if(C.typePickerDishId!==null){
+    const d=DB.dishes[C.typePickerDishId];
+    if(d&&d.hasTypes&&(d.types||[]).length>0){
+      const dishCatIcon=(cats.find(c=>c._key===d.cat)||{}).icon||'🍽';
+      menuH+=`<div class="cust-modal">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          <span style="font-size:20px">${dishCatIcon}</span>
+          <div><div style="font-size:16px;font-weight:500">${d.name}</div>
+          <div style="font-size:12px;color:var(--muted)">Elegí el tipo</div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">
+          ${d.types.map(t=>`<button onclick="selectType('${C.typePickerDishId}','${t.replace(/'/g,"\\'")}')
+            " style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);font-size:14px;font-family:inherit;cursor:pointer;text-align:left;transition:all 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">${t}</button>`).join('')}
+        </div>
+        <button class="btn btn-ghost" style="width:100%" onclick="closeTypePicker()">Cancelar</button>
+      </div>`;
     }
   }
 
@@ -811,7 +853,7 @@ function renderMenuWithCart(mc){
     const entry=C.cart[d._key];const q=entry?entry.qty:0;const excl=entry?entry.excluded:new Set();
     const fp=dishFinalPrice(d);const dishCat=cats.find(c=>c._key===d.cat);const isP=dishCat&&dishCat.isPromo&&d.promoDiscount>0;
     const r=DB.ratings[d.name];const avg=r&&r.count>0?r.total/r.count:null;
-    menuH+=`<div class="menu-card${isP?' promo-card':''}">${isP?`<div style="margin-bottom:6px"><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:#fff7ed;color:#c2410c;border:0.5px solid #fed7aa">🔥 PROMO DEL DÍA</span></div>`:''}<div class="menu-card-emoji">${d.emoji}</div><div class="menu-card-name">${d.name}</div>${avg?`<div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">${starsHtml(avg,11)}<span style="font-size:11px;color:var(--muted);margin-left:2px">${avg.toFixed(1)}</span></div>`:''}<div class="menu-card-desc">${d.desc}</div>${d.customizable&&(d.ingredients||[]).length>0?`<div style="font-size:11px;color:#5b21b6;background:#ede9fe;border-radius:5px;padding:2px 7px;display:inline-block;margin-bottom:6px">🧩 Personalizable</div>`:''}${excl&&excl.size>0?`<div class="excl-note">Sin: ${[...excl].join(', ')}</div>`:''}<div class="menu-card-footer"><div>${isP?`<span class="menu-card-price-original">$${d.price.toLocaleString()}</span> `:''}<span class="menu-card-price">$${fp.toLocaleString()}</span>${isP?`<span style="font-size:10px;font-weight:600;color:#c2410c;margin-left:4px">-${d.promoDiscount}%</span>`:''}</div>${q===0?`<button class="add-btn" onclick="${d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`}">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeFromCart('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="${d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`}">+</button></div>`}</div></div>`;
+    menuH+=`<div class="menu-card${isP?' promo-card':''}">${isP?`<div style="margin-bottom:6px"><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:#fff7ed;color:#c2410c;border:0.5px solid #fed7aa">🔥 PROMO DEL DÍA</span></div>`:''}<div class="menu-card-name">${d.name}</div>${avg?`<div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">${starsHtml(avg,11)}<span style="font-size:11px;color:var(--muted);margin-left:2px">${avg.toFixed(1)}</span></div>`:''}<div class="menu-card-desc">${d.desc}</div>${d.customizable&&(d.ingredients||[]).length>0?`<div style="font-size:11px;color:#5b21b6;background:#ede9fe;border-radius:5px;padding:2px 7px;display:inline-block;margin-bottom:6px">🧩 Personalizable</div>`:''}${excl&&excl.size>0?`<div class="excl-note">Sin: ${[...excl].join(', ')}</div>`:''}<div class="menu-card-footer"><div>${isP?`<span class="menu-card-price-original">$${d.price.toLocaleString()}</span> `:''}<span class="menu-card-price">$${fp.toLocaleString()}</span>${isP?`<span style="font-size:10px;font-weight:600;color:#c2410c;margin-left:4px">-${d.promoDiscount}%</span>`:''}</div>${q===0?`<button class="add-btn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${d._key}')`:(d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`)}">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeFromCart('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${d._key}')`:(d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`)}">+</button></div>`}</div></div>`;
   });
   menuH+=`</div>`;
 
@@ -821,10 +863,14 @@ function renderMenuWithCart(mc){
   if(cartEntries.length===0)cartH+=`<div class="cart-empty">Todavía no agregaste ningún plato.</div>`;
   else cartEntries.forEach(([id,v])=>{
     const d=DB.dishes[id];if(!d)return;const fp=dishFinalPrice(d);
-    cartH+=`<div class="cart-item"><div style="font-size:18px;flex-shrink:0">${d.emoji}</div><div class="cart-item-info"><div class="cart-item-name">${d.name}</div>${v.excluded&&v.excluded.size>0?`<div style="font-size:11px;color:#b45309">Sin: ${[...v.excluded].join(', ')}</div>`:''}</div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCart('${id}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="${d.customizable&&(d.ingredients||[]).length>0?`openCust('${id}')`:`quickAdd('${id}')`}">+</button></div><div class="cart-item-price">$${(fp*v.qty).toLocaleString()}</div></div>`;
+    cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0;color:var(--muted)">${(cats.find(c=>c._key===d.cat)||{}).icon||'🍽'}</div><div class="cart-item-info"><div class="cart-item-name">${d.name}${v.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">${v.selectedType}</span>`:''}</div>${v.excluded&&v.excluded.size>0?`<div style="font-size:11px;color:#b45309">Sin: ${[...v.excluded].join(', ')}</div>`:''}</div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCart('${id}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${id}')`:d.customizable&&(d.ingredients||[]).length>0?`openCust('${id}')`:`quickAdd('${id}')`}">+</button></div><div class="cart-item-price">$${(fp*v.qty).toLocaleString()}</div></div>`;
   });
   cartH+=`</div><div class="cart-footer">`;
-  if(cartEntries.length>0){cartH+=`<div class="cart-total-row big"><span>Total</span><span>$${total.toLocaleString()}</span></div><button class="btn btn-primary btn-block" style="margin-top:10px" onclick="placeOrder()">Confirmar pedido</button>`;}
+  if(cartEntries.length>0){
+    cartH+=`<div class="cart-total-row big"><span>Total</span><span>$${total.toLocaleString()}</span></div>
+    <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="placeOrder()">Confirmar pedido</button>
+    <button class="btn btn-ghost btn-block" style="margin-top:6px;color:var(--danger);border-color:var(--danger)" onclick="cancelCart()">Cancelar pedido</button>`;
+  }
   const hasOrders=Object.values(DB.orders).some(o=>o.tableId===C.customerTableId&&o.status!=='delivered');
   if(hasOrders)cartH+=`<button class="btn btn-outline btn-block" style="margin-top:8px" onclick="goToBill()">Solicitar la cuenta</button>`;
   cartH+=`</div>`;
@@ -834,15 +880,38 @@ function renderMenuWithCart(mc){
 
 window.openCust=id=>{C.custDishId=id;renderMenuWithCart(document.getElementById('main-content'));};
 window.cancelCust=()=>{C.custDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
+window.openTypePicker=id=>{C.typePickerDishId=id;C.custDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
+window.closeTypePicker=()=>{C.typePickerDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
+window.selectType=(dishId,typeName)=>{
+  // After selecting type, if dish has ingredients open ingredient customizer, else add to cart
+  const d=DB.dishes[dishId];
+  C.typePickerDishId=null;
+  if(!C.cart[dishId])C.cart[dishId]={qty:0,excluded:new Set(),selectedType:null};
+  C.cart[dishId].selectedType=typeName;
+  if(d&&d.customizable&&(d.ingredients||[]).length>0){
+    C.custDishId=dishId;
+  } else {
+    C.cart[dishId].qty+=1;
+  }
+  renderMenuWithCart(document.getElementById('main-content'));
+};
 window.toggleIng=(dishId,ing)=>{if(!C.cart[dishId])C.cart[dishId]={qty:0,excluded:new Set()};if(!C.cart[dishId].excluded)C.cart[dishId].excluded=new Set();if(C.cart[dishId].excluded.has(ing))C.cart[dishId].excluded.delete(ing);else C.cart[dishId].excluded.add(ing);renderMenuWithCart(document.getElementById('main-content'));};
 window.confirmCust=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;C.custDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
 window.quickAdd=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;renderMenuWithCart(document.getElementById('main-content'));};
 window.removeFromCart=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;else delete C.cart[id];}renderMenuWithCart(document.getElementById('main-content'));};
 window.setCat=c=>{C.customerCat=c;C.custDishId=null;render();};
+window.cancelCart=()=>{
+  if(confirm('¿Cancelar el pedido? Se van a borrar todos los ítems del carrito.')){
+    C.cart={};
+    C.custDishId=null;
+    C.typePickerDishId=null;
+    renderMenuWithCart(document.getElementById('main-content'));
+  }
+};
 
 window.placeOrder=()=>{
   if(cartCount()===0)return;
-  const items=Object.entries(C.cart).map(([id,v])=>{const d=DB.dishes[id];return{name:d.name,qty:v.qty,price:d.price,finalPrice:dishFinalPrice(d),excluded:v.excluded?[...v.excluded]:[]};});
+  const items=Object.entries(C.cart).map(([id,v])=>{const d=DB.dishes[id];return{name:d.name,qty:v.qty,price:d.price,finalPrice:dishFinalPrice(d),excluded:v.excluded?[...v.excluded]:[],selectedType:v.selectedType||null};});
   push(ref(db,'orders'),{tableId:C.customerTableId,items,status:'pending',time:nowStr(),billRequested:false,orderMode:C.orderMode,personName:C.orderMode==='individual'?C.customerName:null,createdAt:Date.now()});
   C.cart={};C.custDishId=null;C.customerStep='confirm';render();
 };
@@ -854,7 +923,7 @@ function renderConfirmScreen(mc){
   const total=(last.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
   const isInd=last.orderMode==='individual';
   let h=`<div class="content"><div class="confirm-screen"><div class="confirm-icon">✅</div><div class="confirm-title">¡Pedido enviado!</div><div style="font-size:14px;color:var(--muted)">${isInd?`Pedido de <strong>${last.personName}</strong> · `:''} ${tableLabel(C.customerTableId)}</div><div class="order-review"><div style="font-weight:500;margin-bottom:10px;font-size:14px">${isInd?last.personName:'Pedido'} — ${tableLabel(C.customerTableId)}</div>`;
-  (last.items||[]).forEach(i=>{h+=`<div class="review-row"><span>${i.qty}× ${i.name}${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}</span><span>$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;});
+  (last.items||[]).forEach(i=>{h+=`<div class="review-row"><span>${i.qty}× ${i.name}${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>":""}${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}</span><span>$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;});
   h+=`<div class="review-row"><span>Total</span><span>$${total.toLocaleString()}</span></div></div><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button class="btn btn-primary" onclick="backToMenu()">${isInd?'Otro comensal':'Seguir pidiendo'}</button><button class="btn btn-outline" onclick="goToBill()">Solicitar la cuenta</button></div></div></div>`;
   mc.innerHTML=h;
 }
