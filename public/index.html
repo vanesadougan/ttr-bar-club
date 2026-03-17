@@ -425,8 +425,8 @@ function renderDishesTab(){
   const subTab=C.dishSubTab||'platos';
 
   let tabsH=`<div style="display:flex;gap:6px;margin-bottom:1rem">
-    <button onclick="C.dishSubTab='platos';render()" style="padding:5px 14px;border-radius:20px;font-size:13px;border:none;cursor:pointer;font-family:inherit;background:${subTab==='platos'?'var(--brand)':'var(--bg)'};color:${subTab==='platos'?'#fff':'var(--muted)'}">Platos</button>
-    <button onclick="C.dishSubTab='categorias';render()" style="padding:5px 14px;border-radius:20px;font-size:13px;border:none;cursor:pointer;font-family:inherit;background:${subTab==='categorias'?'var(--brand)':'var(--bg)'};color:${subTab==='categorias'?'#fff':'var(--muted)'}">Categorías</button>
+    <button onclick="setDishSubTab('platos')" style="padding:5px 14px;border-radius:20px;font-size:13px;border:none;cursor:pointer;font-family:inherit;background:${subTab==='platos'?'var(--brand)':'var(--bg)'};color:${subTab==='platos'?'#fff':'var(--muted)'}">Platos</button>
+    <button onclick="setDishSubTab('categorias')" style="padding:5px 14px;border-radius:20px;font-size:13px;border:none;cursor:pointer;font-family:inherit;background:${subTab==='categorias'?'var(--brand)':'var(--bg)'};color:${subTab==='categorias'?'#fff':'var(--muted)'}">Categorías</button>
   </div>`;
 
   if(subTab==='categorias') return tabsH+renderCategoriesTab();
@@ -639,6 +639,11 @@ window.editTable=key=>{C.editingTable={...DB.tables[key],_key:key};render();};
 window.saveEditTable=()=>{const {_key,...data}=C.editingTable;set(ref(db,`tables/${_key}`),data);C.editingTable=null;render();};
 window.cancelEditTable=()=>{C.editingTable=null;render();};
 window.deleteTable=key=>{if(tableOccupied(key)){alert('Mesa con pedidos activos');return;}if(confirm('¿Eliminar?'))remove(ref(db,`tables/${key}`));};
+// ── GLOBAL HELPERS for inline onclick ─────────────
+window.setDishSubTab=tab=>{C.dishSubTab=tab;render();};
+window.setCustomerNameInput=val=>{C.customerNameInput=val;};
+window.goToModeChoice=()=>{C.customerStep='modeChoice';render();};
+
 window.markReady=key=>update(ref(db,`orders/${key}`),{status:'ready'});
 window.markDelivered=key=>update(ref(db,`orders/${key}`),{status:'delivered'});
 window.setHistFilter=f=>{C.historyFilter=f;render();};
@@ -709,7 +714,7 @@ window.chooseMode=mode=>{C.orderMode=mode;if(mode==='individual')C.customerStep=
 
 function renderNameInput(mc){
   const table=DB.tables[C.customerTableId];
-  mc.innerHTML=`<div class="content"><div class="name-screen"><div style="font-size:26px;font-family:'Playfair Display',serif">¿Cuál es tu nombre?</div><div style="font-size:14px;color:var(--muted)">${table?table.label:''} · Pedido individual</div><input class="name-input" id="name-inp" placeholder="Tu nombre..." value="${C.customerNameInput}" oninput="C.customerNameInput=this.value" onkeydown="if(event.key==='Enter')confirmName()"><button class="btn btn-primary" style="min-width:200px;padding:12px" onclick="confirmName()">Continuar →</button><button class="btn btn-ghost btn-sm" onclick="C.customerStep='modeChoice';render()">← Volver</button></div></div>`;
+  mc.innerHTML=`<div class="content"><div class="name-screen"><div style="font-size:26px;font-family:'Playfair Display',serif">¿Cuál es tu nombre?</div><div style="font-size:14px;color:var(--muted)">${table?table.label:''} · Pedido individual</div><input class="name-input" id="name-inp" placeholder="Tu nombre..." value="${C.customerNameInput}" oninput="setCustomerNameInput(this.value)" onkeydown="if(event.key==='Enter')confirmName()"><button class="btn btn-primary" style="min-width:200px;padding:12px" onclick="confirmName()">Continuar →</button><button class="btn btn-ghost btn-sm" onclick="goToModeChoice()">← Volver</button></div></div>`;
   setTimeout(()=>{const el=document.getElementById('name-inp');if(el)el.focus();},50);
 }
 window.confirmName=()=>{const name=C.customerNameInput.trim();if(!name){alert('Ingresá tu nombre');return;}C.customerName=name;C.customerStep='menu';render();};
@@ -731,7 +736,7 @@ function renderMenuWithCart(mc){
   const filtered=C.customerCat==='todos'?dishes:dishes.filter(d=>d.cat===C.customerCat);
   const ct=cartCount();
 
-  let menuH=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem;flex-wrap:wrap"><button class="back-btn" onclick="C.customerStep='modeChoice';render()">← Volver</button><div style="font-size:14px;color:var(--muted)"><strong style="color:var(--text)">${table?table.label:''}</strong>${isIndividual?`<span class="order-type-chip ot-individual" style="margin-left:6px">👤 ${C.customerName}</span>`:`<span class="order-type-chip ot-general" style="margin-left:6px">👥 General</span>`}</div></div><div class="cat-tabs">`;
+  let menuH=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem;flex-wrap:wrap"><button class="back-btn" onclick="goToModeChoice()">← Volver</button><div style="font-size:14px;color:var(--muted)"><strong style="color:var(--text)">${table?table.label:''}</strong>${isIndividual?`<span class="order-type-chip ot-individual" style="margin-left:6px">👤 ${C.customerName}</span>`:`<span class="order-type-chip ot-general" style="margin-left:6px">👥 General</span>`}</div></div><div class="cat-tabs">`;
   // Build tab labels dynamically
   const tabLabel=id=>{
     if(id==='todos')return'Todos';
