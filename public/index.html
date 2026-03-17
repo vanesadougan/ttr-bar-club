@@ -192,7 +192,10 @@
       <button class="modetab active" id="tab-admin" onclick="setMode('admin')">Administrador</button>
       <button class="modetab" id="tab-customer" onclick="setMode('customer')">Comensal</button>
     </div>
-    <div style="width:80px;text-align:right;font-size:12px;color:rgba(255,255,255,0.5)" id="clock"></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="font-size:12px;color:rgba(255,255,255,0.5)" id="clock"></div>
+      <button id="logout-btn" onclick="doLogout()" style="display:none;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.3);background:transparent;color:rgba(255,255,255,0.7);font-size:12px;cursor:pointer;font-family:inherit">Salir</button>
+    </div>
   </div>
   <div id="main-content"><div class="loading-screen"><div class="spinner"></div><div style="font-size:14px;color:var(--muted)">Conectando...</div></div></div>
 </div>
@@ -202,6 +205,8 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, push, onValue, update, remove, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // ─── FIREBASE CONFIG ───────────────────────────────
 // Reemplazá estos valores con los de tu proyecto Firebase
@@ -218,6 +223,7 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
+const auth = getAuth(app);
 
 // ─── HELPERS ──────────────────────────────────────
 const CATS=[
@@ -278,23 +284,34 @@ function highlightNewOrder(){
 }
 
 // ─── ROUTING: detect /mesa/:id in URL ─────────────
+let isCustomerRoute = false;
 function initRoute(){
   const path = window.location.pathname;
   const m = path.match(/\/mesa\/(.+)/);
   if(m){
+    isCustomerRoute = true;
     C.mode='customer';
     const tableId=m[1];
-    // find table by id or label
     const found = Object.entries(DB.tables).find(([k,v])=>k===tableId||v.label===tableId);
     if(found){ C.customerTableId=found[0]; C.customerStep='modeChoice'; }
     document.getElementById('modetabs').style.display='none';
   }
 }
 
+// ─── AUTH STATE ───────────────────────────────────
+let currentUser = null;
+onAuthStateChanged(auth, user => {
+  currentUser = user;
+  render();
+});
+
 // ─── RENDER ───────────────────────────────────────
 function render(){
   updateClock();
-  // update tab badges
+  // If customer route, skip auth entirely
+  if(isCustomerRoute){ renderCustomer(); return; }
+  // Admin requires login
+  if(C.mode==='admin' && !currentUser){ renderLogin(); return; }
   const tabAdmin=document.getElementById('tab-admin');
   const tabCust=document.getElementById('tab-customer');
   if(tabAdmin) tabAdmin.classList.toggle('active',C.mode==='admin');
@@ -308,10 +325,56 @@ function setMode(m){
   render();
 }
 
+// ─── LOGIN SCREEN ─────────────────────────────────
+function renderLogin(){
+  const mc=document.getElementById('main-content');
+  // hide modetabs while not logged in
+  document.getElementById('modetabs').style.display='none';
+  mc.innerHTML=`
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:calc(100vh - 56px);padding:2rem">
+      <div style="background:#fff;border:0.5px solid #e5e7eb;border-radius:16px;padding:2rem 2rem;width:100%;max-width:360px">
+        <div style="text-align:center;margin-bottom:1.5rem">
+          <div style="font-family:'Playfair Display',serif;font-size:22px;color:#1a1a2e">Panel <span style="color:#e94560">Administrador</span></div>
+          <div style="font-size:13px;color:#6b7280;margin-top:4px">Ingresá con tu cuenta para continuar</div>
+        </div>
+        <div id="login-error" style="display:none;background:#fef2f2;border:0.5px solid #fca5a5;border-radius:8px;padding:8px 12px;font-size:13px;color:#b91c1c;margin-bottom:12px;text-align:center"></div>
+        <div style="margin-bottom:10px">
+          <label style="font-size:13px;color:#6b7280;display:block;margin-bottom:4px">Email</label>
+          <input id="login-email" type="email" placeholder="tu@email.com" style="width:100%;padding:10px 12px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:14px;font-family:inherit;outline:none;background:#f8f7f4;color:#1a1a2e" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <div style="margin-bottom:1.25rem">
+          <label style="font-size:13px;color:#6b7280;display:block;margin-bottom:4px">Contraseña</label>
+          <input id="login-pass" type="password" placeholder="••••••••" style="width:100%;padding:10px 12px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:14px;font-family:inherit;outline:none;background:#f8f7f4;color:#1a1a2e" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <button onclick="doLogin()" id="login-btn" style="width:100%;padding:11px;background:#e94560;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit">Entrar</button>
+      </div>
+    </div>`;
+  setTimeout(()=>{ const el=document.getElementById('login-email'); if(el) el.focus(); },50);
+}
+
+window.doLogin=async()=>{
+  const email=document.getElementById('login-email').value.trim();
+  const pass=document.getElementById('login-pass').value;
+  const btn=document.getElementById('login-btn');
+  const err=document.getElementById('login-error');
+  if(!email||!pass){ err.style.display='block'; err.textContent='Completá email y contraseña'; return; }
+  btn.textContent='Entrando...'; btn.disabled=true;
+  try{
+    await signInWithEmailAndPassword(auth, email, pass);
+    document.getElementById('modetabs').style.display='flex';
+    // onAuthStateChanged will trigger render()
+  } catch(e){
+    btn.textContent='Entrar'; btn.disabled=false;
+    err.style.display='block';
+    err.textContent=e.code==='auth/wrong-password'||e.code==='auth/invalid-credential'?'Email o contraseña incorrectos':'Error al iniciar sesión. Intentá de nuevo.';
+  }
+};
+
 // ══════════════════════════════════════════════════
 // ADMIN
 // ══════════════════════════════════════════════════
 function renderAdmin(){
+  showLogoutBtn(true);
   const mc=document.getElementById('main-content');
   const tabs=['dishes','tables','orders','ratings','history'];
   const pc=pendingCount();
@@ -648,9 +711,25 @@ function renderThanksScreen(mc){
 }
 window.startOver=()=>{C.customerStep='mesa';C.cart={};C.survey={items:[],ratings:{}};C.customerTableId=null;C.custDishId=null;render();};
 
+window.doLogout=async()=>{
+  await signOut(auth);
+  currentUser=null;
+  const lb=document.getElementById('logout-btn');
+  if(lb) lb.style.display='none';
+  document.getElementById('modetabs').style.display='none';
+  render();
+};
+
+// Show logout button when admin is logged in
+function showLogoutBtn(show){
+  const lb=document.getElementById('logout-btn');
+  if(lb) lb.style.display=show?'block':'none';
+}
+
 // Start
 setInterval(updateClock,60000);
 initRoute();
 </script>
 </body>
 </html>
+
