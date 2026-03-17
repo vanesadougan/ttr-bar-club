@@ -1025,7 +1025,7 @@ function renderBillScreen(mc){
   </div>`;
   h+=`<div class="survey-card"><div class="survey-title">¿Cómo estuvo tu experiencia?</div><div class="survey-sub">Calificá los platos — opcional</div>`;
   C.survey.items.forEach(name=>{const r=C.survey.ratings[name]||0;h+=`<div class="survey-dish"><div class="survey-dish-name">${name}</div><div class="stars">`;for(let s=1;s<=5;s++)h+=`<span class="star${s<=r?' lit':''}" onclick="rateDish('${name.replace(/'/g,"\\'")}',${s})">${s<=r?'★':'☆'}</span>`;h+=`</div></div>`;});
-  h+=`</div><button class="btn btn-primary btn-block" style="margin-top:1.25rem;${!C.survey.paymentMethod?'opacity:0.6':''}" onclick="submitBill()">Confirmar y cerrar cuenta</button>${!C.survey.paymentMethod?'<div style="text-align:center;margin-top:6px;font-size:12px;color:var(--muted)">Seleccioná el medio de pago para continuar</div>':'<div style="text-align:center;margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="submitBill()">Enviar sin calificar</button></div>'}</div></div>`;
+  h+=`</div><button class="btn btn-primary btn-block" style="margin-top:1.25rem;${!C.survey.paymentMethod?'opacity:0.6':''}" onclick="submitBill()">Enviar y listo</button>${!C.survey.paymentMethod?'<div style="text-align:center;margin-top:6px;font-size:12px;color:var(--muted)">Seleccioná el medio de pago para continuar</div>':'<div style="text-align:center;margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="submitBill()">Enviar sin calificar</button></div>'}</div></div>`;
   mc.innerHTML=h;
 }
 window.rateDish=(name,stars)=>{C.survey.ratings[name]=stars;renderBillScreen(document.getElementById('main-content'));};
@@ -1038,10 +1038,10 @@ window.submitBill=async()=>{
     const cur=DB.ratings[safeName]||{total:0,count:0};
     await set(ref(db,`ratings/${safeName}`),{total:cur.total+stars,count:cur.count+1,name});
   }
-  // mark orders cobrado + save payment method
+  // save paymentMethod — admin marks cobrado manually
   const pm=C.survey.paymentMethod||'efectivo';
   const subCutoff=Date.now()-18*60*60*1000;
-  Object.entries(DB.orders).forEach(([k,o])=>{if(o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=subCutoff)update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm});});
+  Object.entries(DB.orders).forEach(([k,o])=>{if(o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=subCutoff)update(ref(db,`orders/${k}`),{paymentMethod:pm});});
   C.customerStep='thanks';render();
 };
 function renderThanksScreen(mc){
