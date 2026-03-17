@@ -840,8 +840,7 @@ function renderMenuWithCart(mc){
           <div style="font-size:12px;color:var(--muted)">Elegí el tipo</div></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">
-          ${d.types.map(t=>`<button onclick="selectType('${C.typePickerDishId}','${t.replace(/'/g,"\\'")}')
-            " style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);font-size:14px;font-family:inherit;cursor:pointer;text-align:left;transition:all 0.15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'">${t}</button>`).join('')}
+          ${d.types.map((t,ti)=>`<button onclick="pickType(${ti})" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);font-size:14px;font-family:inherit;cursor:pointer;text-align:left">${t}</button>`).join('')}
         </div>
         <button class="btn btn-ghost" style="width:100%" onclick="closeTypePicker()">Cancelar</button>
       </div>`;
@@ -881,6 +880,12 @@ function renderMenuWithCart(mc){
 window.openCust=id=>{C.custDishId=id;renderMenuWithCart(document.getElementById('main-content'));};
 window.cancelCust=()=>{C.custDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
 window.openTypePicker=id=>{C.typePickerDishId=id;C.custDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
+window.pickType=idx=>{
+  const d=DB.dishes[C.typePickerDishId];
+  if(!d)return;
+  const typeName=d.types[idx];
+  window.selectType(C.typePickerDishId,typeName);
+};
 window.closeTypePicker=()=>{C.typePickerDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
 window.selectType=(dishId,typeName)=>{
   // After selecting type, if dish has ingredients open ingredient customizer, else add to cart
@@ -923,7 +928,7 @@ function renderConfirmScreen(mc){
   const total=(last.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
   const isInd=last.orderMode==='individual';
   let h=`<div class="content"><div class="confirm-screen"><div class="confirm-icon">✅</div><div class="confirm-title">¡Pedido enviado!</div><div style="font-size:14px;color:var(--muted)">${isInd?`Pedido de <strong>${last.personName}</strong> · `:''} ${tableLabel(C.customerTableId)}</div><div class="order-review"><div style="font-weight:500;margin-bottom:10px;font-size:14px">${isInd?last.personName:'Pedido'} — ${tableLabel(C.customerTableId)}</div>`;
-  (last.items||[]).forEach(i=>{h+=`<div class="review-row"><span>${i.qty}× ${i.name}${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>":""}${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}</span><span>$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;});
+  (last.items||[]).forEach(i=>{h+=`<div class="review-row"><span>${i.qty}× ${i.name}${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:""}${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}</span><span>$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;});
   h+=`<div class="review-row"><span>Total</span><span>$${total.toLocaleString()}</span></div></div><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button class="btn btn-primary" onclick="backToMenu()">${isInd?'Otro comensal':'Seguir pidiendo'}</button><button class="btn btn-outline" onclick="goToBill()">Solicitar la cuenta</button></div></div></div>`;
   mc.innerHTML=h;
 }
