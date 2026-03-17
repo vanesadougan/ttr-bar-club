@@ -281,6 +281,7 @@ function updateClock(){} // clock removed from topbar
 
 // ─── FIREBASE LISTENERS ───────────────────────────
 let firstLoad = true;
+let tablesLoaded = false;
 onValue(ref(db,'dishes'),  snap=>{ DB.dishes  = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'categories'), snap=>{ DB.categories = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'alerts'), snap=>{
@@ -289,6 +290,7 @@ onValue(ref(db,'alerts'), snap=>{
 });
 onValue(ref(db,'tables'), snap=>{
   DB.tables = snap.val()||{};
+  tablesLoaded = true;
   resolveTableRoute(); // resolve URL route once tables are available
   if(!firstLoad) render();
 });
@@ -802,6 +804,7 @@ function renderCustomer(){
 
 function renderMesaScreen(mc){
   const tables=Object.entries(DB.tables).map(([k,v])=>({...v,_key:k}));
+  if(!tablesLoaded){mc.innerHTML=`<div class="content"><div style="text-align:center;padding:4rem 1rem"><div class="spinner" style="margin:0 auto 1rem"></div><div style="font-size:14px;color:var(--muted)">Iniciando TTR Bar Club...</div></div></div>`;return;}
   if(tables.length===0){mc.innerHTML=`<div class="content"><div style="text-align:center;padding:4rem 1rem"><div style="font-size:40px;margin-bottom:1rem">🪑</div><div style="font-family:'Playfair Display',serif;font-size:22px">No hay mesas configuradas</div></div></div>`;return;}
   let h=`<div class="content"><div class="mesa-screen"><div style="width:100%;max-width:480px"><div class="mesa-title" style="margin-bottom:1.5rem">¿En qué mesa<br>estás sentado?</div><div class="mesa-grid">`;
   tables.forEach(t=>{const occ=tableOccupied(t._key);h+=`<button class="mesa-btn" onclick="selectMesa('${t._key}')" style="${occ?'border-color:#f59e0b;':''}"><div>${t.label}</div>${t.capacity?`<div class="mesa-btn-label">${t.capacity} personas</div>`:''}</button>`;});
