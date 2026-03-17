@@ -74,7 +74,7 @@
     .order-items-text{font-size:13px;color:var(--muted);margin-bottom:6px;line-height:1.7}
     .order-footer{display:flex;align-items:center;justify-content:space-between}
     .status{font-size:12px;font-weight:500;padding:3px 9px;border-radius:6px}
-    .status-pending{background:#fef3c7;color:#92400e}.status-ready{background:#d1fae5;color:#065f46}.status-delivered{background:#f3f4f6;color:var(--muted)}
+    .status-pending{background:#fef3c7;color:#92400e}.status-delivered{background:#d1fae5;color:#065f46}.status-billed{background:#ede9fe;color:#5b21b6}.status-cobrado{background:#d1fae5;color:#065f46}
     .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1rem}
     .metric{background:var(--bg);border-radius:10px;padding:12px;text-align:center;border:0.5px solid var(--border)}
     .metric-val{font-size:22px;font-weight:600;color:var(--accent)}.metric-lbl{font-size:11px;color:var(--muted);margin-top:2px}
@@ -273,8 +273,8 @@ function dishFinalPrice(d){
   return isPromoCat&&d.promoDiscount>0?Math.round(d.price*(1-d.promoDiscount/100)):d.price;
 }
 function tableLabel(tid){const t=DB.tables[tid];return t?t.label:`Mesa ${tid}`;}
-function tableOccupied(tid){return Object.values(DB.orders).some(o=>o.tableId===tid&&o.status!=='delivered');}
-function pendingCount(){const alertCount=Object.values(DB.alerts||{}).filter(a=>a.status==='pending').length;return Object.values(DB.orders).filter(o=>o.status==='pending'||o.billRequested).length+alertCount;}
+function tableOccupied(tid){return Object.values(DB.orders).some(o=>o.tableId===tid&&o.status!=='cobrado');}
+function pendingCount(){return Object.values(DB.orders).filter(o=>o.status==='pending'||o.status==='billed').length;}
 function starsHtml(avg,size){let h='';for(let i=1;i<=5;i++)h+=`<span class="${i<=Math.round(avg)?'star-lit':'star-empty'}" style="font-size:${size||14}px">${i<=Math.round(avg)?'★':'☆'}</span>`;return h;}
 
 function updateClock(){} // clock removed from topbar
@@ -617,7 +617,7 @@ function renderOrdersTab(){
     const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
     h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}</div><div class="order-time">${o.time}</div></div><div class="order-items-text">`;
     (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''} <span style="color:var(--accent)">$${(i.finalPrice||i.price).toLocaleString()}</span><br>`;});
-    h+=`</div>${o.billRequested?`<div class="bill-req">⚡ Mesa solicitó la cuenta</div>`:''}<div class="order-footer" style="margin-top:8px"><span class="status status-${o.status}">${{pending:'Pendiente',ready:'Listo',delivered:'Entregado'}[o.status]}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>${o.status==='pending'?`<button class="btn btn-primary btn-sm" onclick="markReady('${o._key}')">Marcar listo</button>`:''}${o.status==='ready'?`<button class="btn btn-ghost btn-sm" onclick="markDelivered('${o._key}')">Entregado</button>`:''}</div></div></div>`;
+    h+=`</div>${o.status==='billed'||o.billRequested?`<div class="bill-req">⚡ Pide cuenta${o.paymentMethod?` · <strong>${{efectivo:'Efectivo',credito:'Créd.',debito:'Déb.',transferencia:'Transfer.',mercadopago:'Mercado Pago'}[o.paymentMethod]||o.paymentMethod}</strong>`:''}</div>`:''}<div class="order-footer" style="margin-top:8px"><span class="status status-${o.status}">${{pending:'Pendiente',delivered:'Entregado',billed:'Pide cuenta',cobrado:'Cobrado'}[o.status]||o.status}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>${o.status==='pending'?`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`:''}${o.status==='billed'?`<button class="btn btn-ghost btn-sm" onclick="markCobrado('${o._key}')" style="border-color:#5b21b6;color:#5b21b6">Cobrado ✓</button>`:''}</div></div></div>`;
   });
   return h+`</div>`;
 }
@@ -640,11 +640,11 @@ function renderRatingsTab(){
 
 // ── HISTORY TAB ───────────────────────────────────
 function renderHistoryTab(){
-  const filters=['todos','pendiente','listo','entregado'];
+  const filters=['todos','pendiente','entregado','cobrado'];
   let h=`<div class="history-filter">`;
   filters.forEach(f=>{const a=C.historyFilter===f;h+=`<button onclick="setHistFilter('${f}')" style="padding:5px 12px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:${a?'var(--brand)':'var(--card)'};color:${a?'#fff':'var(--muted)'}">${f[0].toUpperCase()+f.slice(1)}</button>`;});
   h+=`</div><div class="orders-list">`;
-  const map={pendiente:'pending',listo:'ready',entregado:'delivered'};
+  const map={pendiente:'pending',entregado:'delivered',cobrado:'cobrado'};
   const all=Object.entries(DB.orders).map(([k,v])=>({...v,_key:k})).sort((a,b)=>b.createdAt-a.createdAt);
   const fil=all.filter(o=>C.historyFilter==='todos'||o.status===map[C.historyFilter]);
   if(fil.length===0)h+=`<div class="empty-state">No hay pedidos</div>`;
@@ -653,7 +653,7 @@ function renderHistoryTab(){
     const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
     h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}</div><div class="order-time">${o.time}</div></div><div class="order-items-text">`;
     (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}<br>`;});
-    h+=`</div><div class="order-footer"><span class="status status-${o.status}">${{pending:'Pendiente',ready:'Listo',delivered:'Entregado'}[o.status]}</span><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span></div></div>`;
+    h+=`</div><div class="order-footer"><span class="status status-${o.status}">${{pending:'Pendiente',delivered:'Entregado',billed:'Pide cuenta',cobrado:'Cobrado'}[o.status]||o.status}</span><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span></div></div>`;
   });
   return h+`</div>`;
 }
@@ -715,8 +715,8 @@ window.setCustomerNameInput=val=>{C.customerNameInput=val;};
 window.goToModeChoice=()=>{C.customerStep='modeChoice';render();};
 
 window.dismissAlert=key=>update(ref(db,`alerts/${key}`),{status:'dismissed'});
-window.markReady=key=>update(ref(db,`orders/${key}`),{status:'ready'});
 window.markDelivered=key=>update(ref(db,`orders/${key}`),{status:'delivered'});
+window.markCobrado=key=>update(ref(db,`orders/${key}`),{status:'cobrado'});
 window.setHistFilter=f=>{C.historyFilter=f;render();};
 
 // ── AVAILABILITY TOGGLE ───────────────────────────
@@ -891,7 +891,7 @@ function renderMenuWithCart(mc){
     <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="placeOrder()">Confirmar pedido</button>
     <button class="btn btn-ghost btn-block" style="margin-top:6px;color:var(--danger);border-color:var(--danger)" onclick="cancelCart()">Cancelar pedido</button>`;
   }
-  const hasOrders=Object.values(DB.orders).some(o=>o.tableId===C.customerTableId&&o.status!=='delivered');
+  const hasOrders=Object.values(DB.orders).some(o=>o.tableId===C.customerTableId&&o.status!=='cobrado');
   if(hasOrders)cartH+=`<button class="btn btn-outline btn-block" style="margin-top:8px" onclick="goToBill()">Solicitar la cuenta</button>`;
   // 🛎 Llamar al mozo — always visible
   const tableObj=DB.tables[C.customerTableId];
@@ -974,7 +974,7 @@ function renderConfirmScreen(mc){
 window.backToMenu=()=>{C.cart={};C.custDishId=null;C.typePickerDishId=null;C.customerStep='menu';render();};
 
 window.goToBill=()=>{
-  Object.entries(DB.orders).forEach(([k,o])=>{if(o.tableId===C.customerTableId&&o.status!=='delivered')update(ref(db,`orders/${k}`),{billRequested:true});});
+  Object.entries(DB.orders).forEach(([k,o])=>{if(o.tableId===C.customerTableId&&o.status!=='cobrado')update(ref(db,`orders/${k}`),{status:'billed',billRequested:true});});
   // build survey items excluding dishes from noRating categories
   const cats=getCats();
   const noRatingCatKeys=new Set(cats.filter(c=>c.noRating).map(c=>c._key));
@@ -985,7 +985,7 @@ window.goToBill=()=>{
     if(dish&&noRatingCatKeys.has(dish.cat))return; // skip noRating categories
     seen[i.name]=true;
   }));
-  C.survey={items:Object.keys(seen),ratings:{}};C.customerStep='bill';render();
+  C.survey={items:Object.keys(seen),ratings:{},paymentMethod:null};C.customerStep='bill';render();
 };
 
 function renderBillScreen(mc){
@@ -1003,21 +1003,40 @@ function renderBillScreen(mc){
     h+=`<div class="card">`;allItems.forEach(i=>{h+=`<div class="bill-row"><span>${i.qty}× ${i.name}</span><span>$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;});
     h+=`<div class="bill-row"><span>Total</span><span>$${total.toLocaleString()}</span></div></div>`;
   }
+  // Payment method selector
+  const payMethods=[
+    {id:'efectivo',label:'Efectivo',icon:'💵'},
+    {id:'credito',label:'Tarjeta de crédito',icon:'💳'},
+    {id:'debito',label:'Tarjeta de débito',icon:'💳'},
+    {id:'transferencia',label:'Transferencia',icon:'📲'},
+    {id:'mercadopago',label:'Mercado Pago',icon:'🔵'},
+  ];
+  const selPay=C.survey.paymentMethod||null;
+  h+=`<div class="survey-card" style="margin-top:1.25rem">
+    <div style="font-size:15px;font-weight:500;margin-bottom:4px">¿Cómo vas a pagar?</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Elegí el medio de pago</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:4px">
+      ${payMethods.map(pm=>`<button onclick="selectPayment('${pm.id}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;border:${selPay===pm.id?'2px solid var(--accent)':'0.5px solid var(--border)'};background:${selPay===pm.id?'#fff5f7':'var(--bg)'};cursor:pointer;font-size:14px;font-family:inherit;text-align:left;transition:all 0.15s"><span style="font-size:18px">${pm.icon}</span><span style="${selPay===pm.id?'font-weight:500;color:var(--accent)':''}">${pm.label}</span>${selPay===pm.id?'<span style="margin-left:auto;color:var(--accent);font-size:16px">✓</span>':''}</button>`).join('')}
+    </div>
+  </div>`;
   h+=`<div class="survey-card"><div class="survey-title">¿Cómo estuvo tu experiencia?</div><div class="survey-sub">Calificá los platos — opcional</div>`;
   C.survey.items.forEach(name=>{const r=C.survey.ratings[name]||0;h+=`<div class="survey-dish"><div class="survey-dish-name">${name}</div><div class="stars">`;for(let s=1;s<=5;s++)h+=`<span class="star${s<=r?' lit':''}" onclick="rateDish('${name.replace(/'/g,"\\'")}',${s})">${s<=r?'★':'☆'}</span>`;h+=`</div></div>`;});
-  h+=`</div><button class="btn btn-primary btn-block" style="margin-top:1.25rem" onclick="submitBill()">Enviar y cerrar cuenta</button><div style="text-align:center;margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="submitBill()">Omitir encuesta</button></div></div></div>`;
+  h+=`</div><button class="btn btn-primary btn-block" style="margin-top:1.25rem;${!C.survey.paymentMethod?'opacity:0.6':''}" onclick="submitBill()">Confirmar y cerrar cuenta</button>${!C.survey.paymentMethod?'<div style="text-align:center;margin-top:6px;font-size:12px;color:var(--muted)">Seleccioná el medio de pago para continuar</div>':'<div style="text-align:center;margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="submitBill()">Enviar sin calificar</button></div>'}</div></div>`;
   mc.innerHTML=h;
 }
 window.rateDish=(name,stars)=>{C.survey.ratings[name]=stars;renderBillScreen(document.getElementById('main-content'));};
+window.selectPayment=method=>{C.survey.paymentMethod=method;renderBillScreen(document.getElementById('main-content'));};
 window.submitBill=async()=>{
+  if(!C.survey.paymentMethod){alert('Seleccioná el medio de pago antes de continuar');return;}
   // save ratings
   for(const[name,stars] of Object.entries(C.survey.ratings)){
     const safeName=name.replace(/[.#$/[\]]/g,'_');
     const cur=DB.ratings[safeName]||{total:0,count:0};
     await set(ref(db,`ratings/${safeName}`),{total:cur.total+stars,count:cur.count+1,name});
   }
-  // mark orders delivered
-  Object.entries(DB.orders).forEach(([k,o])=>{if(o.tableId===C.customerTableId&&o.status!=='delivered')update(ref(db,`orders/${k}`),{status:'delivered'});});
+  // mark orders cobrado + save payment method
+  const pm=C.survey.paymentMethod||'efectivo';
+  Object.entries(DB.orders).forEach(([k,o])=>{if(o.tableId===C.customerTableId&&o.status!=='cobrado')update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm});});
   C.customerStep='thanks';render();
 };
 function renderThanksScreen(mc){
