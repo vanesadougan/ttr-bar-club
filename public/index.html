@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TTR Bar Club</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#1a1a2e">
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Playfair+Display:wght@600&display=swap');
+    *{box-sizing:border-box;margin:0;padding:0}
+    :root{--brand:#1a1a2e;--accent:#e94560;--bg:#f8f7f4;--card:#fff;--text:#1a1a2e;--muted:#6b7280;--border:#e5e7eb;--warn:#f59e0b;--danger:#ef4444;--promo:#f97316;}
+    body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text)}
+    .topbar{background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;height:56px;position:sticky;top:0;z-index:200}
+    .logo{font-family:'Playfair Display',serif;font-size:18px;letter-spacing:0.5px;white-space:nowrap}
+    .logo .ttr{color:#fff}.logo .bar{color:var(--accent)}
+    .modetabs{display:flex;gap:4px;background:rgba(255,255,255,0.1);border-radius:8px;padding:3px}
+    .modetab{padding:5px 14px;border-radius:6px;font-size:13px;cursor:pointer;border:none;background:transparent;color:rgba(255,255,255,0.7);font-family:inherit}
+    .modetab.active{background:#fff;color:var(--brand);font-weight:500}
+    .badge{background:var(--accent);color:#fff;border-radius:12px;font-size:11px;padding:1px 6px;margin-left:4px;font-weight:600}
+    .content{padding:1.5rem;max-width:980px;margin:0 auto;width:100%}
+    .card{background:var(--card);border:0.5px solid var(--border);border-radius:12px;padding:1.25rem}
+    .card-title{font-size:13px;font-weight:500;color:var(--muted);margin-bottom:1rem;text-transform:uppercase;letter-spacing:0.5px}
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .form-group{margin-bottom:10px}
+    .form-group label{font-size:13px;color:var(--muted);display:block;margin-bottom:4px}
+    .form-group input,.form-group select,.form-group textarea{width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:var(--bg);color:var(--text);outline:none}
+    .form-group input:focus,.form-group select:focus{border-color:var(--accent)}
+    .form-group textarea{resize:vertical;min-height:56px}
+    .btn{padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:none;font-family:inherit;transition:all 0.15s}
+    .btn-primary{background:var(--accent);color:#fff}.btn-primary:hover{background:#d63651}
+    .btn-sm{padding:5px 10px;font-size:12px}
+    .btn-ghost{background:transparent;border:0.5px solid var(--border);color:var(--muted)}.btn-ghost:hover{background:var(--bg)}
+    .btn-danger{background:transparent;border:0.5px solid var(--danger);color:var(--danger)}.btn-danger:hover{background:#fef2f2}
+    .btn-outline{background:transparent;border:0.5px solid var(--accent);color:var(--accent)}.btn-outline:hover{background:#fff5f7}
+    .btn-block{width:100%;text-align:center;padding:12px}
+    .row-btns{display:flex;gap:4px;margin-left:4px}
+    .ing-section{border:0.5px solid var(--border);border-radius:10px;padding:12px;margin-bottom:10px;background:var(--bg)}
+    .toggle-switch{position:relative;display:inline-block;width:36px;height:20px}
+    .toggle-switch input{opacity:0;width:0;height:0}
+    .toggle-slider{position:absolute;cursor:pointer;inset:0;background:#d1d5db;border-radius:20px;transition:0.2s}
+    .toggle-slider:before{content:'';position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:0.2s}
+    .toggle-switch input:checked+.toggle-slider{background:var(--accent)}
+    .toggle-switch input:checked+.toggle-slider:before{transform:translateX(16px)}
+    .ing-list{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+    .ing-chip{display:flex;align-items:center;gap:4px;padding:4px 8px 4px 10px;background:var(--card);border:0.5px solid var(--border);border-radius:20px;font-size:12px}
+    .ing-chip-remove{background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;line-height:1;padding:0 2px}.ing-chip-remove:hover{color:var(--danger)}
+    .ing-add-row{display:flex;gap:6px}
+    .ing-add-row input{flex:1;padding:6px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:var(--card);color:var(--text);outline:none}
+    .ing-tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 7px;border-radius:6px;background:#ede9fe;color:#5b21b6;margin-top:3px}
+    .dishes-layout{display:grid;grid-template-columns:340px 1fr;gap:1rem;align-items:start}
+    .cat-sections{display:flex;flex-direction:column;gap:1rem}
+    .cat-section{background:var(--card);border:0.5px solid var(--border);border-radius:12px;overflow:hidden}
+    .cat-section-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;user-select:none}
+    .cat-section-title{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:500}
+    .cat-count{font-size:11px;background:var(--bg);border:0.5px solid var(--border);border-radius:10px;padding:1px 7px;color:var(--muted)}
+    .cat-chevron{font-size:12px;color:var(--muted);transition:transform 0.2s}
+    .cat-chevron.open{transform:rotate(180deg)}
+    .dish-row{display:flex;align-items:flex-start;gap:10px;padding:10px 14px;border-top:0.5px solid var(--border);transition:background 0.1s}
+    .dish-row:hover{background:var(--bg)}
+    .dish-emoji{font-size:20px;width:32px;text-align:center;padding-top:1px;flex-shrink:0}
+    .dish-info{flex:1;min-width:0}.dish-name{font-size:13px;font-weight:500}.dish-desc{font-size:11px;color:var(--muted);margin-top:1px}
+    .dish-price-wrap{display:flex;align-items:center;gap:6px;margin-top:3px;flex-wrap:wrap}
+    .dish-price{font-weight:600;font-size:13px;color:var(--accent)}
+    .dish-price-original{font-size:11px;color:var(--muted);text-decoration:line-through}
+    .promo-chip{font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:#fff7ed;color:#c2410c;border:0.5px solid #fed7aa}
+    .cat-icon-entrada{color:#854d0e}.cat-icon-principal{color:#1e40af}.cat-icon-postre{color:#9d174d}.cat-icon-bebida{color:#065f46}.cat-icon-promo{color:#c2410c}
+    .promo-section{border:0.5px solid #fed7aa;border-radius:10px;padding:12px;margin-bottom:10px;background:#fff7ed}
+    .discount-preview{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card);border-radius:8px;font-size:13px;margin-top:8px;flex-wrap:wrap}
+    .orders-list{display:flex;flex-direction:column;gap:10px;max-height:500px;overflow-y:auto}
+    .order-card{background:var(--bg);border:0.5px solid var(--border);border-radius:10px;padding:1rem}
+    .order-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .order-tname{font-weight:600;font-size:15px}.order-time{font-size:12px;color:var(--muted)}
+    .order-items-text{font-size:13px;color:var(--muted);margin-bottom:6px;line-height:1.7}
+    .order-footer{display:flex;align-items:center;justify-content:space-between}
+    .status{font-size:12px;font-weight:500;padding:3px 9px;border-radius:6px}
+    .status-pending{background:#fef3c7;color:#92400e}.status-ready{background:#d1fae5;color:#065f46}.status-delivered{background:#f3f4f6;color:var(--muted)}
+    .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1rem}
+    .metric{background:var(--bg);border-radius:10px;padding:12px;text-align:center;border:0.5px solid var(--border)}
+    .metric-val{font-size:22px;font-weight:600;color:var(--accent)}.metric-lbl{font-size:11px;color:var(--muted);margin-top:2px}
+    .history-filter{display:flex;gap:6px;margin-bottom:1rem;flex-wrap:wrap}
+    .bill-req{background:#ede9fe;border:0.5px solid #c4b5fd;border-radius:8px;padding:8px 12px;font-size:12px;color:#5b21b6;margin-top:8px;text-align:center}
+    .removed-ing{font-size:11px;color:#b45309;background:#fef3c7;border-radius:4px;padding:1px 6px;display:inline-block}
+    .order-type-chip{font-size:11px;padding:2px 8px;border-radius:6px;font-weight:500;margin-left:6px}
+    .ot-general{background:#d1fae5;color:#065f46}.ot-individual{background:#ede9fe;color:#5b21b6}
+    .rating-row{display:flex;align-items:center;gap:10px;padding:12px;background:var(--bg);border-radius:10px;border:0.5px solid var(--border);margin-bottom:8px}
+    .rating-info{flex:1;min-width:0}.rating-name{font-size:14px;font-weight:500;margin-bottom:4px}
+    .rating-bar-wrap{height:6px;background:var(--border);border-radius:3px;overflow:hidden}
+    .rating-bar{height:6px;border-radius:3px;background:var(--warn)}
+    .stars-display{display:flex;gap:2px}.star-lit{color:#f59e0b}.star-empty{color:#d1d5db}
+    .ratings-hero{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+    .podium-item{display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px}
+    .podium-rank{width:20px;font-weight:600;text-align:center;flex-shrink:0}
+    .podium-rank.gold{color:#d97706}.podium-rank.silver{color:#6b7280}.podium-rank.bronze{color:#92400e}
+    .no-ratings{text-align:center;padding:3rem 1rem;color:var(--muted);font-size:14px}
+    .customer-wrap{display:flex;min-height:calc(100vh - 56px)}
+    .menu-col{flex:1;min-width:0;padding:1.25rem}
+    .cart-col{width:290px;flex-shrink:0;border-left:0.5px solid var(--border);background:var(--card);display:flex;flex-direction:column;position:sticky;top:56px;height:calc(100vh - 56px);overflow:hidden}
+    @media(max-width:640px){.customer-wrap{flex-direction:column}.cart-col{width:100%;height:auto;position:relative;top:0;border-left:none;border-top:0.5px solid var(--border)}.dishes-layout{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}}
+    .cart-header{padding:1rem 1.25rem;border-bottom:0.5px solid var(--border);font-weight:500;font-size:15px;display:flex;align-items:center;justify-content:space-between}
+    .cart-body{flex:1;overflow-y:auto;padding:1rem 1.25rem}
+    .cart-footer{padding:1rem 1.25rem;border-top:0.5px solid var(--border)}
+    .cart-item{display:flex;align-items:flex-start;gap:8px;padding:8px 0;border-bottom:0.5px solid var(--border)}
+    .cart-item:last-child{border:none}
+    .cart-item-info{flex:1;min-width:0}.cart-item-name{font-size:13px;font-weight:500}
+    .cart-item-price{font-size:13px;font-weight:500;color:var(--accent);white-space:nowrap}
+    .cart-qty{display:flex;align-items:center;gap:4px;flex-shrink:0}
+    .cqbtn{width:22px;height:22px;border-radius:50%;border:0.5px solid var(--border);background:var(--bg);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;color:var(--text)}
+    .cqval{font-size:13px;font-weight:500;min-width:14px;text-align:center}
+    .cart-total-row{display:flex;justify-content:space-between;font-size:14px;margin-bottom:4px}
+    .cart-total-row.big{font-weight:600;font-size:16px;margin-top:4px;padding-top:8px;border-top:0.5px solid var(--border)}
+    .cart-empty{text-align:center;padding:2rem 1rem;color:var(--muted);font-size:13px;line-height:1.6}
+    .cart-tag{font-size:11px;background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:2px 7px;color:var(--muted)}
+    .mesa-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:1.5rem}
+    .mesa-title{font-family:'Playfair Display',serif;font-size:28px;text-align:center}
+    .mesa-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:400px}
+    .mesa-btn{padding:18px 12px;border-radius:12px;border:0.5px solid var(--border);background:var(--card);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;transition:all 0.15s;text-align:center}
+    .mesa-btn:hover{border-color:var(--accent);color:var(--accent)}
+    .mesa-btn-label{font-size:11px;color:var(--muted);font-weight:400;margin-top:2px}
+    .back-btn{background:none;border:0.5px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;font-family:inherit;color:var(--muted)}
+    .cat-tabs{display:flex;gap:6px;margin-bottom:1.25rem;flex-wrap:wrap}
+    .cat-tab{padding:6px 14px;border-radius:20px;font-size:13px;cursor:pointer;border:0.5px solid var(--border);background:var(--card);color:var(--muted);font-family:inherit;transition:all 0.15s}
+    .cat-tab.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+    .cat-tab.promo-tab{border-color:#fed7aa;color:#c2410c;background:#fff7ed}
+    .cat-tab.promo-tab.active{background:#c2410c;color:#fff;border-color:#c2410c}
+    .menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+    @media(max-width:400px){.menu-grid{grid-template-columns:1fr}}
+    .menu-card{background:var(--card);border:0.5px solid var(--border);border-radius:12px;padding:1rem;transition:all 0.15s}
+    .menu-card:hover{border-color:var(--accent)}
+    .menu-card.promo-card{border-color:#fed7aa;background:#fffbf7}
+    .menu-card-emoji{font-size:26px;margin-bottom:6px}
+    .menu-card-name{font-size:14px;font-weight:500;margin-bottom:3px}
+    .menu-card-desc{font-size:12px;color:var(--muted);margin-bottom:6px;line-height:1.4}
+    .menu-card-footer{display:flex;align-items:center;justify-content:space-between;margin-top:8px}
+    .menu-card-price{font-weight:600;color:var(--accent);font-size:14px}
+    .menu-card-price-original{font-size:11px;color:var(--muted);text-decoration:line-through;margin-right:4px}
+    .add-btn{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;border:none;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
+    .qty-ctrl{display:flex;align-items:center;gap:5px}
+    .qty-btn{width:24px;height:24px;border-radius:50%;border:0.5px solid var(--border);background:var(--bg);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
+    .qty-val{font-weight:600;font-size:14px;min-width:16px;text-align:center}
+    .excl-note{font-size:11px;color:#b45309;margin-top:2px}
+    .cust-modal{background:var(--card);border-radius:14px;border:1.5px solid var(--accent);padding:1.25rem;margin-bottom:1.25rem}
+    .cust-ing-list{display:flex;flex-direction:column;gap:6px;margin-bottom:1rem}
+    .cust-ing-row{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:8px;background:var(--bg);border:0.5px solid var(--border);cursor:pointer;transition:all 0.15s}
+    .cust-ing-row.excluded{background:#fef2f2;border-color:#fca5a5;opacity:0.7}
+    .cust-check{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .cust-check.checked{background:var(--accent);border-color:var(--accent);color:#fff;font-size:11px}
+    .strikethrough{text-decoration:line-through;color:var(--muted)}
+    .mode-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:1.5rem;padding:2rem}
+    .mode-cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;width:100%;max-width:480px}
+    .mode-card{background:var(--card);border:0.5px solid var(--border);border-radius:14px;padding:1.5rem 1.25rem;cursor:pointer;text-align:center;transition:all 0.15s}
+    .mode-card:hover{border-color:var(--accent);transform:translateY(-2px)}
+    .mode-card-icon{font-size:36px;margin-bottom:10px}
+    .mode-card-title{font-size:15px;font-weight:500;margin-bottom:4px}
+    .mode-card-desc{font-size:12px;color:var(--muted);line-height:1.4}
+    .name-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:1.25rem;padding:2rem}
+    .name-input{padding:12px 16px;font-size:16px;font-family:inherit;border:0.5px solid var(--border);border-radius:10px;width:100%;max-width:300px;outline:none;background:var(--card);color:var(--text);text-align:center}
+    .name-input:focus{border-color:var(--accent)}
+    .bill-screen{max-width:520px;margin:0 auto;padding:1.5rem 0}
+    .bill-title{font-family:'Playfair Display',serif;font-size:24px;margin-bottom:1.25rem}
+    .bill-row{display:flex;justify-content:space-between;font-size:14px;padding:6px 0;border-bottom:0.5px solid var(--border)}
+    .bill-row:last-child{border:none;font-weight:600;font-size:16px;margin-top:4px;padding-top:8px}
+    .person-bill-section{margin-bottom:1rem}
+    .person-bill-title{font-size:13px;font-weight:500;color:#1e40af;background:#dbeafe;border-radius:6px;padding:4px 10px;margin-bottom:6px;display:inline-block}
+    .survey-card{background:var(--card);border:0.5px solid var(--border);border-radius:12px;padding:1.25rem;margin-top:1.25rem}
+    .survey-title{font-weight:500;font-size:15px;margin-bottom:4px}
+    .survey-sub{font-size:13px;color:var(--muted);margin-bottom:1rem}
+    .survey-dish{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:0.5px solid var(--border)}
+    .survey-dish:last-child{border:none}
+    .survey-dish-name{font-size:14px;flex:1}
+    .stars{display:flex;gap:4px}
+    .star{font-size:22px;cursor:pointer;color:#d1d5db;user-select:none}.star.lit{color:#f59e0b}
+    .thanks-screen,.confirm-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:1rem;text-align:center;padding:2rem}
+    .confirm-icon,.thanks-icon{font-size:56px}
+    .confirm-title,.thanks-title{font-family:'Playfair Display',serif;font-size:26px}
+    .order-review{background:var(--card);border:0.5px solid var(--border);border-radius:12px;padding:1rem;width:100%;max-width:400px;text-align:left}
+    .review-row{display:flex;justify-content:space-between;font-size:13px;padding:5px 0;border-bottom:0.5px solid var(--border)}
+    .review-row:last-child{border:none;font-weight:600;margin-top:4px}
+    .empty-state{text-align:center;padding:2rem;color:var(--muted);font-size:14px}
+    .loading-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;gap:1rem}
+    .spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.7s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .new-order-pulse{animation:pulse-border 1s ease-in-out 3}
+    @keyframes pulse-border{0%,100%{border-color:var(--border)}50%{border-color:var(--accent);box-shadow:0 0 0 3px rgba(233,69,96,0.15)}}
+  </style>
+</head>
+<body>
+<div style="display:flex;flex-direction:column;min-height:100vh">
+  <div class="topbar">
+    <div class="logo"><span class="ttr">TTR</span> <span class="bar">Bar Club</span></div>
+    <div class="modetabs" id="modetabs">
+      <button class="modetab active" id="tab-admin" onclick="setMode('admin')">Administrador</button>
+      <button class="modetab" id="tab-customer" onclick="setMode('customer')">Comensal</button>
+    </div>
+    <div style="width:80px;text-align:right;font-size:12px;color:rgba(255,255,255,0.5)" id="clock"></div>
+  </div>
+  <div id="main-content"><div class="loading-screen"><div class="spinner"></div><div style="font-size:14px;color:var(--muted)">Conectando...</div></div></div>
+</div>
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getDatabase, ref, set, push, onValue, update, remove, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+// ─── FIREBASE CONFIG ───────────────────────────────
+// Reemplazá estos valores con los de tu proyecto Firebase
+const firebaseConfig = {
+  apiKey: "AIzaSyBvZ-t5rFj6Eo2Eveze5f5eqqRxZ2xiodY",
+  authDomain: "ttr-bar-club.firebaseapp.com",
+  databaseURL: "https://ttr-bar-club-default-rtdb.firebaseio.com",
+  projectId: "ttr-bar-club",
+  storageBucket: "ttr-bar-club.firebasestorage.app",
+  messagingSenderId: "197986436291",
+  appId: "1:197986436291:web:338ddcf70a35962aacce76",
+  measurementId: "G-4QYLLN280Q"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getDatabase(app);
+
+// ─── HELPERS ──────────────────────────────────────
+const CATS=[
+  {id:'promo',label:'Promo del día',icon:'🔥',iconCls:'cat-icon-promo'},
+  {id:'entrada',label:'Entradas',icon:'🥗',iconCls:'cat-icon-entrada'},
+  {id:'principal',label:'Principales',icon:'🍽️',iconCls:'cat-icon-principal'},
+  {id:'postre',label:'Postres',icon:'🍰',iconCls:'cat-icon-postre'},
+  {id:'bebida',label:'Bebidas',icon:'🥤',iconCls:'cat-icon-bebida'},
+];
+const catOpen={promo:true,entrada:true,principal:true,postre:true,bebida:true};
+
+// Local reactive state (synced from Firebase)
+let DB = { dishes:{}, tables:{}, orders:{}, ratings:{} };
+
+// Customer flow state (local only)
+let C = {
+  mode:'admin', adminTab:'dishes',
+  customerStep:'mesa', customerTableId:null,
+  orderMode:null, customerName:'', customerNameInput:'',
+  customerCat:'todos', cart:{}, custDishId:null,
+  historyFilter:'todos', survey:{items:[],ratings:{}},
+  editingDish:null, editingTable:null,
+  newDish:{name:'',desc:'',price:'',cat:'entrada',emoji:'🍽️',customizable:false,ingredients:[],promoDiscount:0},
+  newIngInput:'', newTable:{label:'',capacity:''},
+};
+
+function nowStr(){const n=new Date();return n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');}
+function dishFinalPrice(d){return d.cat==='promo'&&d.promoDiscount>0?Math.round(d.price*(1-d.promoDiscount/100)):d.price;}
+function tableLabel(tid){const t=DB.tables[tid];return t?t.label:`Mesa ${tid}`;}
+function tableOccupied(tid){return Object.values(DB.orders).some(o=>o.tableId===tid&&o.status!=='delivered');}
+function pendingCount(){return Object.values(DB.orders).filter(o=>o.status==='pending'||o.billRequested).length;}
+function starsHtml(avg,size){let h='';for(let i=1;i<=5;i++)h+=`<span class="${i<=Math.round(avg)?'star-lit':'star-empty'}" style="font-size:${size||14}px">${i<=Math.round(avg)?'★':'☆'}</span>`;return h;}
+
+function updateClock(){const el=document.getElementById('clock');if(el){const n=new Date();el.textContent=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');}}
+
+// ─── FIREBASE LISTENERS ───────────────────────────
+let firstLoad = true;
+onValue(ref(db,'dishes'),  snap=>{ DB.dishes  = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'tables'),  snap=>{ DB.tables  = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'ratings'), snap=>{ DB.ratings = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'orders'),  snap=>{
+  const prev = Object.keys(DB.orders).length;
+  DB.orders = snap.val()||{};
+  firstLoad = false;
+  // flash new order notification if admin is watching orders tab
+  if(C.mode==='admin' && C.adminTab==='orders' && Object.keys(DB.orders).length > prev){
+    render(); highlightNewOrder();
+  } else {
+    render();
+  }
+});
+
+function highlightNewOrder(){
+  setTimeout(()=>{
+    const cards=document.querySelectorAll('.order-card');
+    if(cards.length>0) cards[0].classList.add('new-order-pulse');
+  },100);
+}
+
+// ─── ROUTING: detect /mesa/:id in URL ─────────────
+function initRoute(){
+  const path = window.location.pathname;
+  const m = path.match(/\/mesa\/(.+)/);
+  if(m){
+    C.mode='customer';
+    const tableId=m[1];
+    // find table by id or label
+    const found = Object.entries(DB.tables).find(([k,v])=>k===tableId||v.label===tableId);
+    if(found){ C.customerTableId=found[0]; C.customerStep='modeChoice'; }
+    document.getElementById('modetabs').style.display='none';
+  }
+}
+
+// ─── RENDER ───────────────────────────────────────
+function render(){
+  updateClock();
+  // update tab badges
+  const tabAdmin=document.getElementById('tab-admin');
+  const tabCust=document.getElementById('tab-customer');
+  if(tabAdmin) tabAdmin.classList.toggle('active',C.mode==='admin');
+  if(tabCust)  tabCust.classList.toggle('active',C.mode==='customer');
+  C.mode==='admin'?renderAdmin():renderCustomer();
+}
+
+function setMode(m){
+  C.mode=m;
+  if(m==='customer'){ C.customerStep='mesa';C.cart={};C.survey={items:[],ratings:{}}; }
+  render();
+}
+
+// ══════════════════════════════════════════════════
+// ADMIN
+// ══════════════════════════════════════════════════
+function renderAdmin(){
+  const mc=document.getElementById('main-content');
+  const tabs=['dishes','tables','orders','ratings','history'];
+  const pc=pendingCount();
+  const tl={dishes:'Platos',tables:'Mesas',orders:`Pedidos${pc>0?` <span class="badge">${pc}</span>`:''}`,ratings:'Calificaciones',history:'Historial'};
+  let h=`<div class="content"><div style="display:flex;gap:6px;margin-bottom:1.25rem;border-bottom:0.5px solid var(--border);padding-bottom:10px;flex-wrap:wrap">`;
+  tabs.forEach(t=>{const a=C.adminTab===t;h+=`<button onclick="adminTab('${t}')" style="padding:6px 14px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:${a?'500':'400'};background:${a?'var(--brand)':'transparent'};color:${a?'#fff':'var(--muted)'}">${tl[t]}</button>`;});
+  h+=`</div>`;
+  if(C.adminTab==='dishes')h+=renderDishesTab();
+  else if(C.adminTab==='tables')h+=renderTablesTab();
+  else if(C.adminTab==='orders')h+=renderOrdersTab();
+  else if(C.adminTab==='ratings')h+=renderRatingsTab();
+  else h+=renderHistoryTab();
+  h+=`</div>`;
+  mc.innerHTML=h;
+  const inp=document.getElementById('ing-input');
+  if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addIngredient();}});
+}
+window.adminTab=t=>{C.adminTab=t;render();};
+window.toggleCatOpen=id=>{catOpen[id]=!catOpen[id];render();};
+
+// ── DISHES TAB ────────────────────────────────────
+function renderDishesTab(){
+  const f=C.editingDish||C.newDish; const ings=f.ingredients||[]; const isPromo=f.cat==='promo';
+  const finalPrice=isPromo&&f.promoDiscount>0&&f.price?Math.round(Number(f.price)*(1-Number(f.promoDiscount)/100)):null;
+  let formH=`<div class="card" style="overflow-y:auto;max-height:680px">
+    <div class="card-title">${C.editingDish?'Editar plato':'Agregar plato'}</div>
+    <div class="two-col">
+      <div class="form-group"><label>Emoji</label><input value="${f.emoji}" oninput="uF('dish','emoji',this.value)"></div>
+      <div class="form-group"><label>Categoría</label><select onchange="uF('dish','cat',this.value)">${CATS.map(c=>`<option value="${c.id}"${f.cat===c.id?' selected':''}>${c.icon} ${c.label}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-group"><label>Nombre</label><input placeholder="Nombre del plato" value="${f.name}" oninput="uF('dish','name',this.value)"></div>
+    <div class="form-group"><label>Descripción</label><textarea oninput="uF('dish','desc',this.value)">${f.desc}</textarea></div>
+    <div class="form-group"><label>Precio normal ($)</label><input type="number" placeholder="0" value="${f.price}" oninput="uF('dish','price',this.value)"></div>`;
+  if(isPromo){formH+=`<div class="promo-section"><div style="font-size:13px;font-weight:500;color:#c2410c;margin-bottom:8px">🔥 Promo del día</div><div class="form-group" style="margin-bottom:6px"><label style="color:#92400e">Descuento (%)</label><input type="number" min="0" max="99" placeholder="Ej: 20" value="${f.promoDiscount||''}" oninput="uF('dish','promoDiscount',this.value)" style="border-color:#fed7aa"></div>${finalPrice?`<div class="discount-preview"><span style="color:var(--muted)">Normal:</span><span style="text-decoration:line-through;color:var(--muted)">$${Number(f.price).toLocaleString()}</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">-${f.promoDiscount}%</span><strong style="color:var(--accent)">$${finalPrice.toLocaleString()}</strong></div>`:'<div style="font-size:12px;color:#92400e;margin-top:4px">Ingresá precio y descuento.</div>'}</div>`;}
+  formH+=`<div class="ing-section"><div style="display:flex;align-items:center;gap:8px;margin-bottom:${f.customizable?'10':'0'}px"><label class="toggle-switch"><input type="checkbox" ${f.customizable?'checked':''} onchange="toggleCustomizable(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Personalizar ingredientes</span></div>${f.customizable?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">El comensal podrá destildar los ingredientes que no desea.</div><div class="ing-list">${ings.map((ing,i)=>`<div class="ing-chip">${ing}<button class="ing-chip-remove" onclick="removeIngredient(${i})">×</button></div>`).join('')}${ings.length===0?`<span style="font-size:12px;color:var(--muted)">Sin ingredientes aún</span>`:''}</div><div class="ing-add-row"><input id="ing-input" placeholder="Ej: Cebolla, Tomate..." value="${C.newIngInput}"><button class="btn btn-primary btn-sm" onclick="addIngredient()">+ Agregar</button></div>`:`<div style="font-size:12px;color:var(--muted);margin-top:8px">Activá para definir ingredientes personalizables.</div>`}</div>
+  <div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="${C.editingDish?'saveEditDish()':'addDish()'}">${C.editingDish?'Guardar cambios':'Agregar plato'}</button>${C.editingDish?`<button class="btn btn-ghost" onclick="cancelEditDish()">Cancelar</button>`:''}</div></div>`;
+
+  const dishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k}));
+  let listH=`<div class="cat-sections">`;
+  CATS.forEach(cat=>{
+    const catDishes=dishes.filter(d=>d.cat===cat.id);
+    const open=catOpen[cat.id];
+    listH+=`<div class="cat-section"><div class="cat-section-header" onclick="toggleCatOpen('${cat.id}')"><div class="cat-section-title"><span class="${cat.iconCls}" style="font-size:16px">${cat.icon}</span><span>${cat.label}</span><span class="cat-count">${catDishes.length}</span></div><span class="cat-chevron${open?' open':''}">▼</span></div>`;
+    if(open){
+      listH+=`<div>`;
+      if(catDishes.length===0)listH+=`<div style="padding:10px 14px;font-size:13px;color:var(--muted)">Sin platos en esta categoría</div>`;
+      catDishes.forEach(d=>{
+        const fp=dishFinalPrice(d);const isP=d.cat==='promo'&&d.promoDiscount>0;
+        const r=DB.ratings[d.name];const avg=r?r.total/r.count:null;
+        listH+=`<div class="dish-row"><div class="dish-emoji">${d.emoji}</div><div class="dish-info"><div class="dish-name">${d.name}</div><div class="dish-desc">${d.desc}</div><div class="dish-price-wrap">${isP?`<span class="dish-price-original">$${d.price.toLocaleString()}</span>`:''}<span class="dish-price">$${fp.toLocaleString()}</span>${isP?`<span class="promo-chip">-${d.promoDiscount}%</span>`:''}${d.customizable&&(d.ingredients||[]).length>0?`<span class="ing-tag">🧩 ${d.ingredients.length} ing.</span>`:''}</div>${avg?`<div style="display:flex;align-items:center;gap:3px;margin-top:2px">${starsHtml(avg,11)}<span style="font-size:11px;color:var(--muted)">${avg.toFixed(1)}</span></div>`:''}</div><div class="row-btns"><button class="btn btn-ghost btn-sm" onclick="editDish('${d._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteDish('${d._key}')">✕</button></div></div>`;
+      });
+      listH+=`</div>`;
+    }
+    listH+=`</div>`;
+  });
+  listH+=`</div>`;
+  return`<div class="dishes-layout">${formH}<div>${listH}</div></div>`;
+}
+
+// ── TABLES TAB ────────────────────────────────────
+function renderTablesTab(){
+  const f=C.editingTable||C.newTable;
+  const tables=Object.entries(DB.tables).map(([k,v])=>({...v,_key:k}));
+  return`<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+    <div class="card">
+      <div class="card-title">${C.editingTable?'Editar mesa':'Agregar mesa'}</div>
+      <div class="form-group"><label>Nombre o número</label><input placeholder="Ej: Mesa 5, Barra, Terraza VIP..." value="${f.label}" oninput="uF('table','label',this.value)"></div>
+      <div class="form-group"><label>Capacidad (personas)</label><input type="number" min="1" placeholder="Ej: 4" value="${f.capacity||''}" oninput="uF('table','capacity',this.value)"></div>
+      <div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="${C.editingTable?'saveEditTable()':'addTable()'}">${C.editingTable?'Guardar':'Agregar mesa'}</button>${C.editingTable?`<button class="btn btn-ghost" onclick="cancelEditTable()">Cancelar</button>`:''}</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Mesas del salón (${tables.length})</div>
+      <div style="display:flex;flex-direction:column;gap:8px;max-height:380px;overflow-y:auto">
+        ${tables.length===0?`<div class="empty-state">No hay mesas</div>`:tables.map(t=>{
+          const occ=tableOccupied(t._key);
+          const qrUrl=`${window.location.origin}/mesa/${t._key}`;
+          return`<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)">
+            <div style="width:36px;height:36px;border-radius:8px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;flex-shrink:0">${t.label.replace(/\D/g,'').slice(0,2)||'#'}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;font-weight:500">${t.label}</div>
+              <div style="font-size:12px;color:var(--muted)">${t.capacity?`${t.capacity} personas · `:''}<span style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:500;background:${occ?'#fef3c7':'#d1fae5'};color:${occ?'#92400e':'#065f46'}">${occ?'Ocupada':'Libre'}</span></div>
+              <div style="font-size:11px;color:#5b21b6;margin-top:2px;cursor:pointer" onclick="copyQR('${qrUrl}')">🔗 Copiar link QR</div>
+            </div>
+            <div class="row-btns"><button class="btn btn-ghost btn-sm" onclick="editTable('${t._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteTable('${t._key}')"${occ?' disabled':''}>✕</button></div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+window.copyQR=url=>{navigator.clipboard.writeText(url).then(()=>alert('Link copiado: '+url));};
+
+// ── ORDERS TAB ────────────────────────────────────
+function renderOrdersTab(){
+  const orders=Object.entries(DB.orders).map(([k,v])=>({...v,_key:k})).sort((a,b)=>b.createdAt-a.createdAt);
+  const active=orders.filter(o=>o.status!=='delivered');
+  let h=`<div class="metrics">
+    <div class="metric"><div class="metric-val">${orders.filter(o=>o.status==='pending').length}</div><div class="metric-lbl">Pendientes</div></div>
+    <div class="metric"><div class="metric-val">${orders.filter(o=>o.status==='ready').length}</div><div class="metric-lbl">Listos</div></div>
+    <div class="metric"><div class="metric-val">${orders.filter(o=>o.billRequested&&o.status!=='delivered').length}</div><div class="metric-lbl">Piden cuenta</div></div>
+    <div class="metric"><div class="metric-val">${orders.filter(o=>o.status==='delivered').length}</div><div class="metric-lbl">Entregados</div></div>
+  </div><div class="orders-list">`;
+  if(active.length===0)h+=`<div class="empty-state">No hay pedidos activos</div>`;
+  active.forEach(o=>{
+    const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+    const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
+    h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}</div><div class="order-time">${o.time}</div></div><div class="order-items-text">`;
+    (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''} <span style="color:var(--accent)">$${(i.finalPrice||i.price).toLocaleString()}</span><br>`;});
+    h+=`</div>${o.billRequested?`<div class="bill-req">⚡ Mesa solicitó la cuenta</div>`:''}<div class="order-footer" style="margin-top:8px"><span class="status status-${o.status}">${{pending:'Pendiente',ready:'Listo',delivered:'Entregado'}[o.status]}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>${o.status==='pending'?`<button class="btn btn-primary btn-sm" onclick="markReady('${o._key}')">Marcar listo</button>`:''}${o.status==='ready'?`<button class="btn btn-ghost btn-sm" onclick="markDelivered('${o._key}')">Entregado</button>`:''}</div></div></div>`;
+  });
+  return h+`</div>`;
+}
+
+// ── RATINGS TAB ───────────────────────────────────
+function renderRatingsTab(){
+  const allRated=Object.entries(DB.ratings).filter(([,r])=>r&&r.count>0);
+  if(allRated.length===0)return`<div class="no-ratings"><div style="font-size:40px;margin-bottom:1rem">⭐</div><div style="font-size:16px;font-weight:500">Todavía no hay calificaciones</div></div>`;
+  const sorted=[...allRated].sort((a,b)=>(b[1].total/b[1].count)-(a[1].total/a[1].count));
+  const totalReviews=allRated.reduce((s,[,r])=>s+r.count,0);
+  const globalAvg=allRated.reduce((s,[,r])=>s+r.total,0)/allRated.reduce((s,[,r])=>s+r.count,0);
+  const medals=['🥇','🥈','🥉'];const medalCls=['gold','silver','bronze'];
+  let h=`<div class="ratings-hero"><div class="card"><div class="card-title">Resumen general</div><div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px"><span style="font-size:36px;font-weight:600">${globalAvg.toFixed(1)}</span><div>${starsHtml(globalAvg,18)}</div></div><div style="font-size:13px;color:var(--muted)">${totalReviews} calificación${totalReviews!==1?'es':''}</div></div><div class="card"><div class="card-title">Top 3 platos</div>`;
+  const dishes=Object.values(DB.dishes);
+  sorted.slice(0,3).forEach(([name,r],i)=>{const avg=(r.total/r.count).toFixed(1);const d=dishes.find(x=>x.name===name);h+=`<div class="podium-item"><div class="podium-rank ${medalCls[i]}">${medals[i]}</div><div style="font-size:18px">${d?d.emoji:''}</div><div style="flex:1;font-size:13px;font-weight:500">${name}</div><div style="font-size:13px;font-weight:600;color:var(--warn)">${avg} ★</div></div>`;});
+  h+=`</div></div>`;
+  sorted.forEach(([name,r])=>{const avg=r.total/r.count;const d=dishes.find(x=>x.name===name);h+=`<div class="rating-row"><div style="font-size:24px;width:36px;text-align:center;flex-shrink:0">${d?d.emoji:'🍽️'}</div><div class="rating-info"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div class="rating-name">${name}</div><div style="display:flex;align-items:center;gap:8px"><div class="stars-display">${starsHtml(avg,14)}</div><div style="font-size:20px;font-weight:600;min-width:36px;text-align:right">${avg.toFixed(1)}</div><div style="font-size:11px;color:var(--muted);min-width:52px;text-align:right">${r.count} voto${r.count!==1?'s':''}</div></div></div><div class="rating-bar-wrap"><div class="rating-bar" style="width:${(avg/5)*100}%"></div></div></div></div>`;});
+  return h;
+}
+
+// ── HISTORY TAB ───────────────────────────────────
+function renderHistoryTab(){
+  const filters=['todos','pendiente','listo','entregado'];
+  let h=`<div class="history-filter">`;
+  filters.forEach(f=>{const a=C.historyFilter===f;h+=`<button onclick="setHistFilter('${f}')" style="padding:5px 12px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:${a?'var(--brand)':'var(--card)'};color:${a?'#fff':'var(--muted)'}">${f[0].toUpperCase()+f.slice(1)}</button>`;});
+  h+=`</div><div class="orders-list">`;
+  const map={pendiente:'pending',listo:'ready',entregado:'delivered'};
+  const all=Object.entries(DB.orders).map(([k,v])=>({...v,_key:k})).sort((a,b)=>b.createdAt-a.createdAt);
+  const fil=all.filter(o=>C.historyFilter==='todos'||o.status===map[C.historyFilter]);
+  if(fil.length===0)h+=`<div class="empty-state">No hay pedidos</div>`;
+  fil.forEach(o=>{
+    const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+    const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
+    h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}</div><div class="order-time">${o.time}</div></div><div class="order-items-text">`;
+    (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}<br>`;});
+    h+=`</div><div class="order-footer"><span class="status status-${o.status}">${{pending:'Pendiente',ready:'Listo',delivered:'Entregado'}[o.status]}</span><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span></div></div>`;
+  });
+  return h+`</div>`;
+}
+
+// ─── ADMIN ACTIONS ────────────────────────────────
+window.uF=(type,field,val)=>{
+  const o=type==='dish'?(C.editingDish||C.newDish):(C.editingTable||C.newTable);
+  o[field]=(field==='price'||field==='capacity'||field==='promoDiscount')?Number(val):val;
+  if(type==='dish'&&(field==='price'||field==='promoDiscount'||field==='cat'))render();
+};
+window.toggleCustomizable=val=>{const f=C.editingDish||C.newDish;f.customizable=val;if(!f.ingredients)f.ingredients=[];render();};
+window.addIngredient=()=>{const inp=document.getElementById('ing-input');const val=(inp?inp.value:C.newIngInput).trim();if(!val)return;const f=C.editingDish||C.newDish;if(!f.ingredients)f.ingredients=[];val.split(',').map(v=>v.trim()).filter(Boolean).forEach(v=>{if(!f.ingredients.includes(v))f.ingredients.push(v);});C.newIngInput='';render();};
+window.removeIngredient=idx=>{const f=C.editingDish||C.newDish;f.ingredients.splice(idx,1);render();};
+window.addDish=()=>{const d=C.newDish;if(!d.name||!d.price){alert('Completá nombre y precio');return;}push(ref(db,'dishes'),{...d,ingredients:d.ingredients||[]});C.newDish={name:'',desc:'',price:'',cat:'entrada',emoji:'🍽️',customizable:false,ingredients:[],promoDiscount:0};C.newIngInput='';render();};
+window.editDish=key=>{C.editingDish={...DB.dishes[key],_key:key,ingredients:[...(DB.dishes[key].ingredients||[])]};render();};
+window.saveEditDish=()=>{const {_key,...data}=C.editingDish;set(ref(db,`dishes/${_key}`),data);C.editingDish=null;render();};
+window.cancelEditDish=()=>{C.editingDish=null;render();};
+window.deleteDish=key=>{if(confirm('¿Eliminar este plato?'))remove(ref(db,`dishes/${key}`));};
+window.addTable=()=>{const t=C.newTable;if(!t.label){alert('Ingresá un nombre');return;}push(ref(db,'tables'),{...t});C.newTable={label:'',capacity:''};render();};
+window.editTable=key=>{C.editingTable={...DB.tables[key],_key:key};render();};
+window.saveEditTable=()=>{const {_key,...data}=C.editingTable;set(ref(db,`tables/${_key}`),data);C.editingTable=null;render();};
+window.cancelEditTable=()=>{C.editingTable=null;render();};
+window.deleteTable=key=>{if(tableOccupied(key)){alert('Mesa con pedidos activos');return;}if(confirm('¿Eliminar?'))remove(ref(db,`tables/${key}`));};
+window.markReady=key=>update(ref(db,`orders/${key}`),{status:'ready'});
+window.markDelivered=key=>update(ref(db,`orders/${key}`),{status:'delivered'});
+window.setHistFilter=f=>{C.historyFilter=f;render();};
+
+// ══════════════════════════════════════════════════
+// CUSTOMER
+// ══════════════════════════════════════════════════
+function renderCustomer(){
+  const mc=document.getElementById('main-content');
+  const step=C.customerStep;
+  if(step==='mesa')renderMesaScreen(mc);
+  else if(step==='modeChoice')renderModeChoice(mc);
+  else if(step==='nameInput')renderNameInput(mc);
+  else if(step==='confirm')renderConfirmScreen(mc);
+  else if(step==='bill')renderBillScreen(mc);
+  else if(step==='thanks')renderThanksScreen(mc);
+  else renderMenuWithCart(mc);
+}
+
+function renderMesaScreen(mc){
+  const tables=Object.entries(DB.tables).map(([k,v])=>({...v,_key:k}));
+  if(tables.length===0){mc.innerHTML=`<div class="content"><div style="text-align:center;padding:4rem 1rem"><div style="font-size:40px;margin-bottom:1rem">🪑</div><div style="font-family:'Playfair Display',serif;font-size:22px">No hay mesas configuradas</div></div></div>`;return;}
+  let h=`<div class="content"><div class="mesa-screen"><div style="width:100%;max-width:480px"><div class="mesa-title" style="margin-bottom:1.5rem">¿En qué mesa<br>estás sentado?</div><div class="mesa-grid">`;
+  tables.forEach(t=>{const occ=tableOccupied(t._key);h+=`<button class="mesa-btn" onclick="selectMesa('${t._key}')" style="${occ?'border-color:#f59e0b;':''}"><div>${t.label}</div>${t.capacity?`<div class="mesa-btn-label">${t.capacity} personas</div>`:''}</button>`;});
+  h+=`</div></div></div></div>`;mc.innerHTML=h;
+}
+window.selectMesa=id=>{C.customerTableId=id;C.customerStep='modeChoice';render();};
+
+function renderModeChoice(mc){
+  const table=DB.tables[C.customerTableId];
+  mc.innerHTML=`<div class="content"><div class="mode-screen"><div style="font-family:'Playfair Display',serif;font-size:26px;text-align:center">¿Cómo van a pedir?</div><div style="font-size:14px;color:var(--muted)">${table?table.label:''}</div><div class="mode-cards"><div class="mode-card" onclick="chooseMode('general')"><div class="mode-card-icon">👥</div><div class="mode-card-title">Pedido general</div><div class="mode-card-desc">Un solo pedido compartido para toda la mesa</div></div><div class="mode-card" onclick="chooseMode('individual')"><div class="mode-card-icon">👤</div><div class="mode-card-title">Pedido individual</div><div class="mode-card-desc">Cada persona hace su propio pedido con su nombre</div></div></div><button class="btn btn-ghost btn-sm" onclick="backToMesas()">← Cambiar mesa</button></div></div>`;
+}
+window.chooseMode=mode=>{C.orderMode=mode;if(mode==='individual')C.customerStep='nameInput';else{C.customerName='';C.customerStep='menu';}render();};
+
+function renderNameInput(mc){
+  const table=DB.tables[C.customerTableId];
+  mc.innerHTML=`<div class="content"><div class="name-screen"><div style="font-size:26px;font-family:'Playfair Display',serif">¿Cuál es tu nombre?</div><div style="font-size:14px;color:var(--muted)">${table?table.label:''} · Pedido individual</div><input class="name-input" id="name-inp" placeholder="Tu nombre..." value="${C.customerNameInput}" oninput="C.customerNameInput=this.value" onkeydown="if(event.key==='Enter')confirmName()"><button class="btn btn-primary" style="min-width:200px;padding:12px" onclick="confirmName()">Continuar →</button><button class="btn btn-ghost btn-sm" onclick="C.customerStep='modeChoice';render()">← Volver</button></div></div>`;
+  setTimeout(()=>{const el=document.getElementById('name-inp');if(el)el.focus();},50);
+}
+window.confirmName=()=>{const name=C.customerNameInput.trim();if(!name){alert('Ingresá tu nombre');return;}C.customerName=name;C.customerStep='menu';render();};
+window.backToMesas=()=>{C.customerTableId=null;C.orderMode=null;C.customerName='';C.customerStep='mesa';render();};
+
+function cartCount(){return Object.values(C.cart).reduce((s,v)=>s+v.qty,0);}
+function cartTotal(){return Object.entries(C.cart).reduce((s,[id,v])=>{const d=DB.dishes[id];return s+(d?dishFinalPrice(d)*v.qty:0);},0);}
+
+function renderMenuWithCart(mc){
+  const table=DB.tables[C.customerTableId];
+  const isIndividual=C.orderMode==='individual';
+  const dishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k}));
+  const promoCount=dishes.filter(d=>d.cat==='promo').length;
+  const allCats=['todos',...CATS.map(c=>c.id)];
+  const catLabels={todos:'Todos',promo:`🔥 Promos${promoCount>0?` (${promoCount})`:''}`,entrada:'Entradas',principal:'Principales',postre:'Postres',bebida:'Bebidas'};
+  const filtered=C.customerCat==='todos'?dishes:dishes.filter(d=>d.cat===C.customerCat);
+  const ct=cartCount();
+
+  let menuH=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem;flex-wrap:wrap"><button class="back-btn" onclick="C.customerStep='modeChoice';render()">← Volver</button><div style="font-size:14px;color:var(--muted)"><strong style="color:var(--text)">${table?table.label:''}</strong>${isIndividual?`<span class="order-type-chip ot-individual" style="margin-left:6px">👤 ${C.customerName}</span>`:`<span class="order-type-chip ot-general" style="margin-left:6px">👥 General</span>`}</div></div><div class="cat-tabs">`;
+  allCats.forEach(c=>{const isP=c==='promo';menuH+=`<button class="cat-tab${C.customerCat===c?' active':''}${isP?' promo-tab':''}" onclick="setCat('${c}')">${catLabels[c]}</button>`;});
+  menuH+=`</div>`;
+
+  if(C.custDishId!==null){
+    const d=DB.dishes[C.custDishId];
+    if(d){
+      const excl=(C.cart[C.custDishId]&&C.cart[C.custDishId].excluded)||new Set();
+      menuH+=`<div class="cust-modal"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:24px">${d.emoji}</span><div><div style="font-size:16px;font-weight:500">${d.name}</div><div style="font-size:12px;color:var(--muted)">Destildá lo que no querés</div></div></div><div class="cust-ing-list">`;
+      (d.ingredients||[]).forEach(ing=>{const ex=excl.has(ing);menuH+=`<div class="cust-ing-row${ex?' excluded':''}" onclick="toggleIng('${C.custDishId}','${ing.replace(/'/g,"\\'")}')"><div style="display:flex;align-items:center;gap:8px"><div class="cust-check ${ex?'unchecked':'checked'}">${ex?'':'✓'}</div><span class="${ex?'strikethrough':''}">${ing}</span></div>${ex?`<span style="font-size:11px;color:#b45309">Sin esto</span>`:''}</div>`;});
+      menuH+=`</div><div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="confirmCust('${C.custDishId}')">Agregar al pedido</button><button class="btn btn-ghost" onclick="cancelCust()">Cancelar</button></div></div>`;
+    }
+  }
+
+  menuH+=`<div class="menu-grid">`;
+  filtered.forEach(d=>{
+    const entry=C.cart[d._key];const q=entry?entry.qty:0;const excl=entry?entry.excluded:new Set();
+    const fp=dishFinalPrice(d);const isP=d.cat==='promo'&&d.promoDiscount>0;
+    const r=DB.ratings[d.name];const avg=r&&r.count>0?r.total/r.count:null;
+    menuH+=`<div class="menu-card${isP?' promo-card':''}">${isP?`<div style="margin-bottom:6px"><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:#fff7ed;color:#c2410c;border:0.5px solid #fed7aa">🔥 PROMO DEL DÍA</span></div>`:''}<div class="menu-card-emoji">${d.emoji}</div><div class="menu-card-name">${d.name}</div>${avg?`<div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">${starsHtml(avg,11)}<span style="font-size:11px;color:var(--muted);margin-left:2px">${avg.toFixed(1)}</span></div>`:''}<div class="menu-card-desc">${d.desc}</div>${d.customizable&&(d.ingredients||[]).length>0?`<div style="font-size:11px;color:#5b21b6;background:#ede9fe;border-radius:5px;padding:2px 7px;display:inline-block;margin-bottom:6px">🧩 Personalizable</div>`:''}${excl&&excl.size>0?`<div class="excl-note">Sin: ${[...excl].join(', ')}</div>`:''}<div class="menu-card-footer"><div>${isP?`<span class="menu-card-price-original">$${d.price.toLocaleString()}</span> `:''}<span class="menu-card-price">$${fp.toLocaleString()}</span>${isP?`<span style="font-size:10px;font-weight:600;color:#c2410c;margin-left:4px">-${d.promoDiscount}%</span>`:''}</div>${q===0?`<button class="add-btn" onclick="${d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`}">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeFromCart('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="${d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`}">+</button></div>`}</div></div>`;
+  });
+  menuH+=`</div>`;
+
+  const cartEntries=Object.entries(C.cart).filter(([,v])=>v.qty>0);
+  const total=cartTotal();
+  let cartH=`<div class="cart-header"><span>${isIndividual?C.customerName:'Pedido mesa'}</span>${ct>0?`<span class="cart-tag">${ct} ítem${ct>1?'s':''}</span>`:''}</div><div class="cart-body">`;
+  if(cartEntries.length===0)cartH+=`<div class="cart-empty">Todavía no agregaste ningún plato.</div>`;
+  else cartEntries.forEach(([id,v])=>{
+    const d=DB.dishes[id];if(!d)return;const fp=dishFinalPrice(d);
+    cartH+=`<div class="cart-item"><div style="font-size:18px;flex-shrink:0">${d.emoji}</div><div class="cart-item-info"><div class="cart-item-name">${d.name}</div>${v.excluded&&v.excluded.size>0?`<div style="font-size:11px;color:#b45309">Sin: ${[...v.excluded].join(', ')}</div>`:''}</div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCart('${id}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="${d.customizable&&(d.ingredients||[]).length>0?`openCust('${id}')`:`quickAdd('${id}')`}">+</button></div><div class="cart-item-price">$${(fp*v.qty).toLocaleString()}</div></div>`;
+  });
+  cartH+=`</div><div class="cart-footer">`;
+  if(cartEntries.length>0){cartH+=`<div class="cart-total-row big"><span>Total</span><span>$${total.toLocaleString()}</span></div><button class="btn btn-primary btn-block" style="margin-top:10px" onclick="placeOrder()">Confirmar pedido</button>`;}
+  const hasOrders=Object.values(DB.orders).some(o=>o.tableId===C.customerTableId&&o.status!=='delivered');
+  if(hasOrders)cartH+=`<button class="btn btn-outline btn-block" style="margin-top:8px" onclick="goToBill()">Solicitar la cuenta</button>`;
+  cartH+=`</div>`;
+
+  mc.innerHTML=`<div class="customer-wrap"><div class="menu-col">${menuH}</div><div class="cart-col">${cartH}</div></div>`;
+}
+
+window.openCust=id=>{C.custDishId=id;renderMenuWithCart(document.getElementById('main-content'));};
+window.cancelCust=()=>{C.custDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
+window.toggleIng=(dishId,ing)=>{if(!C.cart[dishId])C.cart[dishId]={qty:0,excluded:new Set()};if(!C.cart[dishId].excluded)C.cart[dishId].excluded=new Set();if(C.cart[dishId].excluded.has(ing))C.cart[dishId].excluded.delete(ing);else C.cart[dishId].excluded.add(ing);renderMenuWithCart(document.getElementById('main-content'));};
+window.confirmCust=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;C.custDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
+window.quickAdd=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;renderMenuWithCart(document.getElementById('main-content'));};
+window.removeFromCart=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;else delete C.cart[id];}renderMenuWithCart(document.getElementById('main-content'));};
+window.setCat=c=>{C.customerCat=c;C.custDishId=null;render();};
+
+window.placeOrder=()=>{
+  if(cartCount()===0)return;
+  const items=Object.entries(C.cart).map(([id,v])=>{const d=DB.dishes[id];return{name:d.name,qty:v.qty,price:d.price,finalPrice:dishFinalPrice(d),excluded:v.excluded?[...v.excluded]:[]};});
+  push(ref(db,'orders'),{tableId:C.customerTableId,items,status:'pending',time:nowStr(),billRequested:false,orderMode:C.orderMode,personName:C.orderMode==='individual'?C.customerName:null,createdAt:Date.now()});
+  C.cart={};C.custDishId=null;C.customerStep='confirm';render();
+};
+
+function renderConfirmScreen(mc){
+  // find last order for this table
+  const myOrders=Object.values(DB.orders).filter(o=>o.tableId===C.customerTableId).sort((a,b)=>b.createdAt-a.createdAt);
+  const last=myOrders[0];if(!last){C.customerStep='menu';render();return;}
+  const total=(last.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+  const isInd=last.orderMode==='individual';
+  let h=`<div class="content"><div class="confirm-screen"><div class="confirm-icon">✅</div><div class="confirm-title">¡Pedido enviado!</div><div style="font-size:14px;color:var(--muted)">${isInd?`Pedido de <strong>${last.personName}</strong> · `:''} ${tableLabel(C.customerTableId)}</div><div class="order-review"><div style="font-weight:500;margin-bottom:10px;font-size:14px">${isInd?last.personName:'Pedido'} — ${tableLabel(C.customerTableId)}</div>`;
+  (last.items||[]).forEach(i=>{h+=`<div class="review-row"><span>${i.qty}× ${i.name}${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}</span><span>$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;});
+  h+=`<div class="review-row"><span>Total</span><span>$${total.toLocaleString()}</span></div></div><div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center"><button class="btn btn-primary" onclick="backToMenu()">${isInd?'Otro comensal':'Seguir pidiendo'}</button><button class="btn btn-outline" onclick="goToBill()">Solicitar la cuenta</button></div></div></div>`;
+  mc.innerHTML=h;
+}
+window.backToMenu=()=>{if(C.orderMode==='individual'){C.customerName='';C.customerNameInput='';C.cart={};C.customerStep='nameInput';}else{C.cart={};C.customerStep='menu';}render();};
+
+window.goToBill=()=>{
+  Object.entries(DB.orders).forEach(([k,o])=>{if(o.tableId===C.customerTableId&&o.status!=='delivered')update(ref(db,`orders/${k}`),{billRequested:true});});
+  const seen={};Object.values(DB.orders).filter(o=>o.tableId===C.customerTableId).forEach(o=>(o.items||[]).forEach(i=>{seen[i.name]=true;}));
+  C.survey={items:Object.keys(seen),ratings:{}};C.customerStep='bill';render();
+};
+
+function renderBillScreen(mc){
+  const tableOrders=Object.values(DB.orders).filter(o=>o.tableId===C.customerTableId);
+  const isIndividual=tableOrders.some(o=>o.orderMode==='individual');
+  let h=`<div class="content"><div class="bill-screen"><div class="bill-title">Tu cuenta</div>`;
+  if(isIndividual){
+    const persons={};tableOrders.forEach(o=>{const key=o.orderMode==='individual'?o.personName:'Mesa (general)';if(!persons[key])persons[key]=[];(o.items||[]).forEach(i=>{const ex=persons[key].find(x=>x.name===i.name);if(ex)ex.qty+=i.qty;else persons[key].push({...i});});});
+    const grandTotal=Object.values(persons).flat().reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+    Object.entries(persons).forEach(([name,items])=>{const sub=items.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);h+=`<div class="person-bill-section"><div class="person-bill-title">👤 ${name}</div><div class="card" style="padding:0.75rem">`;items.forEach(i=>{h+=`<div class="bill-row"><span>${i.qty}× ${i.name}</span><span>$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;});h+=`<div class="bill-row"><span>Subtotal</span><span>$${sub.toLocaleString()}</span></div></div></div>`;});
+    h+=`<div class="card" style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;padding:1rem 1.25rem"><span style="font-weight:600;font-size:16px">Total mesa</span><span style="font-weight:600;font-size:18px;color:var(--accent)">$${grandTotal.toLocaleString()}</span></div>`;
+  } else {
+    const seen={};tableOrders.forEach(o=>(o.items||[]).forEach(i=>{if(seen[i.name])seen[i.name].qty+=i.qty;else seen[i.name]={...i};}));
+    const allItems=Object.values(seen);const total=allItems.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+    h+=`<div class="card">`;allItems.forEach(i=>{h+=`<div class="bill-row"><span>${i.qty}× ${i.name}</span><span>$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;});
+    h+=`<div class="bill-row"><span>Total</span><span>$${total.toLocaleString()}</span></div></div>`;
+  }
+  h+=`<div class="survey-card"><div class="survey-title">¿Cómo estuvo tu experiencia?</div><div class="survey-sub">Calificá los platos — opcional</div>`;
+  C.survey.items.forEach(name=>{const r=C.survey.ratings[name]||0;h+=`<div class="survey-dish"><div class="survey-dish-name">${name}</div><div class="stars">`;for(let s=1;s<=5;s++)h+=`<span class="star${s<=r?' lit':''}" onclick="rateDish('${name.replace(/'/g,"\\'")}',${s})">${s<=r?'★':'☆'}</span>`;h+=`</div></div>`;});
+  h+=`</div><button class="btn btn-primary btn-block" style="margin-top:1.25rem" onclick="submitBill()">Enviar y cerrar cuenta</button><div style="text-align:center;margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="submitBill()">Omitir encuesta</button></div></div></div>`;
+  mc.innerHTML=h;
+}
+window.rateDish=(name,stars)=>{C.survey.ratings[name]=stars;renderBillScreen(document.getElementById('main-content'));};
+window.submitBill=async()=>{
+  // save ratings
+  for(const[name,stars] of Object.entries(C.survey.ratings)){
+    const safeName=name.replace(/[.#$/[\]]/g,'_');
+    const cur=DB.ratings[safeName]||{total:0,count:0};
+    await set(ref(db,`ratings/${safeName}`),{total:cur.total+stars,count:cur.count+1,name});
+  }
+  // mark orders delivered
+  Object.entries(DB.orders).forEach(([k,o])=>{if(o.tableId===C.customerTableId&&o.status!=='delivered')update(ref(db,`orders/${k}`),{status:'delivered'});});
+  C.customerStep='thanks';render();
+};
+function renderThanksScreen(mc){
+  const rated=Object.keys(C.survey.ratings||{}).length;
+  mc.innerHTML=`<div class="content"><div class="thanks-screen"><div class="thanks-icon">🙏</div><div class="thanks-title">¡Hasta la próxima!</div><div style="font-size:15px;color:var(--muted);max-width:280px;line-height:1.6">Gracias por visitarnos.${rated>0?` Tu opinión sobre ${rated} plato${rated>1?'s':''} fue registrada.`:''}</div><button class="btn btn-primary" onclick="startOver()" style="margin-top:0.5rem">Nueva mesa</button></div></div>`;
+}
+window.startOver=()=>{C.customerStep='mesa';C.cart={};C.survey={items:[],ratings:{}};C.customerTableId=null;C.custDishId=null;render();};
+
+// Start
+setInterval(updateClock,60000);
+initRoute();
+</script>
+</body>
+</html>

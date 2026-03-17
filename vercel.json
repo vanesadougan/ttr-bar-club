@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/mesa/:tableId", "destination": "/index.html" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
+}
