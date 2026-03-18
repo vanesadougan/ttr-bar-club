@@ -275,7 +275,7 @@ let C = {
   historyFilter:'todos', survey:{items:[],ratings:{}},
   editingDish:null, editingTable:null,
   newDish:{name:'',desc:'',price:'',cat:'entrada',emoji:'🍽️',customizable:false,ingredients:[],promoDiscount:0},
-  newIngInput:'', newTypeInput:'', typePickerDishId:null, newTable:{label:'',capacity:''},
+  newIngInput:'', newTypeInput:'', typePickerDishId:null, showPaymentPicker:false, newTable:{label:'',capacity:''},
   newCat:{label:'',icon:'🍽️',isPromo:false,noRating:false}, editingCat:null,
 };
 
@@ -961,6 +961,27 @@ function renderMenuWithCart(mc){
     }
   }
 
+  // Payment picker modal
+  if(C.showPaymentPicker){
+    const payMethods=[
+      {id:'efectivo',label:'Efectivo',icon:'💵'},
+      {id:'credito',label:'Tarjeta de crédito',icon:'💳'},
+      {id:'debito',label:'Tarjeta de débito',icon:'💳'},
+      {id:'transferencia',label:'Transferencia',icon:'📲'},
+      {id:'mercadopago',label:'Mercado Pago',icon:'🔵'},
+    ];
+    const selPay=C.survey.paymentMethod||null;
+    menuH+=`<div class="cust-modal">
+      <div style="font-size:18px;font-weight:600;margin-bottom:4px">¿Cómo vas a pagar?</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Elegí el medio de pago para solicitar la cuenta</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+        ${payMethods.map(pm=>`<button onclick="selectPayment('${pm.id}')" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-radius:8px;border:${selPay===pm.id?'2px solid var(--accent)':'0.5px solid var(--border)'};background:${selPay===pm.id?'#fff5f7':'var(--bg)'};cursor:pointer;font-size:14px;font-family:inherit;text-align:left"><span style="font-size:20px">${pm.icon}</span><span style="${selPay===pm.id?'font-weight:500;color:var(--accent)':''}">${pm.label}</span>${selPay===pm.id?'<span style="margin-left:auto;color:var(--accent);font-size:16px">✓</span>':''}</button>`).join('')}
+      </div>
+      <button class="btn btn-primary" style="width:100%;padding:12px;${!selPay?'opacity:0.6':''}" onclick="confirmBill()">Solicitar la cuenta</button>
+      <button class="btn btn-ghost" style="width:100%;margin-top:8px" onclick="cancelPaymentPicker()">Cancelar</button>
+    </div>`;
+  }
+
   // Type picker modal
   if(C.typePickerDishId!==null){
     const d=DB.dishes[C.typePickerDishId];
@@ -1088,20 +1109,34 @@ function renderConfirmScreen(mc){
 window.backToMenu=()=>{C.cart={};C.custDishId=null;C.typePickerDishId=null;C.customerStep='menu';render();};
 
 window.goToBill=()=>{
+  // show payment picker modal — don't navigate away yet
+  C.survey={items:[],ratings:{},paymentMethod:null};
+  C.showPaymentPicker=true;
+  renderMenuWithCart(document.getElementById('main-content'));
+};
+
+window.confirmBill=async()=>{
+  if(!C.survey.paymentMethod){alert('Seleccioná el medio de pago');return;}
+  const pm=C.survey.paymentMethod;
   const billCutoff=Date.now()-18*60*60*1000;
-  Object.entries(DB.orders).forEach(([k,o])=>{if(o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=billCutoff)update(ref(db,`orders/${k}`),{status:'billed',billRequested:true});});
-  // build survey items excluding dishes from noRating categories
+  // mark billed + save payment method
+  Object.entries(DB.orders).forEach(([k,o])=>{
+    if(o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=billCutoff)
+      update(ref(db,`orders/${k}`),{status:'billed',billRequested:true,paymentMethod:pm});
+  });
+  // build survey items for thanks screen
   const cats=getCats();
   const noRatingCatKeys=new Set(cats.filter(c=>c.noRating).map(c=>c._key));
   const seen={};
-  const srvCutoff=Date.now()-18*60*60*1000;
-  Object.values(DB.orders).filter(o=>o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=srvCutoff).forEach(o=>(o.items||[]).forEach(i=>{
-    // find dish to check its category
+  Object.values(DB.orders).filter(o=>o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=billCutoff).forEach(o=>(o.items||[]).forEach(i=>{
     const dish=Object.values(DB.dishes).find(d=>d.name===i.name);
-    if(dish&&noRatingCatKeys.has(dish.cat))return; // skip noRating categories
+    if(dish&&noRatingCatKeys.has(dish.cat))return;
     seen[i.name]=true;
   }));
-  C.survey={items:Object.keys(seen),ratings:{},paymentMethod:null};C.customerStep='bill';render();
+  C.survey.items=Object.keys(seen);
+  C.showPaymentPicker=false;
+  C.customerStep='thanks';
+  render();
 };
 
 function renderBillScreen(mc){
@@ -1143,7 +1178,12 @@ function renderBillScreen(mc){
   mc.innerHTML=h;
 }
 window.rateDish=(name,stars)=>{C.survey.ratings[name]=stars;renderBillScreen(document.getElementById('main-content'));};
-window.selectPayment=method=>{C.survey.paymentMethod=method;renderBillScreen(document.getElementById('main-content'));};
+window.selectPayment=method=>{
+  C.survey.paymentMethod=method;
+  if(C.showPaymentPicker) renderMenuWithCart(document.getElementById('main-content'));
+  else renderBillScreen(document.getElementById('main-content'));
+};
+window.cancelPaymentPicker=()=>{C.showPaymentPicker=false;renderMenuWithCart(document.getElementById('main-content'));};
 window.submitBill=async()=>{
   if(!C.survey.paymentMethod){alert('Seleccioná el medio de pago antes de continuar');return;}
   // save ratings
@@ -1159,9 +1199,25 @@ window.submitBill=async()=>{
   C.customerStep='thanks';render();
 };
 function renderThanksScreen(mc){
+  const items=C.survey.items||[];
+  if(items.length>0&&Object.keys(C.survey.ratings||{}).length<items.length){
+    // show brief survey before final thanks
+    let h=`<div class="content"><div class="bill-screen"><div class="bill-title">¡Cuenta solicitada! 🎉</div><div style="font-size:14px;color:var(--muted);margin-bottom:1rem">Calificá los platos mientras esperás — opcional</div><div class="survey-card">`;
+    items.forEach(name=>{const r=C.survey.ratings[name]||0;h+=`<div class="survey-dish"><div class="survey-dish-name">${name}</div><div class="stars">`;for(let s=1;s<=5;s++)h+=`<span class="star${s<=r?' lit':''}" onclick="rateDish('${name.replace(/'/g,"\'")}',${s})">${s<=r?'★':'☆'}</span>`;h+=`</div></div>`;});
+    h+=`</div><button class="btn btn-primary btn-block" style="margin-top:1rem" onclick="submitSurvey()">Enviar calificaciones</button><div style="text-align:center;margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="submitSurvey()">Omitir</button></div></div></div>`;
+    mc.innerHTML=h; return;
+  }
   const rated=Object.keys(C.survey.ratings||{}).length;
   mc.innerHTML=`<div class="content"><div class="thanks-screen"><div class="thanks-icon">🙏</div><div class="thanks-title">¡Hasta la próxima!</div><div style="font-size:15px;color:var(--muted);max-width:280px;line-height:1.6">Gracias por visitarnos.${rated>0?` Tu opinión sobre ${rated} plato${rated>1?'s':''} fue registrada.`:''}</div><button class="btn btn-primary" onclick="startOver()" style="margin-top:0.5rem">Nueva mesa</button></div></div>`;
 }
+window.submitSurvey=async()=>{
+  for(const[name,stars] of Object.entries(C.survey.ratings||{})){
+    const safeName=name.replace(/[.#$/[\]]/g,'_');
+    const cur=DB.ratings[safeName]||{total:0,count:0};
+    await set(ref(db,`ratings/${safeName}`),{total:cur.total+stars,count:cur.count+1,name});
+  }
+  C.survey.items=[];render();
+};
 window.startOver=()=>{C.customerStep='mesa';C.cart={};C.survey={items:[],ratings:{}};C.customerTableId=null;C.custDishId=null;render();};
 
 window.doLogout=async()=>{
