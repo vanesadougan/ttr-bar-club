@@ -728,7 +728,7 @@ function renderOrdersTab(){
     const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
     h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}</div><div class="order-time">${o.time}</div></div><div class="order-items-text">`;
     (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''} <span style="color:var(--accent)">$${(i.finalPrice||i.price).toLocaleString()}</span><br>`;});
-    h+=`</div>${o.status==='billed'||o.billRequested?`<div class="bill-req">⚡ Pide cuenta${o.paymentMethod?` · <strong>${{efectivo:'Efectivo',credito:'Créd.',debito:'Déb.',transferencia:'Transfer.',mercadopago:'Mercado Pago'}[o.paymentMethod]||o.paymentMethod}</strong>`:''}</div>`:''}<div class="order-footer" style="margin-top:8px"><span class="status status-${o.status}">${{pending:'Pendiente',delivered:'Entregado',billed:'Pide cuenta',cobrado:'Cobrado'}[o.status]||o.status}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>${o.status==='pending'?`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`:''}${(o.status==='billed'||o.status==='delivered')?`<button class="btn btn-sm" onclick="markCobrado('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`:''}</div></div></div>`;
+    h+=`</div>${o.status==='billed'||o.billRequested?`<div class="bill-req">⚡ Pide cuenta${o.paymentMethod?` · <strong>${{efectivo:'Efectivo',credito:'Créd.',debito:'Déb.',transferencia:'Transfer.',mercadopago:'Mercado Pago'}[o.paymentMethod]||o.paymentMethod}</strong>`:''}</div>`:''}<div class="order-footer" style="margin-top:8px"><span class="status status-${o.status}">${{pending:'Pendiente',delivered:'Entregado',billed:'Pide cuenta',cobrado:'Cobrado'}[o.status]||o.status}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>${o.status==='pending'?`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`:''}${(o.status==='billed'||o.status==='delivered')?`<button class="btn btn-sm" onclick="markCobrado('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`:''} ${(o.status==='billed'||o.status==='delivered')?`<button class="btn btn-sm" onclick="printOrderPDF('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #0369a1;color:#0369a1;background:#e0f2fe;cursor:pointer;font-family:inherit">📄 PDF</button>`:''}</div></div></div>`;
   });
   return h+`</div>`;
 }
@@ -828,6 +828,18 @@ window.goToModeChoice=()=>{C.customerStep='modeChoice';render();};
 window.dismissAlert=key=>update(ref(db,`alerts/${key}`),{status:'dismissed'});
 window.markDelivered=key=>update(ref(db,`orders/${key}`),{status:'delivered'});
 window.markCobrado=key=>update(ref(db,`orders/${key}`),{status:'cobrado'});
+window.printOrderPDF=key=>{
+  const o=DB.orders[key];if(!o)return;
+  const pmLabels={efectivo:'Efectivo',credito:'Tarjeta de crédito',debito:'Tarjeta de débito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+  const tbl=tableLabel(o.tableId);
+  const chip=o.orderMode==='individual'&&o.personName?` · 👤 ${o.personName}`:'';
+  const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+  const rows=(o.items||[]).map(i=>`<tr><td>${i.qty}×</td><td><strong>${i.name}</strong>${i.selectedType?` <em>(${i.selectedType})</em>`:''}<br>${i.excluded&&i.excluded.length?`<small style="color:#888">sin: ${i.excluded.join(', ')}</small>`:''}</td><td style="text-align:right">$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</td></tr>`).join('');
+  const pm=o.paymentMethod?`<p style="margin:6px 0;color:#166534;font-size:14px">✓ <strong>Medio de pago:</strong> ${pmLabels[o.paymentMethod]||o.paymentMethod}</p>`:'';
+  const w=window.open('','_blank','width=400,height=600');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Resumen pedido</title><style>body{font-family:sans-serif;padding:20px;max-width:340px;margin:0 auto}h2{font-size:18px;margin:0 0 4px}p{margin:4px 0;font-size:13px;color:#555}table{width:100%;border-collapse:collapse;margin:12px 0}td{padding:4px 2px;font-size:14px;vertical-align:top}tr:not(:last-child) td{border-bottom:1px solid #eee}.total-row td{font-weight:700;font-size:15px;border-top:2px solid #111;padding-top:8px}.footer{margin-top:14px;font-size:12px;color:#888;text-align:center}@media print{body{padding:8px}}</style></head><body><h2>TTR Bar Club</h2><p>${tbl}${chip}</p><p>${o.time}</p><hr style="margin:10px 0"><table>${rows}<tr class="total-row"><td colspan="2">Total</td><td style="text-align:right">$${total.toLocaleString()}</td></tr></table>${pm}<div class="footer">¡Gracias por su visita!</div><script>window.onload=function(){window.print();}<\/script></body></html>`);
+  w.document.close();
+};
 window.setHistFilter=f=>{C.historyFilter=f;render();};
 
 // ── AVAILABILITY TOGGLE ───────────────────────────
@@ -1172,8 +1184,10 @@ function renderBillScreen(mc){
     h+=`</div>`;
   }
   // Botón enviar
-  h+=`<button class="btn btn-primary btn-block" style="margin-top:1.25rem" onclick="submitBill()">Enviar encuesta</button>`;
-  h+=`<div style="text-align:center;margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="submitBill()">Omitir y finalizar</button></div>`;
+  const hasItems=C.survey.items&&C.survey.items.length>0;
+  const ratedCount=Object.keys(C.survey.ratings||{}).length;
+  h+=`<button class="btn btn-primary btn-block" style="margin-top:1.25rem" onclick="submitBillValidated()">Enviar encuesta</button>`;
+  if(hasItems)h+=`<div style="text-align:center;margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="submitBill()">Omitir encuesta</button></div>`;
   h+=`</div></div>`;
   mc.innerHTML=h;
 }
@@ -1182,6 +1196,15 @@ window.selectPayment=method=>{
   C.survey.paymentMethod=method;
   if(C.customerStep==='payment') renderPaymentScreen(document.getElementById('main-content'));
   else renderBillScreen(document.getElementById('main-content'));
+};
+window.submitBillValidated=()=>{
+  const items=C.survey.items||[];
+  const rated=Object.keys(C.survey.ratings||{}).length;
+  if(items.length>0&&rated===0){
+    alert('Por favor calificá al menos un plato antes de enviar 🌟');
+    return;
+  }
+  submitBill();
 };
 window.submitBill=async()=>{
   // save ratings
