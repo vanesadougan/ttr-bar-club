@@ -1106,19 +1106,20 @@ window.goToBill=()=>{
 
 function renderBillScreen(mc){
   const cutoff=Date.now()-18*60*60*1000;
-  const tableOrders=Object.values(DB.orders).filter(o=>o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=cutoff);
-  const isIndividual=tableOrders.some(o=>o.orderMode==='individual');
-  let h=`<div class="content"><div class="bill-screen"><div class="bill-title">Tu cuenta</div>`;
-  if(isIndividual){
-    const persons={};tableOrders.forEach(o=>{const key=o.orderMode==='individual'?o.personName:'Mesa (general)';if(!persons[key])persons[key]=[];(o.items||[]).forEach(i=>{const ex=persons[key].find(x=>x.name===i.name);if(ex)ex.qty+=i.qty;else persons[key].push({...i});});});
-    const grandTotal=Object.values(persons).flat().reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-    Object.entries(persons).forEach(([name,items])=>{const sub=items.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);h+=`<div class="person-bill-section"><div class="person-bill-title">👤 ${name}</div><div class="card" style="padding:0.75rem">`;items.forEach(i=>{h+=`<div class="bill-row"><span>${i.qty}× ${i.name}</span><span>$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;});h+=`<div class="bill-row"><span>Subtotal</span><span>$${sub.toLocaleString()}</span></div></div></div>`;});
-    h+=`<div class="card" style="margin-top:8px;display:flex;justify-content:space-between;align-items:center;padding:1rem 1.25rem"><span style="font-weight:600;font-size:16px">Total mesa</span><span style="font-weight:600;font-size:18px;color:var(--accent)">$${grandTotal.toLocaleString()}</span></div>`;
+  const allTableOrders=Object.values(DB.orders).filter(o=>o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=cutoff);
+  const isIndividual=C.orderMode==='individual';
+  // individual: show only this person's orders; general: show all
+  const tableOrders=isIndividual&&C.customerName
+    ? allTableOrders.filter(o=>o.personName===C.customerName)
+    : allTableOrders;
+  let h=`<div class="content"><div class="bill-screen"><div class="bill-title">Tu cuenta${isIndividual&&C.customerName?` · ${C.customerName}`:''}</div>`;
+  const seen={};tableOrders.forEach(o=>(o.items||[]).forEach(i=>{if(seen[i.name])seen[i.name].qty+=i.qty;else seen[i.name]={...i};}));
+  const allItems=Object.values(seen);const total=allItems.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+  if(allItems.length===0){
+    h+=`<div class="card" style="text-align:center;padding:2rem;color:var(--muted)">No hay pedidos para mostrar</div>`;
   } else {
-    const seen={};tableOrders.forEach(o=>(o.items||[]).forEach(i=>{if(seen[i.name])seen[i.name].qty+=i.qty;else seen[i.name]={...i};}));
-    const allItems=Object.values(seen);const total=allItems.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-    h+=`<div class="card">`;allItems.forEach(i=>{h+=`<div class="bill-row"><span>${i.qty}× ${i.name}</span><span>$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;});
-    h+=`<div class="bill-row"><span>Total</span><span>$${total.toLocaleString()}</span></div></div>`;
+    h+=`<div class="card">`;allItems.forEach(i=>{h+=`<div class="bill-row"><span>${i.qty}× ${i.name}${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:''}</span><span>$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;});
+    h+=`<div class="bill-row"><span style="font-weight:600">Total</span><span style="font-weight:600;color:var(--accent)">$${total.toLocaleString()}</span></div></div>`;
   }
   // Payment method selector
   const payMethods=[
