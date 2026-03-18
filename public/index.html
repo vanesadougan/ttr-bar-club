@@ -723,12 +723,45 @@ function renderOrdersTab(){
   </div>`:''}
   <div class="orders-list">`;
   if(active.length===0)h+=`<div class="empty-state">No hay pedidos activos</div>`;
-  active.forEach(o=>{
+  // Separar pedidos billed para mostrarlos agrupados por mesa/persona
+  const billedOrders=active.filter(o=>o.status==='billed');
+  const nonBilledOrders=active.filter(o=>o.status!=='billed');
+  // Agrupar billed por clave mesa+persona
+  const billedGroups={};
+  billedOrders.forEach(o=>{
+    const key=o.tableId+'|'+(o.orderMode==='individual'&&o.personName?o.personName:'__general__');
+    if(!billedGroups[key])billedGroups[key]={tableId:o.tableId,orderMode:o.orderMode,personName:o.personName,paymentMethod:o.paymentMethod,orders:[]};
+    billedGroups[key].orders.push(o);
+  });
+  // Renderizar grupos consolidados de "piden cuenta"
+  Object.values(billedGroups).forEach(g=>{
+    const seen={};
+    g.orders.forEach(o=>(o.items||[]).forEach(i=>{if(seen[i.name])seen[i.name].qty+=i.qty;else seen[i.name]={...i};}));
+    const allItems=Object.values(seen);
+    const total=allItems.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+    const chip=g.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${g.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
+    const pm=g.paymentMethod||g.orders.find(o=>o.paymentMethod)?.paymentMethod||null;
+    const pmLabels={efectivo:'Efectivo',credito:'Créd.',debito:'Déb.',transferencia:'Transfer.',mercadopago:'Mercado Pago'};
+    const keys=g.orders.map(o=>o._key);
+    h+=`<div class="order-card" style="border:1.5px solid #c4b5fd;background:#faf5ff">`;
+    h+=`<div class="order-header"><div class="order-tname">${tableLabel(g.tableId)}${chip}</div><div style="font-size:12px;color:#7c3aed;font-weight:500">⚡ Pide cuenta${pm?` · <strong>${pmLabels[pm]||pm}</strong>`:''}</div></div>`;
+    h+=`<div class="order-items-text">`;
+    allItems.forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <em>(${i.selectedType})</em>`:''} <span style="color:var(--accent)">$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span><br>`;});
+    h+=`</div>`;
+    h+=`<div class="order-footer" style="margin-top:8px"><span class="status status-billed">Pide cuenta</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>`;
+    // Botón Cobrado marca todos los pedidos del grupo
+    h+=`<button class="btn btn-sm" onclick="markGroupCobrado(${JSON.stringify(keys)})" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
+    // PDF consolidado
+    h+=`<button class="btn btn-sm" onclick="printGroupPDF(${JSON.stringify(keys)})" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #0369a1;color:#0369a1;background:#e0f2fe;cursor:pointer;font-family:inherit">📄 PDF</button>`;
+    h+=`</div></div></div>`;
+  });
+  // Renderizar pedidos individuales no-billed
+  nonBilledOrders.forEach(o=>{
     const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
     const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
     h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}</div><div class="order-time">${o.time}</div></div><div class="order-items-text">`;
     (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''} <span style="color:var(--accent)">$${(i.finalPrice||i.price).toLocaleString()}</span><br>`;});
-    h+=`</div>${o.status==='billed'||o.billRequested?`<div class="bill-req">⚡ Pide cuenta${o.paymentMethod?` · <strong>${{efectivo:'Efectivo',credito:'Créd.',debito:'Déb.',transferencia:'Transfer.',mercadopago:'Mercado Pago'}[o.paymentMethod]||o.paymentMethod}</strong>`:''}</div>`:''}<div class="order-footer" style="margin-top:8px"><span class="status status-${o.status}">${{pending:'Pendiente',delivered:'Entregado',billed:'Pide cuenta',cobrado:'Cobrado'}[o.status]||o.status}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>${o.status==='pending'?`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`:''}${(o.status==='billed'||o.status==='delivered')?`<button class="btn btn-sm" onclick="markCobrado('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`:''} ${(o.status==='billed'||o.status==='delivered')?`<button class="btn btn-sm" onclick="printOrderPDF('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #0369a1;color:#0369a1;background:#e0f2fe;cursor:pointer;font-family:inherit">📄 PDF</button>`:''}</div></div></div>`;
+    h+=`</div><div class="order-footer" style="margin-top:8px"><span class="status status-${o.status}">${{pending:'Pendiente',delivered:'Entregado',billed:'Pide cuenta',cobrado:'Cobrado'}[o.status]||o.status}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>${o.status==='pending'?`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`:''}${(o.status==='delivered')?`<button class="btn btn-sm" onclick="markCobrado('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`:''} ${(o.status==='delivered')?`<button class="btn btn-sm" onclick="printOrderPDF('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #0369a1;color:#0369a1;background:#e0f2fe;cursor:pointer;font-family:inherit">📄 PDF</button>`:''}</div></div></div>`;
   });
   return h+`</div>`;
 }
@@ -828,6 +861,24 @@ window.goToModeChoice=()=>{C.customerStep='modeChoice';render();};
 window.dismissAlert=key=>update(ref(db,`alerts/${key}`),{status:'dismissed'});
 window.markDelivered=key=>update(ref(db,`orders/${key}`),{status:'delivered'});
 window.markCobrado=key=>update(ref(db,`orders/${key}`),{status:'cobrado'});
+window.markGroupCobrado=keys=>{keys.forEach(k=>update(ref(db,`orders/${k}`),{status:'cobrado'}));};
+window.printGroupPDF=keys=>{
+  const pmLabels={efectivo:'Efectivo',credito:'Tarjeta de crédito',debito:'Tarjeta de débito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+  const orders=keys.map(k=>DB.orders[k]).filter(Boolean);
+  if(!orders.length)return;
+  const o0=orders[0];
+  const tbl=tableLabel(o0.tableId);
+  const chip=o0.orderMode==='individual'&&o0.personName?` · 👤 ${o0.personName}`:'';
+  const seen={};orders.forEach(o=>(o.items||[]).forEach(i=>{if(seen[i.name])seen[i.name].qty+=i.qty;else seen[i.name]={...i};}));
+  const allItems=Object.values(seen);
+  const total=allItems.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+  const pm=orders.find(o=>o.paymentMethod)?.paymentMethod||null;
+  const rows=allItems.map(i=>`<tr><td>${i.qty}×</td><td><strong>${i.name}</strong>${i.selectedType?` <em>(${i.selectedType})</em>`:''}</td><td style="text-align:right">$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</td></tr>`).join('');
+  const pmLine=pm?`<p style="margin:6px 0;color:#166534;font-size:14px">✓ <strong>Medio de pago:</strong> ${pmLabels[pm]||pm}</p>`:'';
+  const w=window.open('','_blank','width=400,height=600');
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Resumen cuenta</title><style>body{font-family:sans-serif;padding:20px;max-width:340px;margin:0 auto}h2{font-size:18px;margin:0 0 4px}p{margin:4px 0;font-size:13px;color:#555}table{width:100%;border-collapse:collapse;margin:12px 0}td{padding:4px 2px;font-size:14px;vertical-align:top}tr:not(:last-child) td{border-bottom:1px solid #eee}.total-row td{font-weight:700;font-size:15px;border-top:2px solid #111;padding-top:8px}.footer{margin-top:14px;font-size:12px;color:#888;text-align:center}@media print{body{padding:8px}}</style></head><body><h2>TTR Bar Club</h2><p>${tbl}${chip}</p><hr style="margin:10px 0"><table>${rows}<tr class="total-row"><td colspan="2">Total</td><td style="text-align:right">$${total.toLocaleString()}</td></tr></table>${pmLine}<div class="footer">¡Gracias por su visita!</div><script>window.onload=function(){window.print();}<\/script></body></html>`);
+  w.document.close();
+};
 window.printOrderPDF=key=>{
   const o=DB.orders[key];if(!o)return;
   const pmLabels={efectivo:'Efectivo',credito:'Tarjeta de crédito',debito:'Tarjeta de débito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
@@ -1144,9 +1195,22 @@ function renderPaymentScreen(mc){
     {id:'mercadopago',label:'Mercado Pago',icon:'🔵'},
   ];
   const selPay=C.survey.paymentMethod||null;
+  // Resumen de la cuenta
+  const cutoff=Date.now()-18*60*60*1000;
+  const isIndividual=C.orderMode==='individual';
+  const allTableOrders=Object.values(DB.orders).filter(o=>o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=cutoff);
+  const tableOrders=isIndividual&&C.customerName?allTableOrders.filter(o=>o.personName===C.customerName):allTableOrders;
+  const seen={};tableOrders.forEach(o=>(o.items||[]).forEach(i=>{if(seen[i.name])seen[i.name].qty+=i.qty;else seen[i.name]={...i};}));
+  const allItems=Object.values(seen);
+  const total=allItems.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
   let h=`<div class="content"><div class="bill-screen">
-    <div class="bill-title">¿Cómo vas a pagar?</div>
-    <div style="font-size:14px;color:var(--muted);margin-bottom:1.5rem">Elegí el medio de pago para solicitar la cuenta</div>
+    <div class="bill-title">¿Cómo vas a pagar?</div>`;
+  if(allItems.length>0){
+    h+=`<div class="card" style="width:100%;max-width:400px;margin-bottom:1.25rem">`;
+    allItems.forEach(i=>{h+=`<div class="bill-row"><span>${i.qty}× ${i.name}${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:''}</span><span>$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;});
+    h+=`<div class="bill-row"><span style="font-weight:600">Total</span><span style="font-weight:600;color:var(--accent)">$${total.toLocaleString()}</span></div></div>`;
+  }
+  h+=`<div style="font-size:14px;color:var(--muted);margin-bottom:1rem">Elegí el medio de pago</div>
     <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:400px">
       ${payMethods.map(pm=>`<button onclick="selectPayment('${pm.id}')" style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;border:${selPay===pm.id?'2px solid var(--accent)':'0.5px solid var(--border)'};background:${selPay===pm.id?'#fff5f7':'var(--card)'};cursor:pointer;font-size:15px;font-family:inherit;text-align:left;transition:all 0.15s;width:100%"><span style="font-size:22px">${pm.icon}</span><span style="${selPay===pm.id?'font-weight:600;color:var(--accent)':'font-weight:500'}">${pm.label}</span>${selPay===pm.id?'<span style="margin-left:auto;color:var(--accent);font-size:18px">✓</span>':''}</button>`).join('')}
     </div>
