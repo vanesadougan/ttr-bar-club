@@ -272,7 +272,7 @@ let C = {
   customerStep:'mesa', customerTableId:null,
   orderMode:null, customerName:'', customerNameInput:'',
   customerCat:'todos', cart:{}, custDishId:null,
-  historyFilter:'todos', survey:{items:[],ratings:{}},
+  historyFilter:'hoy', survey:{items:[],ratings:{}},
   editingDish:null, editingTable:null,
   newDish:{name:'',desc:'',price:'',cat:'entrada',emoji:'🍽️',customizable:false,ingredients:[],promoDiscount:0},
   newIngInput:'', newTypeInput:'', typePickerDishId:null, showPaymentPicker:false, newTable:{label:'',capacity:''},
@@ -515,7 +515,7 @@ function renderAdmin(){
   const mc=document.getElementById('main-content');
   const tabs=['dishes','tables','orders','ratings','history'];
   const pc=pendingCount();
-  const tl={dishes:'Platos',tables:'Mesas',orders:`Pedidos${pc>0?` <span class="badge">${pc}</span>`:''}`,ratings:'Calificaciones',history:'Historial'};
+  const tl={dishes:'Platos',tables:'Mesas',orders:`Pedidos${pc>0?` <span class="badge">${pc}</span>`:''}`,ratings:'Calificaciones',history:'Cobrados'};
   let h=`<div class="content"><div style="display:flex;gap:6px;margin-bottom:1.25rem;border-bottom:0.5px solid var(--border);padding-bottom:10px;flex-wrap:wrap">`;
   tabs.forEach(t=>{const a=C.adminTab===t;h+=`<button onclick="adminTab('${t}')" style="padding:6px 14px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:${a?'500':'400'};background:${a?'var(--brand)':'transparent'};color:${a?'#fff':'var(--muted)'}">${tl[t]}</button>`;});
   h+=`</div>`;
@@ -709,10 +709,12 @@ function renderOrdersTab(){
   const orders=Object.entries(DB.orders).map(([k,v])=>({...v,_key:k})).sort((a,b)=>b.createdAt-a.createdAt);
   const active=orders.filter(o=>o.status!=='cobrado');
   const pendingAlerts=Object.entries(DB.alerts||{}).filter(([,a])=>a.status==='pending');
+  const pendingCount=new Set(orders.filter(o=>o.status==='pending').map(o=>o.tableId+'|'+(o.orderMode==='individual'&&o.personName?o.personName:'__general__'))).size;
+  const deliveredCount=new Set(orders.filter(o=>o.status==='delivered').map(o=>o.tableId+'|'+(o.orderMode==='individual'&&o.personName?o.personName:'__general__'))).size;
   const billedCount=new Set(orders.filter(o=>o.status==='billed').map(o=>o.tableId+'|'+(o.orderMode==='individual'&&o.personName?o.personName:'__general__'))).size;
   let h=`<div class="metrics">
-    <div class="metric"><div class="metric-val">${orders.filter(o=>o.status==='pending').length}</div><div class="metric-lbl">Pendientes</div></div>
-    <div class="metric"><div class="metric-val">${orders.filter(o=>o.status==='delivered').length}</div><div class="metric-lbl">Entregados</div></div>
+    <div class="metric"><div class="metric-val">${pendingCount}</div><div class="metric-lbl">Pendientes</div></div>
+    <div class="metric"><div class="metric-val">${deliveredCount}</div><div class="metric-lbl">Entregados</div></div>
     <div class="metric" style="${billedCount>0?'background:#ede9fe;border-color:#c4b5fd':''}"><div class="metric-val" style="${billedCount>0?'color:#5b21b6':''}">${billedCount}</div><div class="metric-lbl">Piden cuenta</div></div>
     <div class="metric" style="${pendingAlerts.length>0?'background:#fef3c7;border-color:#fcd34d':''}"><div class="metric-val" style="${pendingAlerts.length>0?'color:#92400e':''}">${pendingAlerts.length}</div><div class="metric-lbl">🛎 Llamadas</div></div>
   </div>
@@ -785,20 +787,55 @@ function renderRatingsTab(){
 
 // ── HISTORY TAB ───────────────────────────────────
 function renderHistoryTab(){
-  const filters=['todos','pendiente','entregado','cobrado'];
-  let h=`<div class="history-filter">`;
-  filters.forEach(f=>{const a=C.historyFilter===f;h+=`<button onclick="setHistFilter('${f}')" style="padding:5px 12px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:${a?'var(--brand)':'var(--card)'};color:${a?'#fff':'var(--muted)'}">${f[0].toUpperCase()+f.slice(1)}</button>`;});
-  h+=`</div><div class="orders-list">`;
-  const map={pendiente:'pending',entregado:'delivered',cobrado:'cobrado'};
-  const all=Object.entries(DB.orders).map(([k,v])=>({...v,_key:k})).sort((a,b)=>b.createdAt-a.createdAt);
-  const fil=all.filter(o=>C.historyFilter==='todos'||o.status===map[C.historyFilter]);
-  if(fil.length===0)h+=`<div class="empty-state">No hay pedidos</div>`;
+  const now=new Date();
+  const todayStr=now.toLocaleDateString('es-AR');
+  const yesterday=new Date(now);yesterday.setDate(yesterday.getDate()-1);
+  const yesterdayStr=yesterday.toLocaleDateString('es-AR');
+  const fmtDate=ts=>{if(!ts)return'';const d=new Date(ts);return d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});};
+  const fmtTime=ts=>{if(!ts)return'';const d=new Date(ts);return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');};
+  const all=Object.entries(DB.orders).map(([k,v])=>({...v,_key:k})).filter(o=>o.status==='cobrado').sort((a,b)=>b.createdAt-a.createdAt);
+  const cobradoKeys=all.map(o=>o._key);
+  // filtros: hoy, ayer, todos
+  const fil=all.filter(o=>{
+    if(!o.createdAt)return C.historyFilter==='todos';
+    const d=new Date(o.createdAt).toLocaleDateString('es-AR');
+    if(C.historyFilter==='hoy')return d===todayStr;
+    if(C.historyFilter==='ayer')return d===yesterdayStr;
+    return true;
+  });
+  // totales por filtro
+  const totalHoy=all.filter(o=>o.createdAt&&new Date(o.createdAt).toLocaleDateString('es-AR')===todayStr).reduce((s,o)=>(o.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,s),0);
+  const totalAyer=all.filter(o=>o.createdAt&&new Date(o.createdAt).toLocaleDateString('es-AR')===yesterdayStr).reduce((s,o)=>(o.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,s),0);
+  const totalFil=fil.reduce((s,o)=>(o.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,s),0);
+  let h=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">`;
+  h+=`<div style="display:flex;gap:6px;flex-wrap:wrap">`;
+  [['hoy','Hoy'],['ayer','Ayer'],['todos','Todos']].forEach(([val,lbl])=>{
+    const a=C.historyFilter===val;
+    h+=`<button onclick="setHistFilter('${val}')" style="padding:5px 12px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:${a?'var(--brand)':'var(--card)'};color:${a?'#fff':'var(--muted)'}">${lbl}</button>`;
+  });
+  h+=`</div>`;
+  if(cobradoKeys.length>0){
+    h+=`<button onclick="clearHistory()" style="padding:6px 14px;border-radius:8px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">🗑 Limpiar (${cobradoKeys.length})</button>`;
+  }
+  h+=`</div>`;
+  if(fil.length>0){
+    h+=`<div style="padding:10px 14px;background:var(--card);border:0.5px solid var(--border);border-radius:10px;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center">`;
+    h+=`<span style="font-size:13px;color:var(--muted)">${fil.length} pedido${fil.length!==1?'s':''}</span>`;
+    h+=`<span style="font-size:16px;font-weight:700;color:var(--accent)">$${totalFil.toLocaleString()}</span>`;
+    h+=`</div>`;
+  }
+  h+=`<div class="orders-list">`;
+  if(fil.length===0)h+=`<div class="empty-state">No hay pedidos cobrados${C.historyFilter!=='todos'?' '+C.historyFilter:''}</div>`;
+  const pmLabels={efectivo:'Efectivo',credito:'Tarjeta de crédito',debito:'Tarjeta de débito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
   fil.forEach(o=>{
     const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
     const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
-    h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}</div><div class="order-time">${o.time}</div></div><div class="order-items-text">`;
+    const dateStr=o.createdAt?`${fmtDate(o.createdAt)} ${fmtTime(o.createdAt)}`:(o.time||'');
+    h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}</div><div class="order-time">${dateStr}</div></div><div class="order-items-text">`;
     (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}<br>`;});
-    h+=`</div><div class="order-footer"><span class="status status-${o.status}">${{pending:'Pendiente',delivered:'Entregado',billed:'Pide cuenta',cobrado:'Cobrado'}[o.status]||o.status}</span><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span></div></div>`;
+    h+=`</div><div class="order-footer"><span class="status status-cobrado">Cobrado</span>`;
+    if(o.paymentMethod)h+=`<span style="font-size:12px;color:var(--muted)">${pmLabels[o.paymentMethod]||o.paymentMethod}</span>`;
+    h+=`<span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span></div></div>`;
   });
   return h+`</div>`;
 }
@@ -862,6 +899,12 @@ window.goToModeChoice=()=>{C.customerStep='modeChoice';render();};
 window.dismissAlert=key=>update(ref(db,`alerts/${key}`),{status:'dismissed'});
 window.markDelivered=key=>update(ref(db,`orders/${key}`),{status:'delivered'});
 window.markCobrado=key=>update(ref(db,`orders/${key}`),{status:'cobrado'});
+window.clearHistory=async()=>{
+  const cobradoKeys=Object.entries(DB.orders).filter(([,o])=>o.status==='cobrado').map(([k])=>k);
+  if(!cobradoKeys.length)return;
+  if(!confirm(`¿Eliminar ${cobradoKeys.length} pedido${cobradoKeys.length!==1?'s':''} cobrado${cobradoKeys.length!==1?'s':''}? Esta acción no se puede deshacer.`))return;
+  await Promise.all(cobradoKeys.map(k=>remove(ref(db,`orders/${k}`))));
+};
 window.markGroupCobrado=gi=>{const g=window._billedGroups&&window._billedGroups[gi];if(!g)return;g.orders.forEach(o=>update(ref(db,`orders/${o._key}`),{status:'cobrado'}));};
 window.printGroupPDF=gi=>{
   const g=window._billedGroups&&window._billedGroups[gi];if(!g)return;
