@@ -944,7 +944,7 @@ function renderMenuWithCart(mc){
   const cats=getCats();
   const promoCat=cats.find(c=>c.isPromo);
   const promoCount=promoCat?dishes.filter(d=>d.cat===promoCat._key).length:0;
-  const allCatIds=[...cats.map(c=>c._key)]; // 'todos' removido
+  const allCatIds=[...cats.map(c=>c._key)].filter(id=>dishes.some(d=>d.cat===id)); // solo cats con platos disponibles
   const filtered=(C.customerCat==='todos'||!C.customerCat)?dishes:dishes.filter(d=>d.cat===C.customerCat);
   const ct=cartCount();
 
@@ -1060,7 +1060,10 @@ window.removeFromCart=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;e
 window.setCat=c=>{C.customerCat=c;C.custDishId=null;render();};
 window.initCustomerCat=()=>{
   const cats=getCats();
-  if(C.customerCat==='todos'&&cats.length>0) C.customerCat=cats[0]._key;
+  const allDishes=Object.values(DB.dishes);
+  const availDishes=allDishes.filter(d=>!d.unavailable);
+  const firstCatWithDishes=cats.find(c=>availDishes.some(d=>d.cat===c._key));
+  if(C.customerCat==='todos'&&firstCatWithDishes) C.customerCat=firstCatWithDishes._key;
 };
 window.callWaiter=()=>{
   const tableObj=DB.tables[C.customerTableId];
