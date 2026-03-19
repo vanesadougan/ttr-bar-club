@@ -766,23 +766,25 @@ function renderOrdersTab(){
     const isEditing=C.adminEditOrderKey===o._key;
     h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}</div><div class="order-time">${o.time}</div></div>`;
     if(isEditing){
-      // Panel de edición inline
+      // Panel de edición inline — usa _adminEditItems como fuente de verdad
+      const editItems=window._adminEditItems||o.items||[];
       h+=`<div style="margin:8px 0;border:1px dashed #e5e7eb;border-radius:8px;padding:10px;background:#f9fafb">`;
       h+=`<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">Editar ítems del pedido</div>`;
-      (o.items||[]).forEach((item,idx)=>{
+      editItems.forEach((item,idx)=>{
         const price=(item.finalPrice||item.price);
         h+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #f3f4f6">`;
         h+=`<div style="flex:1;font-size:13px"><strong>${item.name}</strong>${item.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${item.selectedType}</span>`:''}<div style="font-size:11px;color:var(--muted)">$${price.toLocaleString()} c/u</div></div>`;
         h+=`<div style="display:flex;align-items:center;gap:6px">`;
-        h+=`<button onclick="adminOrderQty('${o._key}',${idx},-1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">−</button>`;
+        h+=`<button onclick="adminOrderQty(${idx},-1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">−</button>`;
         h+=`<span style="font-size:14px;font-weight:600;min-width:20px;text-align:center">${item.qty}</span>`;
-        h+=`<button onclick="adminOrderQty('${o._key}',${idx},+1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">+</button>`;
-        h+=`<button onclick="adminOrderRemoveItem('${o._key}',${idx})" style="width:28px;height:28px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit" title="Eliminar ítem">✕</button>`;
+        h+=`<button onclick="adminOrderQty(${idx},+1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">+</button>`;
+        h+=`<button onclick="adminOrderRemoveItem(${idx})" style="width:28px;height:28px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit" title="Eliminar ítem">✕</button>`;
         h+=`</div></div>`;
       });
       h+=`<div style="display:flex;gap:8px;margin-top:10px">`;
-      h+=`<button onclick="adminSaveOrderEdit('${o._key}')" class="btn btn-primary btn-sm">Guardar cambios</button>`;
-      h+=`<button onclick="C.adminEditOrderKey=null;render()" class="btn btn-ghost btn-sm">Cancelar</button>`;
+      h+=`<button onclick="adminSaveOrderEdit()" class="btn btn-primary btn-sm">Guardar cambios</button>`;
+      h+=`<button onclick="adminCancelEdit()" class="btn btn-ghost btn-sm">Cancelar</button>`;
+      h+=`<button onclick="adminDeleteOrder()" style="margin-left:auto;padding:5px 12px;border-radius:6px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">🗑 Cancelar pedido</button>`;
       h+=`</div></div>`;
     } else {
       h+=`<div class="order-items-text">`;
@@ -935,33 +937,47 @@ window.markDelivered=key=>update(ref(db,`orders/${key}`),{status:'delivered'});
 
 // ── EDICIÓN DE PEDIDOS PENDIENTES (ADMIN) ─────────
 window.adminEditOrder=key=>{
-  // Clonar los ítems en un estado temporal para edición
-  const o=DB.orders[key];
-  if(!o)return;
+  const o=DB.orders[key];if(!o)return;
+  window._adminEditKey=key;
   window._adminEditItems=JSON.parse(JSON.stringify(o.items||[]));
   C.adminEditOrderKey=key;
   render();
 };
-window.adminOrderQty=(key,idx,delta)=>{
+window.adminCancelEdit=()=>{
+  C.adminEditOrderKey=null;
+  window._adminEditKey=null;
+  window._adminEditItems=null;
+  render();
+};
+window.adminOrderQty=(idx,delta)=>{
   if(!window._adminEditItems)return;
   window._adminEditItems[idx].qty=Math.max(1,window._adminEditItems[idx].qty+delta);
-  // Re-render solo el panel sin tocar Firebase
-  DB.orders[key]={...DB.orders[key],items:JSON.parse(JSON.stringify(window._adminEditItems))};
   render();
 };
-window.adminOrderRemoveItem=(key,idx)=>{
+window.adminOrderRemoveItem=idx=>{
   if(!window._adminEditItems)return;
-  if(window._adminEditItems.length===1){alert('El pedido debe tener al menos un ítem.');return;}
+  if(window._adminEditItems.length===1){alert('El pedido debe tener al menos un ítem. Si querés cancelarlo usá "Cancelar pedido".');return;}
   window._adminEditItems.splice(idx,1);
-  DB.orders[key]={...DB.orders[key],items:JSON.parse(JSON.stringify(window._adminEditItems))};
   render();
 };
-window.adminSaveOrderEdit=async key=>{
-  if(!window._adminEditItems)return;
+window.adminSaveOrderEdit=async()=>{
+  const key=window._adminEditKey;
+  if(!key||!window._adminEditItems||!window._adminEditItems.length)return;
   await update(ref(db,`orders/${key}`),{items:window._adminEditItems});
   C.adminEditOrderKey=null;
+  window._adminEditKey=null;
   window._adminEditItems=null;
-  // DB se actualiza solo por el listener de Firebase
+  render();
+};
+window.adminDeleteOrder=async()=>{
+  const key=window._adminEditKey;
+  if(!key)return;
+  if(!confirm('¿Cancelar este pedido? Se eliminará definitivamente.'))return;
+  await remove(ref(db,`orders/${key}`));
+  C.adminEditOrderKey=null;
+  window._adminEditKey=null;
+  window._adminEditItems=null;
+  render();
 };
 window.markCobrado=key=>update(ref(db,`orders/${key}`),{status:'cobrado'});
 window.clearHistory=async()=>{
