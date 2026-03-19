@@ -273,6 +273,7 @@ let C = {
   orderMode:null, customerName:'', customerNameInput:'',
   customerCat:'todos', cart:{}, custDishId:null,
   historyFilter:'hoy', survey:{items:[],ratings:{}},
+  adminEditOrderKey:null,
   editingDish:null, editingTable:null,
   newDish:{name:'',desc:'',price:'',cat:'entrada',emoji:'🍽️',customizable:false,ingredients:[],promoDiscount:0},
   newIngInput:'', newTypeInput:'', typePickerDishId:null, showPaymentPicker:false, newTable:{label:'',capacity:''},
@@ -762,9 +763,42 @@ function renderOrdersTab(){
   nonBilledOrders.forEach(o=>{
     const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
     const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
-    h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}</div><div class="order-time">${o.time}</div></div><div class="order-items-text">`;
-    (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''} <span style="color:var(--accent)">$${(i.finalPrice||i.price).toLocaleString()}</span><br>`;});
-    h+=`</div><div class="order-footer" style="margin-top:8px"><span class="status status-${o.status}">${{pending:'Pendiente',delivered:'Entregado',billed:'Pide cuenta',cobrado:'Cobrado'}[o.status]||o.status}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>${o.status==='pending'?`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`:''}${(o.status==='delivered')?`<button class="btn btn-sm" onclick="markCobrado('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`:''} ${(o.status==='delivered')?`<button class="btn btn-sm" onclick="printOrderPDF('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #0369a1;color:#0369a1;background:#e0f2fe;cursor:pointer;font-family:inherit">📄 PDF</button>`:''}</div></div></div>`;
+    const isEditing=C.adminEditOrderKey===o._key;
+    h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}</div><div class="order-time">${o.time}</div></div>`;
+    if(isEditing){
+      // Panel de edición inline
+      h+=`<div style="margin:8px 0;border:1px dashed #e5e7eb;border-radius:8px;padding:10px;background:#f9fafb">`;
+      h+=`<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">Editar ítems del pedido</div>`;
+      (o.items||[]).forEach((item,idx)=>{
+        const price=(item.finalPrice||item.price);
+        h+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #f3f4f6">`;
+        h+=`<div style="flex:1;font-size:13px"><strong>${item.name}</strong>${item.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${item.selectedType}</span>`:''}<div style="font-size:11px;color:var(--muted)">$${price.toLocaleString()} c/u</div></div>`;
+        h+=`<div style="display:flex;align-items:center;gap:6px">`;
+        h+=`<button onclick="adminOrderQty('${o._key}',${idx},-1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">−</button>`;
+        h+=`<span style="font-size:14px;font-weight:600;min-width:20px;text-align:center">${item.qty}</span>`;
+        h+=`<button onclick="adminOrderQty('${o._key}',${idx},+1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">+</button>`;
+        h+=`<button onclick="adminOrderRemoveItem('${o._key}',${idx})" style="width:28px;height:28px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit" title="Eliminar ítem">✕</button>`;
+        h+=`</div></div>`;
+      });
+      h+=`<div style="display:flex;gap:8px;margin-top:10px">`;
+      h+=`<button onclick="adminSaveOrderEdit('${o._key}')" class="btn btn-primary btn-sm">Guardar cambios</button>`;
+      h+=`<button onclick="C.adminEditOrderKey=null;render()" class="btn btn-ghost btn-sm">Cancelar</button>`;
+      h+=`</div></div>`;
+    } else {
+      h+=`<div class="order-items-text">`;
+      (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''} <span style="color:var(--accent)">$${(i.finalPrice||i.price).toLocaleString()}</span><br>`;});
+      h+=`</div>`;
+    }
+    h+=`<div class="order-footer" style="margin-top:8px"><span class="status status-${o.status}">${{pending:'Pendiente',delivered:'Entregado',billed:'Pide cuenta',cobrado:'Cobrado'}[o.status]||o.status}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>`;
+    if(o.status==='pending'){
+      h+=`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`;
+      h+=`<button class="btn btn-sm" onclick="adminEditOrder('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️ Editar</button>`;
+    }
+    if(o.status==='delivered'){
+      h+=`<button class="btn btn-sm" onclick="markCobrado('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
+      h+=` <button class="btn btn-sm" onclick="printOrderPDF('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #0369a1;color:#0369a1;background:#e0f2fe;cursor:pointer;font-family:inherit">📄 PDF</button>`;
+    }
+    h+=`</div></div></div>`;
   });
   return h+`</div>`;
 }
@@ -898,6 +932,37 @@ window.goToModeChoice=()=>{C.customerStep='modeChoice';render();};
 
 window.dismissAlert=key=>update(ref(db,`alerts/${key}`),{status:'dismissed'});
 window.markDelivered=key=>update(ref(db,`orders/${key}`),{status:'delivered'});
+
+// ── EDICIÓN DE PEDIDOS PENDIENTES (ADMIN) ─────────
+window.adminEditOrder=key=>{
+  // Clonar los ítems en un estado temporal para edición
+  const o=DB.orders[key];
+  if(!o)return;
+  window._adminEditItems=JSON.parse(JSON.stringify(o.items||[]));
+  C.adminEditOrderKey=key;
+  render();
+};
+window.adminOrderQty=(key,idx,delta)=>{
+  if(!window._adminEditItems)return;
+  window._adminEditItems[idx].qty=Math.max(1,window._adminEditItems[idx].qty+delta);
+  // Re-render solo el panel sin tocar Firebase
+  DB.orders[key]={...DB.orders[key],items:JSON.parse(JSON.stringify(window._adminEditItems))};
+  render();
+};
+window.adminOrderRemoveItem=(key,idx)=>{
+  if(!window._adminEditItems)return;
+  if(window._adminEditItems.length===1){alert('El pedido debe tener al menos un ítem.');return;}
+  window._adminEditItems.splice(idx,1);
+  DB.orders[key]={...DB.orders[key],items:JSON.parse(JSON.stringify(window._adminEditItems))};
+  render();
+};
+window.adminSaveOrderEdit=async key=>{
+  if(!window._adminEditItems)return;
+  await update(ref(db,`orders/${key}`),{items:window._adminEditItems});
+  C.adminEditOrderKey=null;
+  window._adminEditItems=null;
+  // DB se actualiza solo por el listener de Firebase
+};
 window.markCobrado=key=>update(ref(db,`orders/${key}`),{status:'cobrado'});
 window.clearHistory=async()=>{
   const cobradoKeys=Object.entries(DB.orders).filter(([,o])=>o.status==='cobrado').map(([k])=>k);
