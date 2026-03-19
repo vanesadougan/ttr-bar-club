@@ -264,7 +264,7 @@ function getCats(){
 const catOpen={};
 
 // Local reactive state (synced from Firebase)
-let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{} };
+let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}, cancellations:{} };
 
 // Customer flow state (local only)
 let C = {
@@ -316,6 +316,7 @@ onValue(ref(db,'tables'), snap=>{
   if(!firstLoad) render();
 });
 onValue(ref(db,'ratings'), snap=>{ DB.ratings = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'cancellations'), snap=>{ DB.cancellations = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'orders'), snap=>{
   const prevKeys=new Set(Object.keys(DB.orders));
   const prevBilled=new Set(Object.entries(DB.orders).filter(([,o])=>o.status==='billed').map(([k])=>k));
@@ -972,11 +973,30 @@ window.adminSaveOrderEdit=async()=>{
 window.adminDeleteOrder=async()=>{
   const key=window._adminEditKey;
   if(!key)return;
-  if(!confirm('¿Cancelar este pedido? Se eliminará definitivamente.'))return;
+  if(!confirm('¿Cancelar este pedido? Se eliminará definitivamente y el comensal verá un aviso.'))return;
+  const o=DB.orders[key];
+  // Escribir aviso de cancelación en Firebase para que el comensal lo vea
+  if(o&&o.tableId){
+    await set(ref(db,`cancellations/${o.tableId}`),{
+      tableId:o.tableId,
+      personName:o.personName||null,
+      orderMode:o.orderMode||null,
+      cancelledAt:Date.now()
+    });
+  }
   await remove(ref(db,`orders/${key}`));
   C.adminEditOrderKey=null;
   window._adminEditKey=null;
   window._adminEditItems=null;
+  render();
+};
+window.dismissCancellation=async()=>{
+  if(C.customerTableId){
+    await remove(ref(db,`cancellations/${C.customerTableId}`));
+  }
+  // Resetear el comensal a la pantalla del menú
+  C.cart={};
+  C.customerStep='menu';
   render();
 };
 window.markCobrado=key=>update(ref(db,`orders/${key}`),{status:'cobrado'});
@@ -1072,6 +1092,22 @@ window.moveCat=(key,direction)=>{
 function renderCustomer(){
   const mc=document.getElementById('main-content');
   const step=C.customerStep;
+  // Detectar si el admin canceló un pedido de esta mesa
+  if(C.customerTableId && DB.cancellations && DB.cancellations[C.customerTableId]){
+    const info=DB.cancellations[C.customerTableId];
+    const name=info.personName;
+    // Solo mostrar si aplica al comensal actual (modo individual: mismo nombre, o modo general)
+    const relevant=!name||(C.orderMode==='individual'&&C.customerName===name)||C.orderMode!=='individual';
+    if(relevant){
+      mc.innerHTML=`<div class="content"><div class="thanks-screen" style="gap:1.25rem">
+        <div style="font-size:56px">❌</div>
+        <div style="font-family:'Playfair Display',serif;font-size:22px;color:var(--text);text-align:center">Tu pedido fue cancelado</div>
+        <div style="font-size:15px;color:var(--muted);max-width:280px;text-align:center;line-height:1.6">El pedido fue cancelado por el local. Si tenés alguna duda consultá con el mozo.</div>
+        <button class="btn btn-primary" onclick="dismissCancellation()" style="margin-top:.5rem">Entendido</button>
+      </div></div>`;
+      return;
+    }
+  }
   if(step==='mesa')renderMesaScreen(mc);
   else if(step==='modeChoice')renderModeChoice(mc);
   else if(step==='nameInput')renderNameInput(mc);
