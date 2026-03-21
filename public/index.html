@@ -916,7 +916,8 @@ window.uF=(type,field,val)=>{
   // only re-render on category change (dropdown); for typed fields update preview inline
   if(type==='dish'&&field==='cat'){render();return;}
   if(type==='dish'&&(field==='price'||field==='promoDiscount')){
-    // update discount preview without full re-render
+    // Si 2x1 activo, re-renderizar para actualizar el preview
+    if(o.is2x1){render();return;}
     updateDiscountPreview();
   }
 };
@@ -950,7 +951,17 @@ window.addType=()=>{
 window.removeType=idx=>{const f=C.editingDish||C.newDish;f.types.splice(idx,1);render();};
 window.addIngredient=()=>{const inp=document.getElementById('ing-input');const val=(inp?inp.value:C.newIngInput).trim();if(!val)return;const f=C.editingDish||C.newDish;if(!f.ingredients)f.ingredients=[];val.split(',').map(v=>v.trim()).filter(Boolean).forEach(v=>{if(!f.ingredients.includes(v))f.ingredients.push(v);});C.newIngInput='';render();};
 window.removeIngredient=idx=>{const f=C.editingDish||C.newDish;f.ingredients.splice(idx,1);render();};
-window.addDish=()=>{const d=C.newDish;if(!d.name||!d.price){alert('Completá nombre y precio');return;}const cats=getCats();if(!d.cat&&cats.length>0)d.cat=cats[0]._key;push(ref(db,'dishes'),{...d,ingredients:d.ingredients||[],types:d.types||[],hasTypes:d.hasTypes||false,is2x1:d.is2x1===true,promoDiscount:d.promoDiscount||0,unavailable:false});C.newDish={name:'',desc:'',price:'',cat:cats.length>0?cats[0]._key:'',emoji:'🍽️',customizable:false,ingredients:[],types:[],hasTypes:false,promoDiscount:0,is2x1:false};C.newIngInput='';render();};
+window.addDish=()=>{
+  const d=C.newDish;
+  if(!d.name||!d.price){alert('Completá nombre y precio');return;}
+  const cats=getCats();
+  // Si el cat no es un key válido de Firebase, usar el primero disponible
+  const validCat=cats.find(c=>c._key===d.cat);
+  if(!validCat&&cats.length>0)d.cat=cats[0]._key;
+  push(ref(db,'dishes'),{...d,ingredients:d.ingredients||[],types:d.types||[],hasTypes:d.hasTypes||false,is2x1:d.is2x1===true,promoDiscount:d.promoDiscount||0,unavailable:false});
+  C.newDish={name:'',desc:'',price:'',cat:cats.length>0?cats[0]._key:'',emoji:'🍽️',customizable:false,ingredients:[],types:[],hasTypes:false,promoDiscount:0,is2x1:false};
+  C.newIngInput='';render();
+};
 window.editDish=key=>{C.editingDish={...DB.dishes[key],_key:key,ingredients:[...(DB.dishes[key].ingredients||[])]};render();};
 window.saveEditDish=()=>{const {_key,...data}=C.editingDish;set(ref(db,`dishes/${_key}`),{...data,is2x1:data.is2x1===true,promoDiscount:data.promoDiscount||0});C.editingDish=null;render();};
 window.cancelEditDish=()=>{C.editingDish=null;render();};
