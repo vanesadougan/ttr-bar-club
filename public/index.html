@@ -281,10 +281,17 @@ let C = {
 };
 
 function nowStr(){const n=new Date();return n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');}
-function dishFinalPrice(d){
+function dishFinalPrice(d,qty){
   const cat=DB.categories&&Object.entries(DB.categories).find(([k])=>k===d.cat);
   const isPromoCat=cat&&cat[1].isPromo;
-  return isPromoCat&&d.promoDiscount>0?Math.round(d.price*(1-d.promoDiscount/100)):d.price;
+  if(!isPromoCat)return d.price;
+  if(d.is2x1&&qty>=2){
+    // Por cada par, uno es gratis
+    const pairs=Math.floor(qty/2);
+    const singles=qty%2;
+    return Math.round((pairs*d.price+singles*d.price)/qty);
+  }
+  return d.promoDiscount>0?Math.round(d.price*(1-d.promoDiscount/100)):d.price;
 }
 function tableLabel(tid){const t=DB.tables[tid];return t?t.label:`Mesa ${tid}`;}
 function tableOccupied(tid){return Object.values(DB.orders).some(o=>o.tableId===tid&&o.status!=='cobrado');}
@@ -560,7 +567,28 @@ function renderDishesTab(){
     <div class="form-group"><label>Nombre</label><input placeholder="Nombre del plato" value="${f.name}" oninput="uF('dish','name',this.value)"></div>
     <div class="form-group"><label>Descripción</label><textarea oninput="uF('dish','desc',this.value)">${f.desc}</textarea></div>
     <div class="form-group"><label>Precio normal ($)</label><input type="number" placeholder="0" value="${f.price}" oninput="uF('dish','price',this.value)"></div>`;
-  if(isPromo){formH+=`<div class="promo-section"><div style="font-size:13px;font-weight:500;color:#c2410c;margin-bottom:8px">🔥 Promo del día</div><div class="form-group" style="margin-bottom:6px"><label style="color:#92400e">Descuento (%)</label><input type="number" min="0" max="99" placeholder="Ej: 20" value="${f.promoDiscount||''}" oninput="uF('dish','promoDiscount',this.value)" style="border-color:#fed7aa"></div>${finalPrice?`<div class="discount-preview" id="discount-preview"><span style="color:var(--muted)">Normal:</span><span style="text-decoration:line-through;color:var(--muted)">$${Number(f.price).toLocaleString()}</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">-${f.promoDiscount}%</span><strong style="color:var(--accent)">$${finalPrice.toLocaleString()}</strong></div>`:'<div class="discount-preview" id="discount-preview" style="font-size:12px;color:#92400e;margin-top:4px">Ingresá precio y descuento.</div>'}</div>`;}
+  const is2x1=isPromo&&f.is2x1;
+  const finalPrice=isPromo&&!is2x1&&f.promoDiscount>0&&f.price?Math.round(Number(f.price)*(1-Number(f.promoDiscount)/100)):null;
+  if(isPromo){
+    formH+=`<div class="promo-section"><div style="font-size:13px;font-weight:500;color:#c2410c;margin-bottom:10px">🔥 Promo del día</div>`;
+    // Toggle 2x1
+    formH+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <label class="toggle-switch"><input type="checkbox" ${is2x1?'checked':''} onchange="uF('dish','is2x1',this.checked)"><span class="toggle-slider"></span></label>
+      <span style="font-size:13px;font-weight:500;color:#92400e">Promoción 2x1</span>
+    </div>`;
+    if(is2x1){
+      // Preview 2x1
+      const p=Number(f.price)||0;
+      formH+=`<div class="discount-preview"><span style="color:var(--muted)">Al pedir 2:</span><span style="text-decoration:line-through;color:var(--muted)">$${(p*2).toLocaleString()}</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">2x1</span><strong style="color:var(--accent)">$${p.toLocaleString()}</strong></div>`;
+    } else {
+      // Descuento porcentual normal
+      formH+=`<div class="form-group" style="margin-bottom:6px"><label style="color:#92400e">Descuento (%)</label><input type="number" min="0" max="99" placeholder="Ej: 20" value="${f.promoDiscount||''}" oninput="uF('dish','promoDiscount',this.value)" style="border-color:#fed7aa"></div>`;
+      formH+=finalPrice
+        ?`<div class="discount-preview" id="discount-preview"><span style="color:var(--muted)">Normal:</span><span style="text-decoration:line-through;color:var(--muted)">$${Number(f.price).toLocaleString()}</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">-${f.promoDiscount}%</span><strong style="color:var(--accent)">$${finalPrice.toLocaleString()}</strong></div>`
+        :`<div class="discount-preview" id="discount-preview" style="font-size:12px;color:#92400e;margin-top:4px">Ingresá precio y descuento.</div>`;
+    }
+    formH+=`</div>`;
+  }
   // TIPOS section
   const types=f.types||[];
   formH+=`<div class="ing-section" style="margin-bottom:10px">
@@ -881,6 +909,11 @@ function renderHistoryTab(){
 window.uF=(type,field,val)=>{
   const o=type==='dish'?(C.editingDish||C.newDish):(C.editingTable||C.newTable);
   o[field]=(field==='price'||field==='capacity'||field==='promoDiscount')?Number(val):val;
+  // when toggling 2x1, clear discount and re-render
+  if(type==='dish'&&field==='is2x1'){
+    if(val)o.promoDiscount=0; // activar 2x1 limpia el descuento
+    render();return;
+  }
   // only re-render on category change (dropdown); for typed fields update preview inline
   if(type==='dish'&&field==='cat'){render();return;}
   if(type==='dish'&&(field==='price'||field==='promoDiscount')){
@@ -1143,7 +1176,7 @@ window.confirmName=()=>{const name=C.customerNameInput.trim();if(!name){alert('I
 window.backToMesas=()=>{C.customerTableId=null;C.orderMode=null;C.customerName='';C.customerStep='mesa';render();};
 
 function cartCount(){return Object.values(C.cart).reduce((s,v)=>s+v.qty,0);}
-function cartTotal(){return Object.entries(C.cart).reduce((s,[id,v])=>{const d=DB.dishes[id];return s+(d?dishFinalPrice(d)*v.qty:0);},0);}
+function cartTotal(){return Object.entries(C.cart).reduce((s,[id,v])=>{const d=DB.dishes[id];return s+(d?dishFinalPrice(d,v.qty)*v.qty:0);},0);}
 
 function renderMenuWithCart(mc){
   const table=DB.tables[C.customerTableId];
@@ -1206,9 +1239,15 @@ function renderMenuWithCart(mc){
   menuH+=`<div class="menu-grid">`;
   filtered.forEach(d=>{
     const entry=C.cart[d._key];const q=entry?entry.qty:0;const excl=entry?entry.excluded:new Set();
-    const fp=dishFinalPrice(d);const dishCat=cats.find(c=>c._key===d.cat);const isP=dishCat&&dishCat.isPromo&&d.promoDiscount>0;
+    const fp=dishFinalPrice(d,q||1);const dishCat=cats.find(c=>c._key===d.cat);
+    const isPromoCat=dishCat&&dishCat.isPromo;
+    const is2x1=isPromoCat&&d.is2x1;
+    const isP=isPromoCat&&(d.promoDiscount>0||is2x1);
+    const promoChip=is2x1?`<span style="font-size:10px;font-weight:600;color:#c2410c;margin-left:4px;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">2x1</span>`:(d.promoDiscount>0?`<span style="font-size:10px;font-weight:600;color:#c2410c;margin-left:4px">-${d.promoDiscount}%</span>`:'');
+    // Para 2x1 con 2+ unidades mostrar precio especial; si qty<2 mostrar precio normal
+    const displayPrice=is2x1&&q>=2?dishFinalPrice(d,q):fp;
     const r=DB.ratings[d.name];const avg=r&&r.count>0?r.total/r.count:null;
-    menuH+=`<div class="menu-card${isP?' promo-card':''}">${isP?`<div style="margin-bottom:6px"><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:#fff7ed;color:#c2410c;border:0.5px solid #fed7aa">🔥 PROMO DEL DÍA</span></div>`:''}<div class="menu-card-name">${d.name}</div>${avg?`<div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">${starsHtml(avg,11)}<span style="font-size:11px;color:var(--muted);margin-left:2px">${avg.toFixed(1)}</span></div>`:''}<div class="menu-card-desc">${d.desc}</div>${d.customizable&&(d.ingredients||[]).length>0?`<div style="font-size:11px;color:#5b21b6;background:#ede9fe;border-radius:5px;padding:2px 7px;display:inline-block;margin-bottom:6px">🧩 Personalizable</div>`:''}${excl&&excl.size>0?`<div class="excl-note">Sin: ${[...excl].join(', ')}</div>`:''}<div class="menu-card-footer"><div>${isP?`<span class="menu-card-price-original">$${d.price.toLocaleString()}</span> `:''}<span class="menu-card-price">$${fp.toLocaleString()}</span>${isP?`<span style="font-size:10px;font-weight:600;color:#c2410c;margin-left:4px">-${d.promoDiscount}%</span>`:''}</div>${q===0?`<button class="add-btn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${d._key}')`:(d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`)}">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeFromCart('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${d._key}')`:(d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`)}">+</button></div>`}</div></div>`;
+    menuH+=`<div class="menu-card${isP?' promo-card':''}">${isP?`<div style="margin-bottom:6px"><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:#fff7ed;color:#c2410c;border:0.5px solid #fed7aa">🔥 PROMO DEL DÍA</span></div>`:''}<div class="menu-card-name">${d.name}</div>${avg?`<div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">${starsHtml(avg,11)}<span style="font-size:11px;color:var(--muted);margin-left:2px">${avg.toFixed(1)}</span></div>`:''}<div class="menu-card-desc">${d.desc}</div>${is2x1?`<div style="font-size:11px;color:#92400e;background:#fff7ed;border-radius:5px;padding:2px 8px;display:inline-block;margin-bottom:6px;border:0.5px solid #fed7aa">🎁 Llevá 2, pagá 1</div>`:''} ${d.customizable&&(d.ingredients||[]).length>0?`<div style="font-size:11px;color:#5b21b6;background:#ede9fe;border-radius:5px;padding:2px 7px;display:inline-block;margin-bottom:6px">🧩 Personalizable</div>`:''}${excl&&excl.size>0?`<div class="excl-note">Sin: ${[...excl].join(', ')}</div>`:''}<div class="menu-card-footer"><div>${isP&&!is2x1?`<span class="menu-card-price-original">$${d.price.toLocaleString()}</span> `:''}<span class="menu-card-price">$${d.price.toLocaleString()}</span>${promoChip}</div>${q===0?`<button class="add-btn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${d._key}')`:(d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`)}">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeFromCart('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${d._key}')`:(d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`)}">+</button></div>`}</div></div>`;
   });
   menuH+=`</div>`;
 
@@ -1217,8 +1256,12 @@ function renderMenuWithCart(mc){
   let cartH=`<div class="cart-header"><span>${isIndividual?C.customerName:'Pedido mesa'}</span>${ct>0?`<span class="cart-tag">${ct} ítem${ct>1?'s':''}</span>`:''}</div><div class="cart-body">`;
   if(cartEntries.length===0)cartH+=`<div class="cart-empty">Todavía no agregaste ningún plato.</div>`;
   else cartEntries.forEach(([id,v])=>{
-    const d=DB.dishes[id];if(!d)return;const fp=dishFinalPrice(d);
-    cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0;color:var(--muted)">${(cats.find(c=>c._key===d.cat)||{}).icon||'🍽'}</div><div class="cart-item-info"><div class="cart-item-name">${d.name}${v.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">${v.selectedType}</span>`:''}</div>${v.excluded&&v.excluded.size>0?`<div style="font-size:11px;color:#b45309">Sin: ${[...v.excluded].join(', ')}</div>`:''}</div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCart('${id}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${id}')`:d.customizable&&(d.ingredients||[]).length>0?`openCust('${id}')`:`quickAdd('${id}')`}">+</button></div><div class="cart-item-price">$${(fp*v.qty).toLocaleString()}</div></div>`;
+    const d=DB.dishes[id];if(!d)return;
+    const fp=dishFinalPrice(d,v.qty);
+    const dishCat=cats.find(c=>c._key===d.cat);
+    const is2x1=dishCat&&dishCat.isPromo&&d.is2x1;
+    const priceNote=is2x1&&v.qty>=2?`<div style="font-size:11px;color:#c2410c">🎁 2x1 aplicado</div>`:'';
+    cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0;color:var(--muted)">${(cats.find(c=>c._key===d.cat)||{}).icon||'🍽'}</div><div class="cart-item-info"><div class="cart-item-name">${d.name}${v.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">${v.selectedType}</span>`:''}</div>${v.excluded&&v.excluded.size>0?`<div style="font-size:11px;color:#b45309">Sin: ${[...v.excluded].join(', ')}</div>`:''} ${priceNote}</div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCart('${id}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${id}')`:d.customizable&&(d.ingredients||[]).length>0?`openCust('${id}')`:`quickAdd('${id}')`}">+</button></div><div class="cart-item-price">$${(fp*v.qty).toLocaleString()}</div></div>`;
   });
   cartH+=`</div><div class="cart-footer">`;
   if(cartEntries.length>0){
@@ -1296,7 +1339,7 @@ window.cancelCart=()=>{
 
 window.placeOrder=()=>{
   if(cartCount()===0)return;
-  const items=Object.entries(C.cart).map(([id,v])=>{const d=DB.dishes[id];return{name:d.name,qty:v.qty,price:d.price,finalPrice:dishFinalPrice(d),excluded:v.excluded?[...v.excluded]:[],selectedType:v.selectedType||null};});
+  const items=Object.entries(C.cart).map(([id,v])=>{const d=DB.dishes[id];return{name:d.name,qty:v.qty,price:d.price,finalPrice:dishFinalPrice(d,v.qty),excluded:v.excluded?[...v.excluded]:[],selectedType:v.selectedType||null,is2x1:d.is2x1||false};});
   push(ref(db,'orders'),{tableId:C.customerTableId,items,status:'pending',time:nowStr(),billRequested:false,orderMode:C.orderMode,personName:C.orderMode==='individual'?C.customerName:null,createdAt:Date.now()});
   C.cart={};C.custDishId=null;C.customerStep='confirm';render();
 };
