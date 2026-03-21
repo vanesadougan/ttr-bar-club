@@ -547,7 +547,6 @@ function renderDishesTab(){
   const f=C.editingDish||C.newDish; const ings=f.ingredients||[];
   const selCat=cats.find(c=>c._key===f.cat)||cats.find(c=>c.isPromo);
   const isPromo=selCat&&selCat.isPromo;
-  const finalPrice=isPromo&&f.promoDiscount>0&&f.price?Math.round(Number(f.price)*(1-Number(f.promoDiscount)/100)):null;
 
   // sub-tabs: platos | categorias
   const subTab=C.dishSubTab||'platos';
