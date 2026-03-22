@@ -548,6 +548,10 @@ function renderAdmin(){
   mc.innerHTML=h;
   const inp=document.getElementById('ing-input');
   if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addIngredient();}});
+  // Si hay texto en búsqueda manual, poblar la lista de resultados
+  if(C.manualOrder&&C.manualOrderSearch){
+    setTimeout(()=>updateManualSearch(),0);
+  }
 }
 window.adminTab=t=>{C.adminTab=t;render();};
 window.toggleCatOpen=id=>{catOpen[id]=!catOpen[id];render();};
@@ -880,12 +884,6 @@ function renderOrdersTab(){
   if(C.manualOrder){
     const mo=C.manualOrder;
     const tables=Object.entries(DB.tables).map(([k,v])=>({...v,_key:k}));
-    const allItems=[
-      ...Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k,_src:'dishes'})),
-      ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria',emoji:v.emoji||'☕'}))
-    ].filter(d=>!d.unavailable);
-    const search=(C.manualOrderSearch||'').toLowerCase();
-    const searchResults=search.length>=1?allItems.filter(d=>d.name.toLowerCase().includes(search)):[];
     const moTotal=(mo.items||[]).reduce((s,i)=>s+i.price*i.qty,0);
 
     manualH=`<div class="card" style="border:1.5px solid var(--brand);margin-bottom:1.25rem">
@@ -910,21 +908,31 @@ function renderOrdersTab(){
       </div>
       <div style="margin-bottom:10px">
         <div class="form-group" style="margin-bottom:6px"><label>Buscar plato o item</label>
-          <input id="manual-search" placeholder="Escribí para buscar..." value="${C.manualOrderSearch||''}" oninput="updateManualSearch(this.value)" autocomplete="off">
+          <input id="manual-search" placeholder="Escribí para buscar..." value="${C.manualOrderSearch||''}" oninput="updateManualSearch()" autocomplete="off">
         </div>
-        ${searchResults.length>0?`<div style="border:0.5px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;background:var(--card)">
-          ${searchResults.map(d=>`<div onclick="addItemToManualOrder('${d._key}','${d._src}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
-            <span style="font-size:18px">${d.emoji||'🍽️'}</span>
-            <div style="flex:1"><div style="font-size:14px;font-weight:500">${d.name}</div><div style="font-size:12px;color:var(--muted)">${d._src==='cafeteria'?'☕ Cafetería':'🍽 Restaurant'}</div></div>
-            <span style="font-size:14px;font-weight:600;color:var(--accent)">$${Number(d.price).toLocaleString()}</span>
-          </div>`).join('')}
-        </div>`:''}
-        ${search.length>=1&&searchResults.length===0?`<div style="font-size:13px;color:var(--muted);padding:8px 0">Sin resultados para "${search}"</div>`:''}
+        <div id="manual-search-results" style="border:0.5px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;background:var(--card);${C.manualOrderSearch?'':'display:none'}"></div>
       </div>
+      ${C.manualOrderPicker?`<div style="margin-bottom:12px;padding:12px;border:1px dashed #c4b5fd;border-radius:8px;background:#faf5ff">
+        ${(()=>{const pk=C.manualOrderPicker;const d=pk.src==='cafeteria'?DB.cafeteriaItems[pk.key]:DB.dishes[pk.key];if(!d)return'';
+          let ph=`<div style="font-size:14px;font-weight:600;margin-bottom:10px">🛠 Configurar: ${d.name}</div>`;
+          if(d.hasTypes&&(d.types||[]).length>0){
+            ph+=`<div style="font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px">TIPO (obligatorio)</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">`;
+            (d.types||[]).forEach(t=>{ph+=`<button onclick="setManualPickerType('${t.replace(/'/g,"\\'")}')" style="padding:6px 14px;border-radius:6px;border:1.5px solid ${pk.selectedType===t?'#5b21b6':'var(--border)'};background:${pk.selectedType===t?'#ede9fe':'var(--bg)'};color:${pk.selectedType===t?'#5b21b6':'var(--text)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${t}</button>`;});
+            ph+=`</div>`;
+          }
+          if(d.customizable&&(d.ingredients||[]).length>0){
+            ph+=`<div style="font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px">INGREDIENTES</div><div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">`;
+            (d.ingredients||[]).forEach(ing=>{const ex=pk.excluded.has(ing);ph+=`<div onclick="toggleManualPickerIng('${ing.replace(/'/g,"\\'")}')" style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;background:${ex?'#fee2e2':'var(--bg)'};cursor:pointer"><div style="width:18px;height:18px;border-radius:4px;border:1.5px solid ${ex?'#ef4444':'#10b981'};background:${ex?'transparent':'#d1fae5'};display:flex;align-items:center;justify-content:center;font-size:12px">${ex?'':'✓'}</div><span style="${ex?'text-decoration:line-through;color:var(--muted)':''}">${ing}</span>${ex?`<span style="font-size:11px;color:#b45309;margin-left:auto">Sin esto</span>`:''}</div>`;});
+            ph+=`</div>`;
+          }
+          ph+=`<div style="display:flex;gap:8px"><button onclick="confirmManualPicker()" ${d.hasTypes&&(d.types||[]).length>0&&!pk.selectedType?'disabled':''} style="flex:1;padding:8px;border-radius:6px;border:none;background:${d.hasTypes&&(d.types||[]).length>0&&!pk.selectedType?'var(--border)':'var(--brand)'};color:${d.hasTypes&&(d.types||[]).length>0&&!pk.selectedType?'var(--muted)':'#fff'};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Agregar al pedido</button><button onclick="cancelManualPicker()" style="padding:8px 14px;border-radius:6px;border:0.5px solid var(--border);background:transparent;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button></div>`;
+          return ph;
+        })()}
+      </div>`:''}
       ${(mo.items||[]).length>0?`<div style="margin-bottom:12px">
         <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Items del pedido</div>
         ${(mo.items||[]).map((item,idx)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #f3f4f6">
-          <div style="flex:1;font-size:13px;font-weight:500">${item.name}<div style="font-size:11px;color:var(--muted)">$${Number(item.price).toLocaleString()} c/u</div></div>
+          <div style="flex:1;font-size:13px;font-weight:500">${item.name}${item.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${item.selectedType}</span>`:''}${item.excluded&&item.excluded.length>0?`<div style="font-size:11px;color:#b45309">sin: ${item.excluded.join(', ')}</div>`:''}<div style="font-size:11px;color:var(--muted)">$${Number(item.price).toLocaleString()} c/u</div></div>
           <button onclick="manualOrderQty(${idx},-1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;font-family:inherit">−</button>
           <span style="font-size:14px;font-weight:600;min-width:20px;text-align:center">${item.qty}</span>
           <button onclick="manualOrderQty(${idx},+1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;font-family:inherit">+</button>
@@ -1187,19 +1195,76 @@ window.startManualOrder=()=>{
     const tables=Object.entries(DB.tables).map(([k])=>k);
     C.manualOrder={tableId:tables[0]||'',orderMode:'general',personName:'',items:[]};
     C.manualOrderSearch='';
+    C.manualOrderPicker=null; // {key, src, selectedType, excluded}
   }
   render();
 };
-window.cancelManualOrder=()=>{C.manualOrder=null;C.manualOrderSearch='';render();};
+window.cancelManualOrder=()=>{C.manualOrder=null;C.manualOrderSearch='';C.manualOrderPicker=null;render();};
 window.updateManualOrder=(field,val)=>{if(!C.manualOrder)return;C.manualOrder[field]=val;render();};
-window.updateManualSearch=val=>{C.manualOrderSearch=val;render();};
-window.addItemToManualOrder=(key,src)=>{
+
+// Search: solo actualiza la lista sin destruir el input
+window.updateManualSearch=()=>{
+  const inp=document.getElementById('manual-search');
+  if(!inp)return;
+  C.manualOrderSearch=inp.value;
+  // Solo re-renderizar la lista de resultados
+  const list=document.getElementById('manual-search-results');
+  if(!list)return;
+  const search=C.manualOrderSearch.toLowerCase();
+  if(search.length<1){list.innerHTML='';return;}
+  const allItems=[
+    ...Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k,_src:'dishes'})),
+    ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria',emoji:v.emoji||'☕'}))
+  ].filter(d=>!d.unavailable&&d.name.toLowerCase().includes(search));
+  if(allItems.length===0){
+    list.innerHTML=`<div style="padding:10px 14px;font-size:13px;color:var(--muted)">Sin resultados</div>`;
+    return;
+  }
+  list.innerHTML=allItems.map(d=>`<div onclick="selectManualItem('${d._key}','${d._src}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+    <span style="font-size:18px">${d.emoji||'🍽️'}</span>
+    <div style="flex:1"><div style="font-size:14px;font-weight:500">${d.name}</div><div style="font-size:12px;color:var(--muted)">${d._src==='cafeteria'?'☕ Cafetería':'🍽 Restaurant'}${d.hasTypes&&(d.types||[]).length>0?' · variantes':''}${d.customizable&&(d.ingredients||[]).length>0?' · personalizable':''}</div></div>
+    <span style="font-size:14px;font-weight:600;color:var(--accent)">$${Number(d.price).toLocaleString()}</span>
+  </div>`).join('');
+};
+
+// Al seleccionar un item: si tiene variantes o ingredientes, abrir picker; si no, agregar directo
+window.selectManualItem=(key,src)=>{
+  const d=src==='cafeteria'?DB.cafeteriaItems[key]:DB.dishes[key];
+  if(!d)return;
+  const needsPicker=(d.hasTypes&&(d.types||[]).length>0)||(d.customizable&&(d.ingredients||[]).length>0);
+  if(needsPicker){
+    C.manualOrderPicker={key,src,selectedType:null,excluded:new Set()};
+    C.manualOrderSearch='';
+    render();
+  } else {
+    addItemToManualOrder(key,src,null,new Set());
+  }
+};
+
+window.setManualPickerType=t=>{if(C.manualOrderPicker)C.manualOrderPicker.selectedType=t;render();};
+window.toggleManualPickerIng=ing=>{
+  if(!C.manualOrderPicker)return;
+  const ex=C.manualOrderPicker.excluded;
+  if(ex.has(ing))ex.delete(ing);else ex.add(ing);
+  render();
+};
+window.confirmManualPicker=()=>{
+  if(!C.manualOrderPicker)return;
+  const {key,src,selectedType,excluded}=C.manualOrderPicker;
+  addItemToManualOrder(key,src,selectedType,excluded);
+  C.manualOrderPicker=null;render();
+};
+window.cancelManualPicker=()=>{C.manualOrderPicker=null;render();};
+
+window.addItemToManualOrder=(key,src,selectedType,excluded)=>{
   if(!C.manualOrder)return;
   const d=src==='cafeteria'?DB.cafeteriaItems[key]:DB.dishes[key];
   if(!d)return;
-  const existing=C.manualOrder.items.find(i=>i._key===key);
+  // Si mismo key Y mismo tipo → sumar; si no → nuevo item
+  const excArr=excluded?[...excluded]:[];
+  const existing=C.manualOrder.items.find(i=>i._key===key&&(i.selectedType||null)===(selectedType||null)&&JSON.stringify(i.excluded||[])==JSON.stringify(excArr));
   if(existing){existing.qty+=1;}
-  else{C.manualOrder.items.push({_key:key,name:d.name,price:Number(d.price),qty:1,isCafeteria:src==='cafeteria',emoji:d.emoji||null});}
+  else{C.manualOrder.items.push({_key:key,name:d.name,price:Number(d.price),qty:1,isCafeteria:src==='cafeteria',emoji:d.emoji||null,selectedType:selectedType||null,excluded:excArr});}
   C.manualOrderSearch='';render();
 };
 window.manualOrderQty=(idx,delta)=>{
