@@ -891,7 +891,7 @@ function renderOrdersTab(){
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
         <div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label>Mesa</label>
           <select onchange="updateManualOrder('tableId',this.value)">
-            <option value="">— elegir —</option>
+            <option value="" ${!mo.tableId?'selected':''}>— Sin mesa —</option>
             ${tables.map(t=>`<option value="${t._key}"${mo.tableId===t._key?' selected':''}>${t.label}</option>`).join('')}
           </select>
         </div>
@@ -901,7 +901,7 @@ function renderOrdersTab(){
             <option value="individual"${mo.orderMode==='individual'?' selected':''}>👤 Individual</option>
           </select>
         </div>
-        ${mo.orderMode==='individual'?`<div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label>Nombre <span style="color:var(--danger)">*</span></label><input id="manual-nombre" placeholder="Nombre (obligatorio)" value="${mo.personName||''}" oninput="if(C.manualOrder){C.manualOrder.personName=this.value;this.style.borderColor='';const btn=document.getElementById('manual-confirm-btn');if(btn){const ok=C.manualOrder.tableId&&C.manualOrder.items.length&&this.value.trim();btn.disabled=!ok;btn.style.background=ok?'var(--brand)':'var(--border)';btn.style.color=ok?'#fff':'var(--muted)';btn.style.cursor=ok?'pointer':'not-allowed';}}" autocomplete="off"></div>`:''}
+        ${mo.orderMode==='individual'?`<div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label>Nombre <span style="color:var(--danger)">*</span></label><input id="manual-nombre" placeholder="Nombre (obligatorio)" value="${mo.personName||''}" oninput="if(C.manualOrder)C.manualOrder.personName=this.value" autocomplete="off"></div>`:''}
       </div>
       <div style="margin-bottom:10px">
         <div class="form-group" style="margin-bottom:6px"><label>Buscar plato o item</label>
@@ -939,7 +939,7 @@ function renderOrdersTab(){
           <span>Total</span><span style="color:var(--accent)">$${moTotal.toLocaleString()}</span>
         </div>
       </div>`:'<div style="font-size:13px;color:var(--muted);margin-bottom:12px;text-align:center;padding:12px 0">Buscá y agregá items al pedido ↑</div>'}
-      <button id="manual-confirm-btn" onclick="submitManualOrder()" ${!mo.tableId||(mo.items||[]).length===0||(mo.orderMode==='individual'&&!mo.personName.trim())?'disabled':''} style="width:100%;padding:12px;border-radius:8px;border:none;background:${!mo.tableId||(mo.items||[]).length===0||(mo.orderMode==='individual'&&!mo.personName.trim())?'var(--border)':'var(--brand)'};color:${!mo.tableId||(mo.items||[]).length===0||(mo.orderMode==='individual'&&!mo.personName.trim())?'var(--muted)':'#fff'};font-size:15px;font-weight:600;cursor:${!mo.tableId||(mo.items||[]).length===0||(mo.orderMode==='individual'&&!mo.personName.trim())?'not-allowed':'pointer'};font-family:inherit">
+      <button id="manual-confirm-btn" onclick="submitManualOrder()" style="width:100%;padding:12px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${!mo.tableId||(mo.items||[]).length===0?'0.45':'1'}">
         Confirmar pedido →
       </button>
     </div>`;
@@ -1278,10 +1278,14 @@ window.manualOrderRemoveItem=idx=>{
 };
 window.submitManualOrder=async()=>{
   const mo=C.manualOrder;
-  if(!mo||!mo.tableId||!mo.items.length)return;
+  if(!mo)return;
+  // Leer nombre del DOM por si no hubo render intermedio
+  const nombreInp=document.getElementById('manual-nombre');
+  if(nombreInp)mo.personName=nombreInp.value;
+  if(!mo.tableId){alert('Elegí una mesa');return;}
+  if(!mo.items.length){alert('Agregá al menos un item');return;}
   if(mo.orderMode==='individual'&&!mo.personName.trim()){
-    const inp=document.getElementById('manual-nombre');
-    if(inp){inp.focus();inp.style.borderColor='var(--danger)';}
+    if(nombreInp){nombreInp.focus();nombreInp.style.borderColor='var(--danger)';}
     alert('Ingresá el nombre de la persona');return;
   }
   const items=mo.items.map(i=>({name:i.name,qty:i.qty,price:i.price,finalPrice:i.price,excluded:[],selectedType:null,isCafeteria:i.isCafeteria||false,emoji:i.emoji||null,manualEntry:true}));
