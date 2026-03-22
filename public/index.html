@@ -274,6 +274,8 @@ let C = {
   customerCat:'todos', customerMenuSection:'platos', cart:{}, custDishId:null,
   historyFilter:'hoy', survey:{items:[],ratings:{}},
   adminEditOrderKey:null,
+  manualOrder:null, // {tableId, orderMode, personName, items:[]}
+  manualOrderSearch:'',
   editingDish:null, editingTable:null,
   newDish:{name:'',desc:'',price:'',cat:'entrada',emoji:'🍽️',customizable:false,ingredients:[],promoDiscount:0,is2x1:false},
   newIngInput:'', newTypeInput:'', typePickerDishId:null, showPaymentPicker:false, newTable:{label:'',capacity:''},
@@ -872,12 +874,82 @@ function renderOrdersTab(){
   const pendingCount=new Set(orders.filter(o=>o.status==='pending').map(o=>o.tableId+'|'+(o.orderMode==='individual'&&o.personName?o.personName:'__general__'))).size;
   const deliveredCount=new Set(orders.filter(o=>o.status==='delivered').map(o=>o.tableId+'|'+(o.orderMode==='individual'&&o.personName?o.personName:'__general__'))).size;
   const billedCount=new Set(orders.filter(o=>o.status==='billed').map(o=>o.tableId+'|'+(o.orderMode==='individual'&&o.personName?o.personName:'__general__'))).size;
-  let h=`<div class="metrics">
-    <div class="metric"><div class="metric-val">${pendingCount}</div><div class="metric-lbl">Pendientes</div></div>
-    <div class="metric"><div class="metric-val">${deliveredCount}</div><div class="metric-lbl">Entregados</div></div>
-    <div class="metric" style="${billedCount>0?'background:#ede9fe;border-color:#c4b5fd':''}"><div class="metric-val" style="${billedCount>0?'color:#5b21b6':''}">${billedCount}</div><div class="metric-lbl">Piden cuenta</div></div>
-    <div class="metric" style="${pendingAlerts.length>0?'background:#fef3c7;border-color:#fcd34d':''}"><div class="metric-val" style="${pendingAlerts.length>0?'color:#92400e':''}">${pendingAlerts.length}</div><div class="metric-lbl">🛎 Llamadas</div></div>
+
+  // ── Formulario de pedido manual ──
+  let manualH='';
+  if(C.manualOrder){
+    const mo=C.manualOrder;
+    const tables=Object.entries(DB.tables).map(([k,v])=>({...v,_key:k}));
+    const allItems=[
+      ...Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k,_src:'dishes'})),
+      ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria',emoji:v.emoji||'☕'}))
+    ].filter(d=>!d.unavailable);
+    const search=(C.manualOrderSearch||'').toLowerCase();
+    const searchResults=search.length>=1?allItems.filter(d=>d.name.toLowerCase().includes(search)):[];
+    const moTotal=(mo.items||[]).reduce((s,i)=>s+i.price*i.qty,0);
+
+    manualH=`<div class="card" style="border:1.5px solid var(--brand);margin-bottom:1.25rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <div style="font-size:15px;font-weight:600;color:var(--text)">📋 Nuevo pedido manual</div>
+        <button onclick="cancelManualOrder()" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label>Mesa</label>
+          <select onchange="updateManualOrder('tableId',this.value)">
+            <option value="">— elegir —</option>
+            ${tables.map(t=>`<option value="${t._key}"${mo.tableId===t._key?' selected':''}>${t.label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label>Modo</label>
+          <select onchange="updateManualOrder('orderMode',this.value)">
+            <option value="general"${mo.orderMode==='general'?' selected':''}>👥 General</option>
+            <option value="individual"${mo.orderMode==='individual'?' selected':''}>👤 Individual</option>
+          </select>
+        </div>
+        ${mo.orderMode==='individual'?`<div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label>Nombre</label><input placeholder="Nombre" value="${mo.personName||''}" oninput="updateManualOrder('personName',this.value)"></div>`:''}
+      </div>
+      <div style="margin-bottom:10px">
+        <div class="form-group" style="margin-bottom:6px"><label>Buscar plato o item</label>
+          <input id="manual-search" placeholder="Escribí para buscar..." value="${C.manualOrderSearch||''}" oninput="updateManualSearch(this.value)" autocomplete="off">
+        </div>
+        ${searchResults.length>0?`<div style="border:0.5px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;background:var(--card)">
+          ${searchResults.map(d=>`<div onclick="addItemToManualOrder('${d._key}','${d._src}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border);transition:background 0.1s" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+            <span style="font-size:18px">${d.emoji||'🍽️'}</span>
+            <div style="flex:1"><div style="font-size:14px;font-weight:500">${d.name}</div><div style="font-size:12px;color:var(--muted)">${d._src==='cafeteria'?'☕ Cafetería':'🍽 Restaurant'}</div></div>
+            <span style="font-size:14px;font-weight:600;color:var(--accent)">$${Number(d.price).toLocaleString()}</span>
+          </div>`).join('')}
+        </div>`:''}
+        ${search.length>=1&&searchResults.length===0?`<div style="font-size:13px;color:var(--muted);padding:8px 0">Sin resultados para "${search}"</div>`:''}
+      </div>
+      ${(mo.items||[]).length>0?`<div style="margin-bottom:12px">
+        <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Items del pedido</div>
+        ${(mo.items||[]).map((item,idx)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #f3f4f6">
+          <div style="flex:1;font-size:13px;font-weight:500">${item.name}<div style="font-size:11px;color:var(--muted)">$${Number(item.price).toLocaleString()} c/u</div></div>
+          <button onclick="manualOrderQty(${idx},-1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;font-family:inherit">−</button>
+          <span style="font-size:14px;font-weight:600;min-width:20px;text-align:center">${item.qty}</span>
+          <button onclick="manualOrderQty(${idx},+1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;font-family:inherit">+</button>
+          <button onclick="manualOrderRemoveItem(${idx})" style="width:28px;height:28px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:14px;cursor:pointer;font-family:inherit">✕</button>
+        </div>`).join('')}
+        <div style="display:flex;justify-content:space-between;padding:10px 0 4px;font-weight:600;font-size:15px">
+          <span>Total</span><span style="color:var(--accent)">$${moTotal.toLocaleString()}</span>
+        </div>
+      </div>`:'<div style="font-size:13px;color:var(--muted);margin-bottom:12px;text-align:center;padding:12px 0">Buscá y agregá items al pedido ↑</div>'}
+      <button onclick="submitManualOrder()" ${!mo.tableId||(mo.items||[]).length===0?'disabled':''} style="width:100%;padding:12px;border-radius:8px;border:none;background:${!mo.tableId||(mo.items||[]).length===0?'var(--border)':'var(--brand)'};color:${!mo.tableId||(mo.items||[]).length===0?'var(--muted)':'#fff'};font-size:15px;font-weight:600;cursor:${!mo.tableId||(mo.items||[]).length===0?'not-allowed':'pointer'};font-family:inherit">
+        Confirmar pedido →
+      </button>
+    </div>`;
+  }
+
+  let h=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+    <div class="metrics" style="margin-bottom:0;flex:1">
+      <div class="metric"><div class="metric-val">${pendingCount}</div><div class="metric-lbl">Pendientes</div></div>
+      <div class="metric"><div class="metric-val">${deliveredCount}</div><div class="metric-lbl">Entregados</div></div>
+      <div class="metric" style="${billedCount>0?'background:#ede9fe;border-color:#c4b5fd':''}"><div class="metric-val" style="${billedCount>0?'color:#5b21b6':''}">${billedCount}</div><div class="metric-lbl">Piden cuenta</div></div>
+      <div class="metric" style="${pendingAlerts.length>0?'background:#fef3c7;border-color:#fcd34d':''}"><div class="metric-val" style="${pendingAlerts.length>0?'color:#92400e':''}">${pendingAlerts.length}</div><div class="metric-lbl">🛎 Llamadas</div></div>
+    </div>
+    <button onclick="startManualOrder()" style="padding:9px 16px;border-radius:8px;border:0.5px solid var(--brand);background:${C.manualOrder?'var(--brand)':'transparent'};color:${C.manualOrder?'#fff':'var(--brand)'};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">+ Pedido manual</button>
   </div>
+  ${manualH}
   ${pendingAlerts.length>0?`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:1rem">
     ${pendingAlerts.map(([k,a])=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fef3c7;border:0.5px solid #fcd34d;border-radius:10px">
       <div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">🛎</span><div><div style="font-weight:500;font-size:14px">${a.tableLabel} llama al mozo</div><div style="font-size:12px;color:#92400e">${a.time}</div></div></div>
@@ -1108,6 +1180,45 @@ window.setCustomerNameInput=val=>{C.customerNameInput=val;};
 window.goToModeChoice=()=>{C.customerStep='modeChoice';render();};
 
 window.dismissAlert=key=>update(ref(db,`alerts/${key}`),{status:'dismissed'});
+// ── PEDIDO MANUAL (ADMIN) ─────────────────────────
+window.startManualOrder=()=>{
+  if(C.manualOrder){C.manualOrder=null;}
+  else{
+    const tables=Object.entries(DB.tables).map(([k])=>k);
+    C.manualOrder={tableId:tables[0]||'',orderMode:'general',personName:'',items:[]};
+    C.manualOrderSearch='';
+  }
+  render();
+};
+window.cancelManualOrder=()=>{C.manualOrder=null;C.manualOrderSearch='';render();};
+window.updateManualOrder=(field,val)=>{if(!C.manualOrder)return;C.manualOrder[field]=val;render();};
+window.updateManualSearch=val=>{C.manualOrderSearch=val;render();};
+window.addItemToManualOrder=(key,src)=>{
+  if(!C.manualOrder)return;
+  const d=src==='cafeteria'?DB.cafeteriaItems[key]:DB.dishes[key];
+  if(!d)return;
+  const existing=C.manualOrder.items.find(i=>i._key===key);
+  if(existing){existing.qty+=1;}
+  else{C.manualOrder.items.push({_key:key,name:d.name,price:Number(d.price),qty:1,isCafeteria:src==='cafeteria',emoji:d.emoji||null});}
+  C.manualOrderSearch='';render();
+};
+window.manualOrderQty=(idx,delta)=>{
+  if(!C.manualOrder)return;
+  C.manualOrder.items[idx].qty=Math.max(1,C.manualOrder.items[idx].qty+delta);
+  render();
+};
+window.manualOrderRemoveItem=idx=>{
+  if(!C.manualOrder)return;
+  C.manualOrder.items.splice(idx,1);render();
+};
+window.submitManualOrder=async()=>{
+  const mo=C.manualOrder;
+  if(!mo||!mo.tableId||!mo.items.length)return;
+  const items=mo.items.map(i=>({name:i.name,qty:i.qty,price:i.price,finalPrice:i.price,excluded:[],selectedType:null,isCafeteria:i.isCafeteria||false,emoji:i.emoji||null,manualEntry:true}));
+  await push(ref(db,'orders'),{tableId:mo.tableId,items,status:'pending',time:nowStr(),billRequested:false,orderMode:mo.orderMode,personName:mo.orderMode==='individual'&&mo.personName?mo.personName:null,createdAt:Date.now(),manualEntry:true});
+  C.manualOrder=null;C.manualOrderSearch='';render();
+};
+
 window.markDelivered=key=>update(ref(db,`orders/${key}`),{status:'delivered'});
 
 // ── EDICIÓN DE PEDIDOS PENDIENTES (ADMIN) ─────────
