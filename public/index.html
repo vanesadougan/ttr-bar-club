@@ -548,10 +548,7 @@ function renderAdmin(){
   mc.innerHTML=h;
   const inp=document.getElementById('ing-input');
   if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addIngredient();}});
-  // Si hay texto en búsqueda manual, poblar la lista de resultados
-  if(C.manualOrder&&C.manualOrderSearch){
-    setTimeout(()=>updateManualSearch(),0);
-  }
+  if(C.manualOrder)updateManualSearch();
 }
 window.adminTab=t=>{C.adminTab=t;render();};
 window.toggleCatOpen=id=>{catOpen[id]=!catOpen[id];render();};
@@ -904,13 +901,13 @@ function renderOrdersTab(){
             <option value="individual"${mo.orderMode==='individual'?' selected':''}>👤 Individual</option>
           </select>
         </div>
-        ${mo.orderMode==='individual'?`<div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label>Nombre</label><input placeholder="Nombre" value="${mo.personName||''}" oninput="updateManualOrder('personName',this.value)"></div>`:''}
+        ${mo.orderMode==='individual'?`<div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label>Nombre</label><input id="manual-nombre" placeholder="Nombre" value="${mo.personName||''}" oninput="if(C.manualOrder)C.manualOrder.personName=this.value" autocomplete="off"></div>`:''}
       </div>
       <div style="margin-bottom:10px">
         <div class="form-group" style="margin-bottom:6px"><label>Buscar plato o item</label>
           <input id="manual-search" placeholder="Escribí para buscar..." value="${C.manualOrderSearch||''}" oninput="updateManualSearch()" autocomplete="off">
         </div>
-        <div id="manual-search-results" style="border:0.5px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;background:var(--card);${C.manualOrderSearch?'':'display:none'}"></div>
+        <div id="manual-search-results" style="border:0.5px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;background:var(--card);margin-top:4px"></div>
       </div>
       ${C.manualOrderPicker?`<div style="margin-bottom:12px;padding:12px;border:1px dashed #c4b5fd;border-radius:8px;background:#faf5ff">
         ${(()=>{const pk=C.manualOrderPicker;const d=pk.src==='cafeteria'?DB.cafeteriaItems[pk.key]:DB.dishes[pk.key];if(!d)return'';
@@ -1205,19 +1202,19 @@ window.updateManualOrder=(field,val)=>{if(!C.manualOrder)return;C.manualOrder[fi
 // Search: solo actualiza la lista sin destruir el input
 window.updateManualSearch=()=>{
   const inp=document.getElementById('manual-search');
-  if(!inp)return;
-  C.manualOrderSearch=inp.value;
-  // Solo re-renderizar la lista de resultados
   const list=document.getElementById('manual-search-results');
   if(!list)return;
-  const search=C.manualOrderSearch.toLowerCase();
-  if(search.length<1){list.innerHTML='';return;}
+  const val=inp?inp.value:(C.manualOrderSearch||'');
+  if(inp)C.manualOrderSearch=inp.value;
+  const search=val.toLowerCase().trim();
+  if(search.length<1){list.style.display='none';list.innerHTML='';return;}
   const allItems=[
     ...Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k,_src:'dishes'})),
     ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria',emoji:v.emoji||'☕'}))
   ].filter(d=>!d.unavailable&&d.name.toLowerCase().includes(search));
+  list.style.display='block';
   if(allItems.length===0){
-    list.innerHTML=`<div style="padding:10px 14px;font-size:13px;color:var(--muted)">Sin resultados</div>`;
+    list.innerHTML=`<div style="padding:10px 14px;font-size:13px;color:var(--muted)">Sin resultados para "${val}"</div>`;
     return;
   }
   list.innerHTML=allItems.map(d=>`<div onclick="selectManualItem('${d._key}','${d._src}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
