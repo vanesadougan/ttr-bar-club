@@ -264,7 +264,7 @@ function getCats(){
 const catOpen={};
 
 // Local reactive state (synced from Firebase)
-let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}, cancellations:{}, cafeteriaItems:{}, cafeteriaCategories:{} };
+let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}, cancellations:{}, cafeteriaItems:{}, cafeteriaCategories:{}, ingredients:{} };
 
 // Customer flow state (local only)
 let C = {
@@ -275,9 +275,11 @@ let C = {
   historyFilter:'hoy', survey:{items:[],ratings:{}},
   adminEditOrderKey:null,
   manualOrder:null, // {tableId, orderMode, personName, items:[]}
+  newIng:{name:'',unit:'u',stock:'',alertAt:''}, editingIng:null,
   manualOrderSearch:'',
   editingDish:null, editingTable:null,
-  newDish:{name:'',desc:'',price:'',cat:'entrada',emoji:'🍽️',customizable:false,ingredients:[],promoDiscount:0,is2x1:false},
+  newDish:{name:'',desc:'',price:'',cat:'entrada',emoji:'🍽️',customizable:false,ingredients:[],promoDiscount:0,is2x1:false,recipe:[]},
+  newCafItem:{name:'',desc:'',price:'',cat:'',emoji:'☕',customizable:false,ingredients:[],stock:null,recipe:[]},
   newIngInput:'', newTypeInput:'', typePickerDishId:null, showPaymentPicker:false, newTable:{label:'',capacity:''},
   newCat:{label:'',icon:'🍽️',isPromo:false,noRating:false}, editingCat:null,
   // Cafetería state
@@ -334,6 +336,11 @@ onValue(ref(db,'ratings'), snap=>{ DB.ratings = snap.val()||{}; if(!firstLoad) r
 onValue(ref(db,'cancellations'), snap=>{ DB.cancellations = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'cafeteriaItems'), snap=>{ DB.cafeteriaItems = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'cafeteriaCategories'), snap=>{ DB.cafeteriaCategories = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'ingredients'), snap=>{
+  DB.ingredients = snap.val()||{};
+  if(!firstLoad) checkIngredientStock();
+  if(!firstLoad) render();
+});
 onValue(ref(db,'orders'), snap=>{
   const prevKeys=new Set(Object.keys(DB.orders));
   const prevBilled=new Set(Object.entries(DB.orders).filter(([,o])=>o.status==='billed').map(([k])=>k));
@@ -566,9 +573,11 @@ function renderDishesTab(){
   let tabsH=`<div style="display:flex;gap:6px;margin-bottom:1rem">
     <button onclick="setDishSubTab('platos')" style="padding:5px 14px;border-radius:20px;font-size:13px;border:none;cursor:pointer;font-family:inherit;background:${subTab==='platos'?'var(--brand)':'var(--bg)'};color:${subTab==='platos'?'#fff':'var(--muted)'}">Platos</button>
     <button onclick="setDishSubTab('categorias')" style="padding:5px 14px;border-radius:20px;font-size:13px;border:none;cursor:pointer;font-family:inherit;background:${subTab==='categorias'?'var(--brand)':'var(--bg)'};color:${subTab==='categorias'?'#fff':'var(--muted)'}">Categorías</button>
+    <button onclick="setDishSubTab('stock')" style="padding:5px 14px;border-radius:20px;font-size:13px;border:none;cursor:pointer;font-family:inherit;background:${subTab==='stock'?'var(--brand)':'var(--bg)'};color:${subTab==='stock'?'#fff':'var(--muted)'}">📦 Stock</button>
   </div>`;
 
   if(subTab==='categorias') return tabsH+renderCategoriesTab();
+  if(subTab==='stock') return tabsH+renderStockTab();
 
   let formH=`<div class="card" style="overflow-y:auto;max-height:680px">
     <div class="card-title">${C.editingDish?'Editar plato':'Agregar plato'}</div>
@@ -737,6 +746,13 @@ function renderCafeteriaTab(){
     <div class="form-group"><label>Descripción</label><textarea oninput="uCafF('desc',this.value)">${f.desc}</textarea></div>
     <div class="form-group"><label>Precio ($)</label><input type="number" placeholder="0" value="${f.price}" oninput="uCafF('price',this.value)"></div>
     <div class="form-group"><label>Emoji</label><input value="${f.emoji||'☕'}" oninput="uCafF('emoji',this.value)" style="font-size:18px;width:60px"></div>`;
+  const allIngsCaf=Object.entries(DB.ingredients||{}).map(([k,v])=>({...v,_key:k}));
+  if(allIngsCaf.length>0){
+    const recipeCaf=f.recipe||[];
+    formH+=`<div class="ing-section" style="margin-bottom:10px"><div style="font-size:13px;font-weight:500;margin-bottom:8px">🧾 Receta (ingredientes)</div>${recipeCaf.length>0?`<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">${recipeCaf.map((r,ri)=>{const ing=DB.ingredients[r.ingredientId];return ing?`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg);border-radius:6px"><span style="flex:1;font-size:13px">${ing.name}</span><input type="number" min="0.1" step="0.1" value="${r.qty}" oninput="updateRecipeQty(${ri},this.value,'caf')" style="width:60px;padding:4px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px"><span style="font-size:11px;color:var(--muted)">${ing.unit}</span><button onclick="removeFromRecipe(${ri},'caf')" style="width:22px;height:22px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;cursor:pointer;font-size:12px">✕</button></div>`:''}).join('')}</div>`:''}
+      <select onchange="addToRecipe(this.value,'caf');this.value=''" style="width:100%;padding:6px 10px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px"><option value="">+ Agregar ingrediente...</option>${allIngsCaf.filter(ing=>!recipeCaf.some(r=>r.ingredientId===ing._key)).map(ing=>`<option value="${ing._key}">${ing.name} (${ing.stock||0} ${ing.unit})</option>`).join('')}</select>
+    </div>`;
+  }
   if(f.customizable){
     formH+=`<div class="ing-section"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><label class="toggle-switch"><input type="checkbox" checked onchange="toggleCafCustomizable(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Personalizar ingredientes</span></div><div style="font-size:12px;color:var(--muted);margin-bottom:8px">El comensal podrá destildar los que no quiere.</div><div class="ing-list">${ings.map((ing,i)=>`<div class="ing-chip">${ing}<button class="ing-chip-remove" onclick="removeCafIngredient(${i})">×</button></div>`).join('')}${ings.length===0?`<span style="font-size:12px;color:var(--muted)">Sin ingredientes aún</span>`:''}</div><div class="ing-add-row"><input id="caf-ing-input" placeholder="Ej: Leche, Azúcar..." value="${C.newCafIngInput||''}" oninput="C.newCafIngInput=this.value"><button class="btn btn-primary btn-sm" onclick="addCafIngredient()">+ Agregar</button></div></div>`;
   } else {
@@ -832,6 +848,186 @@ window.saveEditCafCat=()=>{const {_key,...data}=C.editingCafCat;set(ref(db,`cafe
 window.cancelEditCafCat=()=>{C.editingCafCat=null;render();};
 window.deleteCafCat=(key,count)=>{if(count>0&&!confirm(`Esta categoría tiene ${count} item${count>1?'s':''}. ¿Eliminarla?`))return;remove(ref(db,`cafeteriaCategories/${key}`));};
 window.moveCafCat=(key,dir)=>{const cats=getCafCats();const idx=cats.findIndex(c=>c._key===key);const swapIdx=idx+dir;if(swapIdx<0||swapIdx>=cats.length)return;const aOrder=cats[idx].order||idx,bOrder=cats[swapIdx].order||swapIdx;update(ref(db,`cafeteriaCategories/${key}`),{order:bOrder});update(ref(db,`cafeteriaCategories/${cats[swapIdx]._key}`),{order:aOrder});};
+
+// ── STOCK TAB ─────────────────────────────────────
+function renderStockTab(){
+  const ings=Object.entries(DB.ingredients||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const fi=C.editingIng||C.newIng||{name:'',unit:'u',stock:'',alertAt:''};
+  const UNITS=['u','l'];
+
+  // Form
+  let formH=`<div class="card">
+    <div class="card-title">${C.editingIng?'Editar ingrediente':'Nuevo ingrediente'}</div>
+    <div class="two-col">
+      <div class="form-group"><label>Nombre</label><input placeholder="Ej: Carne, Pan, Leche..." value="${fi.name||''}" oninput="uIng('name',this.value)"></div>
+      <div class="form-group"><label>Unidad</label><select onchange="uIng('unit',this.value)">
+        ${UNITS.map(u=>`<option value="${u}"${fi.unit===u?' selected':''}>${u}</option>`).join('')}
+      </select></div>
+    </div>
+    <div class="two-col">
+      <div class="form-group"><label>Stock inicial</label><input type="number" min="0" step="0.1" placeholder="0" value="${fi.stock!=null&&fi.stock!==''?fi.stock:''}" oninput="uIng('stock',this.value)"></div>
+      <div class="form-group"><label>Alerta cuando quede ≤</label><input type="number" min="0" step="0.1" placeholder="Ej: 5" value="${fi.alertAt!=null&&fi.alertAt!==''?fi.alertAt:''}" oninput="uIng('alertAt',this.value)"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="${C.editingIng?'saveEditIng()':'addIng()'}">
+        ${C.editingIng?'Guardar cambios':'Agregar ingrediente'}</button>
+      ${C.editingIng?`<button class="btn btn-ghost" onclick="cancelEditIng()">Cancelar</button>`:''}
+    </div>
+  </div>`;
+
+  // List
+  let listH=`<div style="display:flex;flex-direction:column;gap:10px">`;
+  if(ings.length===0){
+    listH+=`<div class="card" style="text-align:center;color:var(--muted);padding:2rem">
+      <div style="font-size:32px;margin-bottom:8px">📦</div>
+      <div style="font-size:14px">No hay ingredientes todavía</div>
+      <div style="font-size:12px;margin-top:4px">Agregá ingredientes para controlar el stock de tus platos</div>
+    </div>`;
+  }
+  ings.forEach(ing=>{
+    const pct=ing.alertAt&&ing.alertAt>0?Math.min(100,Math.round((ing.stock||0)/(ing.alertAt*4)*100)):Math.min(100,(ing.stock||0));
+    const low=ing.alertAt!=null&&(ing.stock||0)<=ing.alertAt;
+    const empty=(ing.stock||0)===0;
+    const barColor=empty?'#ef4444':low?'#f59e0b':'#10b981';
+    const barBg=empty?'#fee2e2':low?'#fef3c7':'#d1fae5';
+    // Platos que usan este ingrediente
+    const relatedDishes=[
+      ...Object.entries(DB.dishes).filter(([,d])=>(d.recipe||[]).some(r=>r.ingredientId===ing._key)).map(([,d])=>d.name),
+      ...Object.entries(DB.cafeteriaItems||{}).filter(([,d])=>(d.recipe||[]).some(r=>r.ingredientId===ing._key)).map(([,d])=>d.name)
+    ];
+    listH+=`<div class="card" style="${low?'border-color:'+barColor+';':''}" >
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="font-size:15px;font-weight:600">${ing.name}</span>
+            ${empty?`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#fee2e2;color:#b91c1c">Sin stock</span>`:
+              low?`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#fef3c7;color:#92400e">⚠️ Stock bajo</span>`:''}
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="font-size:22px;font-weight:700;color:${barColor}">${ing.stock||0}</span>
+            <span style="font-size:13px;color:var(--muted)">${ing.unit}${ing.alertAt!=null?` · alerta ≤ ${ing.alertAt} ${ing.unit}`:''}</span>
+          </div>
+          <div style="height:6px;background:#f3f4f6;border-radius:3px;margin-bottom:8px;overflow:hidden">
+            <div style="height:100%;width:${Math.min(100,ing.alertAt&&ing.alertAt>0?Math.round((ing.stock||0)/Math.max(ing.alertAt*4,1)*100):Math.min(100,(ing.stock||0)))}%;background:${barColor};border-radius:3px;transition:width 0.3s"></div>
+          </div>
+          ${relatedDishes.length>0?`<div style="font-size:11px;color:var(--muted)">Usado en: ${relatedDishes.join(', ')}</div>`:''}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+          <div style="display:flex;gap:4px">
+            <input id="restock-${ing._key}" type="number" min="1" step="0.1" placeholder="+N" style="width:60px;padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px">
+            <button onclick="restockIng('${ing._key}')" style="padding:5px 10px;border-radius:6px;border:0.5px solid #10b981;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar</button>
+          </div>
+          <div style="display:flex;gap:4px;justify-content:flex-end">
+            <button class="btn btn-ghost btn-sm" onclick="editIng('${ing._key}')">✏️</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteIng('${ing._key}')">✕</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  });
+  listH+=`</div>`;
+
+  return `<div class="admin-grid">${formH}${listH}</div>`;
+}
+
+// ── INGREDIENT ACTIONS ────────────────────────────
+window.uIng=(field,val)=>{
+  const o=C.editingIng||(C.newIng=C.newIng||{name:'',unit:'u',stock:'',alertAt:''});
+  o[field]=(field==='stock'||field==='alertAt')?Number(val):val;
+};
+window.addIng=()=>{
+  const d=C.newIng||{};
+  if(!d.name){alert('Ingresá el nombre del ingrediente');return;}
+  push(ref(db,'ingredients'),{name:d.name.trim(),unit:d.unit||'u',stock:Number(d.stock||0),alertAt:d.alertAt!=null&&d.alertAt!==''?Number(d.alertAt):null});
+  C.newIng={name:'',unit:'u',stock:'',alertAt:''};render();
+};
+window.editIng=key=>{C.editingIng={...DB.ingredients[key],_key:key};render();};
+window.saveEditIng=async()=>{
+  const {_key,...data}=C.editingIng;
+  await set(ref(db,`ingredients/${_key}`),{...data,stock:Number(data.stock||0)});
+  C.editingIng=null;render();
+};
+window.cancelEditIng=()=>{C.editingIng=null;render();};
+window.deleteIng=key=>{
+  if(!confirm('¿Eliminar este ingrediente? Se quitará de todas las recetas.'))return;
+  // Remove from all dish recipes
+  Object.entries(DB.dishes).forEach(([dk,d])=>{
+    const r=(d.recipe||[]).filter(r=>r.ingredientId!==key);
+    update(ref(db,`dishes/${dk}`),{recipe:r});
+  });
+  Object.entries(DB.cafeteriaItems||{}).forEach(([dk,d])=>{
+    const r=(d.recipe||[]).filter(r=>r.ingredientId!==key);
+    update(ref(db,`cafeteriaItems/${dk}`),{recipe:r});
+  });
+  remove(ref(db,`ingredients/${key}`));
+};
+window.restockIng=async key=>{
+  const inp=document.getElementById(`restock-${key}`);
+  const qty=Number(inp?inp.value:0);
+  if(!qty||qty<=0){alert('Ingresá una cantidad');return;}
+  const ing=DB.ingredients[key];
+  if(!ing)return;
+  const newStock=(ing.stock||0)+qty;
+  await update(ref(db,`ingredients/${key}`),{stock:newStock});
+  if(inp)inp.value='';
+  // checkIngredientStock will auto-enable dishes
+};
+
+// Recipe helpers for dish/caf forms
+window.addToRecipe=(ingId,type)=>{
+  if(!ingId)return;
+  const f=type==='dish'?(C.editingDish||C.newDish):(C.editingCafItem||C.newCafItem);
+  if(!f.recipe)f.recipe=[];
+  if(!f.recipe.some(r=>r.ingredientId===ingId))f.recipe.push({ingredientId:ingId,qty:1});
+  render();
+};
+window.removeFromRecipe=(idx,type)=>{
+  const f=type==='dish'?(C.editingDish||C.newDish):(C.editingCafItem||C.newCafItem);
+  if(f.recipe)f.recipe.splice(idx,1);
+  render();
+};
+window.updateRecipeQty=(idx,val,type)=>{
+  const f=type==='dish'?(C.editingDish||C.newDish):(C.editingCafItem||C.newCafItem);
+  if(f.recipe&&f.recipe[idx])f.recipe[idx].qty=Math.max(0.1,Number(val)||1);
+};
+
+// Auto-enable/disable dishes based on ingredient stock
+function checkIngredientStock(){
+  const ings=DB.ingredients||{};
+  // Check dishes
+  Object.entries(DB.dishes).forEach(([key,d])=>{
+    const recipe=d.recipe||[];
+    if(recipe.length===0)return;
+    const outOfStock=recipe.some(r=>{
+      const ing=ings[r.ingredientId];
+      return ing&&(ing.stock||0)===0;
+    });
+    // Only auto-change if it was previously auto-managed (stockManaged flag)
+    if(outOfStock&&!d.unavailable){
+      update(ref(db,`dishes/${key}`),{unavailable:true,stockManaged:true});
+      showNotif('alert',`Sin stock: ${d.name}`,'Plato ocultado automáticamente');
+    }
+  });
+  // Check cafeteria items
+  Object.entries(DB.cafeteriaItems||{}).forEach(([key,d])=>{
+    const recipe=d.recipe||[];
+    if(recipe.length===0)return;
+    const outOfStock=recipe.some(r=>{
+      const ing=ings[r.ingredientId];
+      return ing&&(ing.stock||0)===0;
+    });
+    if(outOfStock&&!d.unavailable){
+      update(ref(db,`cafeteriaItems/${key}`),{unavailable:true,stockManaged:true});
+      showNotif('alert',`Sin stock: ${d.name}`,'Item ocultado automáticamente');
+    }
+  });
+  // Alert for low stock
+  Object.entries(ings).forEach(([,ing])=>{
+    if(ing.alertAt!=null&&(ing.stock||0)>0&&(ing.stock||0)<=ing.alertAt){
+      showNotif('alert',`⚠️ Stock bajo: ${ing.name}`,`Quedan ${ing.stock} ${ing.unit}`);
+    }
+  });
+}
 
 // ── TABLES TAB ────────────────────────────────────
 function renderTablesTab(){
@@ -1293,7 +1489,25 @@ window.submitManualOrder=async()=>{
   C.manualOrder=null;C.manualOrderSearch='';render();
 };
 
-window.markDelivered=key=>update(ref(db,`orders/${key}`),{status:'delivered'});
+window.markDelivered=async key=>{
+  await update(ref(db,`orders/${key}`),{status:'delivered'});
+  // Descontar stock de ingredientes
+  const o=DB.orders[key];
+  if(o&&o.items){
+    for(const item of o.items){
+      // Buscar el plato/item de cafetería
+      const dish=Object.entries(DB.dishes).find(([,d])=>d.name===item.name);
+      const cafItem=Object.entries(DB.cafeteriaItems||{}).find(([,d])=>d.name===item.name);
+      const recipe=(dish&&dish[1].recipe)||(cafItem&&cafItem[1].recipe)||[];
+      for(const r of recipe){
+        const ing=DB.ingredients[r.ingredientId];
+        if(ing==null)continue;
+        const newStock=Math.max(0,(ing.stock||0)-r.qty*item.qty);
+        await update(ref(db,`ingredients/${r.ingredientId}`),{stock:newStock});
+      }
+    }
+  }
+};
 
 // ── EDICIÓN DE PEDIDOS PENDIENTES (ADMIN) ─────────
 window.adminEditOrder=key=>{
