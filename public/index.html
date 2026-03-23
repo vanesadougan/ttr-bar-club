@@ -579,51 +579,81 @@ function renderDishesTab(){
   if(subTab==='categorias') return tabsH+renderCategoriesTab();
   if(subTab==='stock') return tabsH+renderStockTab();
 
-  let formH=`<div class="card" style="overflow-y:auto;max-height:680px">
-    <div class="card-title">${C.editingDish?'Editar plato':'Agregar plato'}</div>
-    <div class="form-group"><label>Categoría</label><select onchange="uF('dish','cat',this.value)">
-      ${cats.length===0?'<option value="">Sin categorías</option>':cats.map(c=>`<option value="${c._key}"${f.cat===c._key?' selected':''}>${c.icon} ${c.label}</option>`).join('')}
-    </select></div>
-    <div class="form-group"><label>Nombre</label><input placeholder="Nombre del plato" value="${f.name}" oninput="uF('dish','name',this.value)"></div>
-    <div class="form-group"><label>Descripción</label><textarea oninput="uF('dish','desc',this.value)">${f.desc}</textarea></div>
-    <div class="form-group"><label>Precio normal ($)</label><input type="number" placeholder="0" value="${f.price}" oninput="uF('dish','price',this.value)"></div>`;
+  // Build dish form using string concatenation (no nested template literals)
+  let formH='<div class="card" style="overflow-y:auto;max-height:680px">';
+  formH+='<div class="card-title">'+(C.editingDish?'Editar plato':'Agregar plato')+'</div>';
+  formH+='<div class="form-group"><label>Categoría</label><select onchange="uF(\'dish\',\'cat\',this.value)">';
+  formH+=cats.length===0?'<option value="">Sin categorías</option>':cats.map(c=>'<option value="'+c._key+'"'+(f.cat===c._key?' selected':'')+'>'+c.icon+' '+c.label+'</option>').join('');
+  formH+='</select></div>';
+  formH+='<div class="form-group"><label>Nombre</label><input placeholder="Nombre del plato" value="'+f.name+'" oninput="uF(\'dish\',\'name\',this.value)"></div>';
+  formH+='<div class="form-group"><label>Descripción</label><textarea oninput="uF(\'dish\',\'desc\',this.value)">'+f.desc+'</textarea></div>';
+  formH+='<div class="form-group"><label>Precio normal ($)</label><input type="number" placeholder="0" value="'+f.price+'" oninput="uF(\'dish\',\'price\',this.value)"></div>';
   const is2x1=isPromo&&f.is2x1;
   const finalPrice=isPromo&&!is2x1&&f.promoDiscount>0&&f.price?Math.round(Number(f.price)*(1-Number(f.promoDiscount)/100)):null;
   if(isPromo){
-    formH+=`<div class="promo-section"><div style="font-size:13px;font-weight:500;color:#c2410c;margin-bottom:10px">🔥 Promo del día</div>`;
-    // Toggle 2x1
-    formH+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-      <label class="toggle-switch"><input type="checkbox" ${is2x1?'checked':''} onchange="uF('dish','is2x1',this.checked)"><span class="toggle-slider"></span></label>
-      <span style="font-size:13px;font-weight:500;color:#92400e">Promoción 2x1</span>
-    </div>`;
+    formH+='<div class="promo-section"><div style="font-size:13px;font-weight:500;color:#c2410c;margin-bottom:10px">🔥 Promo del día</div>';
+    formH+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><label class="toggle-switch"><input type="checkbox" '+(is2x1?'checked':'')+' onchange="uF(\'dish\',\'is2x1\',this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500;color:#92400e">Promoción 2x1</span></div>';
     if(is2x1){
-      // Preview 2x1
       const p=Number(f.price)||0;
-      formH+=`<div class="discount-preview"><span style="color:var(--muted)">Al pedir 2:</span><span style="text-decoration:line-through;color:var(--muted)">$${(p*2).toLocaleString()}</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">2x1</span><strong style="color:var(--accent)">$${p.toLocaleString()}</strong></div>`;
+      formH+='<div class="discount-preview"><span style="color:var(--muted)">Al pedir 2:</span><span style="text-decoration:line-through;color:var(--muted)">$'+(p*2).toLocaleString()+'</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">2x1</span><strong style="color:var(--accent)">$'+p.toLocaleString()+'</strong></div>';
     } else {
-      // Descuento porcentual normal
-      formH+=`<div class="form-group" style="margin-bottom:6px"><label style="color:#92400e">Descuento (%)</label><input type="number" min="0" max="99" placeholder="Ej: 20" value="${f.promoDiscount||''}" oninput="uF('dish','promoDiscount',this.value)" style="border-color:#fed7aa"></div>`;
+      formH+='<div class="form-group" style="margin-bottom:6px"><label style="color:#92400e">Descuento (%)</label><input type="number" min="0" max="99" placeholder="Ej: 20" value="'+(f.promoDiscount||'')+'" oninput="uF(\'dish\',\'promoDiscount\',this.value)" style="border-color:#fed7aa"></div>';
       formH+=finalPrice
-        ?`<div class="discount-preview" id="discount-preview"><span style="color:var(--muted)">Normal:</span><span style="text-decoration:line-through;color:var(--muted)">$${Number(f.price).toLocaleString()}</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">-${f.promoDiscount}%</span><strong style="color:var(--accent)">$${finalPrice.toLocaleString()}</strong></div>`
-        :`<div class="discount-preview" id="discount-preview" style="font-size:12px;color:#92400e;margin-top:4px">Ingresá precio y descuento.</div>`;
+        ?'<div class="discount-preview" id="discount-preview"><span style="color:var(--muted)">Normal:</span><span style="text-decoration:line-through;color:var(--muted)">$'+Number(f.price).toLocaleString()+'</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">-'+f.promoDiscount+'%</span><strong style="color:var(--accent)">$'+finalPrice.toLocaleString()+'</strong></div>'
+        :'<div class="discount-preview" id="discount-preview" style="font-size:12px;color:#92400e;margin-top:4px">Ingresá precio y descuento.</div>';
     }
-    formH+=`</div>`;
+    formH+='</div>';
   }
-  // TIPOS section
+  // TIPOS
   const types=f.types||[];
-  formH+=`<div class="ing-section" style="margin-bottom:10px">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:${f.hasTypes?'10':'0'}px">
-      <label class="toggle-switch"><input type="checkbox" ${f.hasTypes?'checked':''} onchange="toggleHasTypes(this.checked)"><span class="toggle-slider"></span></label>
-      <span style="font-size:13px;font-weight:500">Tiene tipos / variantes</span>
-    </div>
-    ${f.hasTypes?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">El comensal deberá elegir uno antes de agregar al pedido. Ej: Pollo, Carne, Veggie.</div>
-      <div class="ing-list">${types.map((t,i)=>`<div class="ing-chip">${t}<button class="ing-chip-remove" onclick="removeType(${i})">×</button></div>`).join('')}${types.length===0?`<span style="font-size:12px;color:var(--muted)">Sin tipos aún</span>`:''}</div>
-      <div class="ing-add-row"><input id="type-input" placeholder="Ej: Pollo, Carne..." value="${C.newTypeInput||''}"><button class="btn btn-primary btn-sm" onclick="addType()">+ Agregar</button></div>`
-    :`<div style="font-size:12px;color:var(--muted);margin-top:8px">Activá para definir variantes del plato.</div>`}
-  </div>`;
-  // INGREDIENTES section
-  formH+=`<div class="ing-section"><div style="display:flex;align-items:center;gap:8px;margin-bottom:${f.customizable?'10':'0'}px"><label class="toggle-switch"><input type="checkbox" ${f.customizable?'checked':''} onchange="toggleCustomizable(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Personalizar ingredientes</span></div>${f.customizable?`<div style="font-size:12px;color:var(--muted);margin-bottom:8px">El comensal podrá destildar los ingredientes que no desea.</div><div class="ing-list">${ings.map((ing,i)=>`<div class="ing-chip">${ing}<button class="ing-chip-remove" onclick="removeIngredient(${i})">×</button></div>`).join('')}${ings.length===0?`<span style="font-size:12px;color:var(--muted)">Sin ingredientes aún</span>`:''}</div><div class="ing-add-row"><input id="ing-input" placeholder="Ej: Cebolla, Tomate..." value="${C.newIngInput}"><button class="btn btn-primary btn-sm" onclick="addIngredient()">+ Agregar</button></div>`:`<div style="font-size:12px;color:var(--muted);margin-top:8px">Activá para definir ingredientes personalizables.</div>`}</div>
-  <div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="${C.editingDish?'saveEditDish()':'addDish()'}">${C.editingDish?'Guardar cambios':'Agregar plato'}</button>${C.editingDish?`<button class="btn btn-ghost" onclick="cancelEditDish()">Cancelar</button>`:''}</div></div>`;
+  formH+='<div class="ing-section" style="margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(f.hasTypes?'10':'0')+'px"><label class="toggle-switch"><input type="checkbox" '+(f.hasTypes?'checked':'')+' onchange="toggleHasTypes(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Tiene tipos / variantes</span></div>';
+  if(f.hasTypes){
+    formH+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">El comensal deberá elegir uno antes de agregar al pedido. Ej: Pollo, Carne, Veggie.</div>';
+    formH+='<div class="ing-list">'+types.map((t,i)=>'<div class="ing-chip">'+t+'<button class="ing-chip-remove" onclick="removeType('+i+')">×</button></div>').join('')+(types.length===0?'<span style="font-size:12px;color:var(--muted)">Sin tipos aún</span>':'')+'</div>';
+    formH+='<div class="ing-add-row"><input id="type-input" placeholder="Ej: Pollo, Carne..." value="'+(C.newTypeInput||'')+'"><button class="btn btn-primary btn-sm" onclick="addType()">+ Agregar</button></div>';
+  } else {
+    formH+='<div style="font-size:12px;color:var(--muted);margin-top:8px">Activá para definir variantes del plato.</div>';
+  }
+  formH+='</div>';
+  // INGREDIENTES personalizables
+  formH+='<div class="ing-section"><div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(f.customizable?'10':'0')+'px"><label class="toggle-switch"><input type="checkbox" '+(f.customizable?'checked':'')+' onchange="toggleCustomizable(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Personalizar ingredientes</span></div>';
+  if(f.customizable){
+    formH+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">El comensal podrá destildar los ingredientes que no desea.</div>';
+    formH+='<div class="ing-list">'+ings.map((ing,i)=>'<div class="ing-chip">'+ing+'<button class="ing-chip-remove" onclick="removeIngredient('+i+')">×</button></div>').join('')+(ings.length===0?'<span style="font-size:12px;color:var(--muted)">Sin ingredientes aún</span>':'')+'</div>';
+    formH+='<div class="ing-add-row"><input id="ing-input" placeholder="Ej: Cebolla, Tomate..." value="'+C.newIngInput+'"><button class="btn btn-primary btn-sm" onclick="addIngredient()">+ Agregar</button></div>';
+  } else {
+    formH+='<div style="font-size:12px;color:var(--muted);margin-top:8px">Activá para definir ingredientes personalizables.</div>';
+  }
+  formH+='</div>';
+  // RECETA para stock
+  const allDishIngs=Object.entries(DB.ingredients||{}).map(([k,v])=>({...v,_key:k}));
+  if(allDishIngs.length>0){
+    const recipe=f.recipe||[];
+    formH+='<div class="ing-section" style="margin-bottom:10px"><div style="font-size:13px;font-weight:500;margin-bottom:6px">🧾 Receta (para control de stock)</div><div style="font-size:12px;color:var(--muted);margin-bottom:8px">Asociá ingredientes para descontar stock al entregar el pedido.</div>';
+    if(recipe.length>0){
+      formH+='<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">';
+      recipe.forEach((r,ri)=>{
+        const ing=DB.ingredients[r.ingredientId];
+        if(!ing)return;
+        formH+='<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg);border-radius:6px;border:0.5px solid var(--border)">'+
+          '<span style="flex:1;font-size:13px;font-weight:500">'+ing.name+'</span>'+
+          '<input type="number" min="0.1" step="0.1" value="'+r.qty+'" oninput="updateRecipeQty('+ri+',this.value,\'dish\')" style="width:70px;padding:4px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px">'+
+          '<span style="font-size:12px;color:var(--muted);min-width:20px">'+ing.unit+'</span>'+
+          '<button onclick="removeFromRecipe('+ri+',\'dish\')" style="width:24px;height:24px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;cursor:pointer;font-size:13px;font-family:inherit">✕</button>'+
+          '</div>';
+      });
+      formH+='</div>';
+    }
+    formH+='<select onchange="addToRecipe(this.value,\'dish\');this.value=\'\'" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;background:var(--bg)"><option value="">+ Agregar ingrediente a la receta...</option>';
+    allDishIngs.filter(ing=>!(recipe||[]).some(r=>r.ingredientId===ing._key)).forEach(ing=>{formH+='<option value="'+ing._key+'">'+ing.name+' (stock: '+(ing.stock||0)+' '+ing.unit+')</option>';});
+    formH+='</select></div>';
+  }
+  // STOCK directo del plato
+  const _s2=Number(f.stock);const _hasStock=f.stock!=null&&f.stock!=='';
+  const stockBadge2=_hasStock?('<span style="font-size:12px;padding:3px 10px;border-radius:6px;font-weight:600;background:'+(_s2===0?'#fee2e2':_s2<=5?'#fef3c7':'#d1fae5')+';color:'+(_s2===0?'#b91c1c':_s2<=5?'#92400e':'#065f46')+'">'+(_s2===0?'Sin stock':_s2<=5?'⚠️ Bajo':'✓ OK')+'</span>'):'';
+  formH+='<div class="form-group" style="margin-bottom:10px"><label>Stock del plato <span style="font-size:11px;color:var(--muted);font-weight:400">(opcional)</span></label><div style="display:flex;align-items:center;gap:8px"><input type="number" min="0" placeholder="Sin límite" value="'+(_hasStock?f.stock:'')+'" oninput="uF(\'dish\',\'stock\',this.value)" style="flex:1">'+stockBadge2+'</div></div>';
+  // Botones guardar
+  formH+='<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="'+(C.editingDish?'saveEditDish()':'addDish()') +'">'+(C.editingDish?'Guardar cambios':'Agregar plato')+'</button>'+(C.editingDish?'<button class="btn btn-ghost" onclick="cancelEditDish()">Cancelar</button>':'')+'</div></div>';
 
   const dishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k}));
   let listH=`<div class="cat-sections">`;
@@ -645,6 +675,8 @@ function renderDishesTab(){
             <div style="display:flex;align-items:center;gap:6px">
               <div class="dish-name">${d.name}</div>
               ${unavail?`<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:#fee2e2;color:#b91c1c">Sin stock</span>`:''}
+              ${!unavail&&d.stock!=null?`<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:${Number(d.stock)===0?'#fee2e2':Number(d.stock)<=5?'#fef3c7':'#d1fae5'};color:${Number(d.stock)===0?'#b91c1c':Number(d.stock)<=5?'#92400e':'#065f46'}">📦 ${d.stock}</span>`:''}
+              ${(d.recipe||[]).length>0?`<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:#ede9fe;color:#5b21b6">🧾 receta</span>`:''}
             </div>
             <div class="dish-desc">${d.desc}</div>
             <div class="dish-price-wrap">${isP?`<span class="dish-price-original">$${d.price.toLocaleString()}</span>`:''}<span class="dish-price">$${fp.toLocaleString()}</span>${isP?`<span class="promo-chip">-${d.promoDiscount}%</span>`:''}${d.customizable&&(d.ingredients||[]).length>0?`<span class="ing-tag">🧩 ${d.ingredients.length} ing.</span>`:''}${d.hasTypes&&(d.types||[]).length>0?`<span style="font-size:11px;padding:2px 7px;border-radius:6px;background:#fef9c3;color:#854d0e;margin-left:4px">↕ ${d.types.length} tipo${d.types.length>1?'s':''}</span>`:''}</div>
@@ -1157,6 +1189,22 @@ function renderOrdersTab(){
       <button onclick="dismissAlert('${k}')" style="padding:5px 12px;border-radius:6px;border:0.5px solid #92400e;background:transparent;color:#92400e;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">Atendido ✓</button>
     </div>`).join('')}
   </div>`:''}
+  ${(()=>{
+    const lowIngs=Object.values(DB.ingredients||{}).filter(ing=>ing.alertAt!=null&&(ing.stock||0)<=ing.alertAt);
+    const emptyIngs=lowIngs.filter(ing=>(ing.stock||0)===0);
+    const warnIngs=lowIngs.filter(ing=>(ing.stock||0)>0);
+    if(!lowIngs.length)return'';
+    return`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:1rem">
+      ${emptyIngs.map(ing=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fee2e2;border:0.5px solid #fca5a5;border-radius:10px">
+        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">🚫</span><div><div style="font-weight:500;font-size:14px;color:#b91c1c">Sin stock: ${ing.name}</div><div style="font-size:12px;color:#b91c1c">Stock: 0 ${ing.unit} · Los platos que lo usan fueron ocultados</div></div></div>
+        <button onclick="adminTab('dishes');C.dishSubTab='stock';render()" style="padding:5px 12px;border-radius:6px;border:0.5px solid #b91c1c;background:transparent;color:#b91c1c;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">Ver stock →</button>
+      </div>`).join('')}
+      ${warnIngs.map(ing=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fef3c7;border:0.5px solid #fcd34d;border-radius:10px">
+        <div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">⚠️</span><div><div style="font-weight:500;font-size:14px;color:#92400e">Stock bajo: ${ing.name}</div><div style="font-size:12px;color:#92400e">Quedan ${ing.stock} ${ing.unit} (alerta ≤ ${ing.alertAt} ${ing.unit})</div></div></div>
+        <button onclick="adminTab('dishes');C.dishSubTab='stock';render()" style="padding:5px 12px;border-radius:6px;border:0.5px solid #92400e;background:transparent;color:#92400e;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">Reponer →</button>
+      </div>`).join('')}
+    </div>`;
+  })()}
   <div class="orders-list">`;
   // Separar pedidos billed para mostrarlos agrupados por mesa/persona
   const billedOrders=active.filter(o=>o.status==='billed');
