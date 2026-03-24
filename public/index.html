@@ -835,48 +835,78 @@ function renderCafeteriaTab(){
     <button onclick="setCafSubTab('categorias')" style="padding:5px 14px;border-radius:20px;font-size:13px;border:none;cursor:pointer;font-family:inherit;background:${subTab==='categorias'?'var(--brand)':'var(--bg)'};color:${subTab==='categorias'?'#fff':'var(--muted)'}">Categorías</button>
   </div>`;
   if(subTab==='categorias') return tabsH+renderCafCategoriesTab();
-  let formH=`<div class="card" style="overflow-y:auto;max-height:680px">
-    <div class="card-title">${C.editingCafItem?'Editar item':'Agregar item'}</div>
-    <div class="form-group"><label>Categoría</label><select onchange="uCafF('cat',this.value)">
-      ${cats.length===0?'<option value="">Sin categorías</option>':cats.map(c=>`<option value="${c._key}"${f.cat===c._key?' selected':''}>${c.icon} ${c.label}</option>`).join('')}
-    </select></div>
-    <div class="form-group"><label>Nombre</label><input placeholder="Nombre del item" value="${f.name}" oninput="uCafF('name',this.value)"></div>
-    <div class="form-group"><label>Descripción</label><textarea oninput="uCafF('desc',this.value)">${f.desc}</textarea></div>
-    <div class="form-group"><label>Precio ($)</label><input type="number" placeholder="0" value="${f.price}" oninput="uCafF('price',this.value)"></div>
-    <div class="form-group"><label>Emoji</label><input value="${f.emoji||'☕'}" oninput="uCafF('emoji',this.value)" style="font-size:18px;width:60px"></div>`;
+
+  let formH='<div class="card">';
+  formH+='<div class="card-title">'+(C.editingCafItem?'✏️ Editar item':'+ Agregar item')+'</div>';
+  formH+='<div class="two-col">';
+  formH+='<div class="form-group" style="margin-bottom:8px"><label>Categoría</label><select onchange="uCafF(\'cat\',this.value)">';
+  formH+=cats.length===0?'<option value="">Sin categorías</option>':cats.map(c=>'<option value="'+c._key+'"'+(f.cat===c._key?' selected':'')+'>'+c.icon+' '+c.label+'</option>').join('');
+  formH+='</select></div>';
+  formH+='<div class="form-group" style="margin-bottom:8px"><label>Precio ($)</label><input type="number" placeholder="0" value="'+f.price+'" oninput="uCafF(\'price\',this.value)"></div>';
+  formH+='</div>';
+  formH+='<div class="two-col">';
+  formH+='<div class="form-group" style="margin-bottom:8px"><label>Nombre</label><input placeholder="Nombre del item" value="'+f.name+'" oninput="uCafF(\'name\',this.value)"></div>';
+  formH+='<div class="form-group" style="margin-bottom:8px"><label>Emoji</label><input value="'+(f.emoji||'☕')+'" oninput="uCafF(\'emoji\',this.value)" style="font-size:18px;width:100%"></div>';
+  formH+='</div>';
+  formH+='<div class="form-group" style="margin-bottom:8px"><label>Descripción <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><textarea style="min-height:44px" oninput="uCafF(\'desc\',this.value)">'+f.desc+'</textarea></div>';
+  const _sc=Number(f.stock);const _hs=f.stock!=null&&f.stock!=='';
+  const _sb=_hs?('<span style="font-size:12px;padding:3px 8px;border-radius:6px;font-weight:600;background:'+(_sc===0?'#fee2e2':_sc<=5?'#fef3c7':'#d1fae5')+';color:'+(_sc===0?'#b91c1c':_sc<=5?'#92400e':'#065f46')+'">'+(_sc===0?'Sin stock':_sc<=5?'⚠️ Bajo':'✓ OK')+'</span>'):'';
+  formH+='<div class="two-col" style="margin-bottom:8px">';
+  formH+='<div class="form-group" style="margin-bottom:0"><label>Stock <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><div style="display:flex;align-items:center;gap:6px"><input type="number" min="0" placeholder="Sin límite" value="'+(_hs?f.stock:'')+'" oninput="uCafF(\'stock\',this.value)" style="flex:1">'+_sb+'</div></div>';
+  formH+='<div class="form-group" style="margin-bottom:0"><label>Alerta ≤</label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uCafF(\'alertAt\',this.value)"></div>';
+  formH+='</div>';
+  formH+='<div class="ing-section" style="margin-bottom:8px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(f.customizable?'8':'0')+'px"><label class="toggle-switch"><input type="checkbox" '+(f.customizable?'checked':'')+' onchange="toggleCafCustomizable(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Personalizar ingredientes</span></div>';
+  if(f.customizable){
+    formH+='<div class="ing-list">'+ings.map((ing,i)=>'<div class="ing-chip">'+ing+'<button class="ing-chip-remove" onclick="removeCafIngredient('+i+')">×</button></div>').join('')+(ings.length===0?'<span style="font-size:12px;color:var(--muted)">Sin ingredientes aún</span>':'')+'</div>';
+    formH+='<div class="ing-add-row"><input id="caf-ing-input" placeholder="Ej: Leche, Azúcar..." value="'+(C.newCafIngInput||'')+'" oninput="C.newCafIngInput=this.value"><button class="btn btn-primary btn-sm" onclick="addCafIngredient()">+ Agregar</button></div>';
+  }
+  formH+='</div>';
   const allIngsCaf=Object.entries(DB.ingredients||{}).map(([k,v])=>({...v,_key:k}));
   if(allIngsCaf.length>0){
     const recipeCaf=f.recipe||[];
-    formH+=`<div class="ing-section" style="margin-bottom:10px"><div style="font-size:13px;font-weight:500;margin-bottom:8px">🧾 Receta (ingredientes)</div>${recipeCaf.length>0?`<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">${recipeCaf.map((r,ri)=>{const ing=DB.ingredients[r.ingredientId];return ing?`<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg);border-radius:6px"><span style="flex:1;font-size:13px">${ing.name}</span><input type="number" min="0.1" step="0.1" value="${r.qty}" oninput="updateRecipeQty(${ri},this.value,'caf')" style="width:60px;padding:4px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px"><span style="font-size:11px;color:var(--muted)">${ing.unit}</span><button onclick="removeFromRecipe(${ri},'caf')" style="width:22px;height:22px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;cursor:pointer;font-size:12px">✕</button></div>`:''}).join('')}</div>`:''}
-      <select onchange="addToRecipe(this.value,'caf');this.value=''" style="width:100%;padding:6px 10px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px"><option value="">+ Agregar ingrediente...</option>${allIngsCaf.filter(ing=>!recipeCaf.some(r=>r.ingredientId===ing._key)).map(ing=>`<option value="${ing._key}">${ing.name} (${ing.stock||0} ${ing.unit})</option>`).join('')}</select>
-    </div>`;
+    formH+='<div class="ing-section" style="margin-bottom:8px"><div style="font-size:13px;font-weight:500;margin-bottom:6px">🧾 Receta (stock)</div>';
+    if(recipeCaf.length>0){
+      formH+='<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">';
+      recipeCaf.forEach((r,ri)=>{
+        const ing=DB.ingredients[r.ingredientId];if(!ing)return;
+        formH+='<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg);border-radius:6px;border:0.5px solid var(--border)">'+
+          '<span style="flex:1;font-size:13px">'+ing.name+'</span>'+
+          '<input type="number" min="0.1" step="0.1" value="'+r.qty+'" oninput="updateRecipeQty('+ri+',this.value,\'caf\')" style="width:60px;padding:4px 6px;border:0.5px solid var(--border);border-radius:4px;font-size:12px">'+
+          '<span style="font-size:11px;color:var(--muted)">'+ing.unit+'</span>'+
+          '<button onclick="removeFromRecipe('+ri+',\'caf\')" style="width:22px;height:22px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;cursor:pointer;font-size:12px">✕</button>'+
+          '</div>';
+      });
+      formH+='</div>';
+    }
+    formH+='<select onchange="addToRecipe(this.value,\'caf\');this.value=\'\'" style="width:100%;padding:6px 10px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px"><option value="">+ Agregar ingrediente...</option>';
+    allIngsCaf.filter(ing=>!(recipeCaf||[]).some(r=>r.ingredientId===ing._key)).forEach(ing=>{formH+='<option value="'+ing._key+'">'+ing.name+' ('+(ing.stock||0)+' '+ing.unit+')</option>';});
+    formH+='</select></div>';
   }
-  if(f.customizable){
-    formH+=`<div class="ing-section"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><label class="toggle-switch"><input type="checkbox" checked onchange="toggleCafCustomizable(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Personalizar ingredientes</span></div><div style="font-size:12px;color:var(--muted);margin-bottom:8px">El comensal podrá destildar los que no quiere.</div><div class="ing-list">${ings.map((ing,i)=>`<div class="ing-chip">${ing}<button class="ing-chip-remove" onclick="removeCafIngredient(${i})">×</button></div>`).join('')}${ings.length===0?`<span style="font-size:12px;color:var(--muted)">Sin ingredientes aún</span>`:''}</div><div class="ing-add-row"><input id="caf-ing-input" placeholder="Ej: Leche, Azúcar..." value="${C.newCafIngInput||''}" oninput="C.newCafIngInput=this.value"><button class="btn btn-primary btn-sm" onclick="addCafIngredient()">+ Agregar</button></div></div>`;
-  } else {
-    formH+=`<div class="ing-section"><div style="display:flex;align-items:center;gap:8px"><label class="toggle-switch"><input type="checkbox" onchange="toggleCafCustomizable(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Personalizar ingredientes</span></div><div style="font-size:12px;color:var(--muted);margin-top:8px">Activá para definir ingredientes personalizables.</div></div>`;
-  }
-  formH+=`<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-primary" onclick="${C.editingCafItem?'saveEditCafItem()':'addCafItem()'}">${C.editingCafItem?'Guardar cambios':'Agregar item'}</button>${C.editingCafItem?`<button class="btn btn-ghost" onclick="cancelEditCafItem()">Cancelar</button>`:''}</div></div>`;
-  let listH=`<div style="display:flex;flex-direction:column;gap:1rem">`;
+  formH+='<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-primary" onclick="'+(C.editingCafItem?'saveEditCafItem()':'addCafItem()') +'">'+(C.editingCafItem?'Guardar cambios':'Agregar item')+'</button>'+(C.editingCafItem?'<button class="btn btn-ghost" onclick="cancelEditCafItem()">Cancelar</button>':'')+'</div></div>';
+
+  let listH=`<div class="cat-sections">`;
   const allItems=Object.entries(DB.cafeteriaItems).map(([k,v])=>({...v,_key:k}));
+  if(cats.length===0){
+    listH+=`<div class="cat-section" style="padding:2rem;text-align:center;color:var(--muted)"><div style="font-size:32px;margin-bottom:8px">☕</div><div>Primero creá una categoría en la pestaña Categorías</div></div>`;
+  }
   cats.forEach(cat=>{
     const catItems=allItems.filter(d=>d.cat===cat._key);
     const open=cafCatOpen[cat._key]!==false;
-    listH+=`<div class="cat-section"><div class="cat-header" onclick="toggleCafCatOpen('${cat._key}')"><div style="display:flex;align-items:center;gap:8px"><span style="font-size:20px">${cat.icon}</span><span style="font-weight:500">${cat.label}</span><span style="font-size:12px;color:var(--muted);margin-left:4px">${catItems.length} item${catItems.length!==1?'s':''}</span></div><span style="color:var(--muted);font-size:12px">${open?'▲':'▼'}</span></div>`;
+    listH+=`<div class="cat-section"><div class="cat-section-header" onclick="toggleCafCatOpen('${cat._key}')"><div class="cat-section-title"><span style="font-size:16px">${cat.icon}</span><span>${cat.label}</span><span class="cat-count">${catItems.length}</span></div><span class="cat-chevron${open?' open':''}">▼</span></div>`;
     if(open){
       listH+=`<div>`;
       if(catItems.length===0)listH+=`<div style="padding:10px 14px;font-size:13px;color:var(--muted)">Sin items en esta categoría</div>`;
       catItems.forEach(d=>{
         const unavail=d.unavailable===true;
-        listH+=`<div class="dish-row" style="${unavail?'opacity:0.55':''}"><div class="dish-emoji">${d.emoji||'☕'}</div><div class="dish-info"><div class="dish-name">${d.name}</div><div class="dish-desc">${d.desc}</div><div class="dish-price-wrap"><span class="dish-price">${Number(d.price).toLocaleString()}</span></div></div><div class="row-btns"><button class="btn btn-sm" onclick="toggleCafAvailability('${d._key}',${unavail})" style="font-size:12px;padding:4px 8px;border-radius:6px;border:0.5px solid ${unavail?'#10b981':'#ef4444'};color:${unavail?'#065f46':'#b91c1c'};background:${unavail?'#d1fae5':'#fee2e2'};cursor:pointer">${unavail?'✓ Habilitar':'✕ Sin stock'}</button><button class="btn btn-ghost btn-sm" onclick="editCafItem('${d._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteCafItem('${d._key}')">✕</button></div></div>`;
+        const stockChip=(!unavail&&d.stock!=null)?`<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:${Number(d.stock)===0?'#fee2e2':Number(d.stock)<=5?'#fef3c7':'#d1fae5'};color:${Number(d.stock)===0?'#b91c1c':Number(d.stock)<=5?'#92400e':'#065f46'}">📦 ${d.stock}</span>`:'';
+        listH+=`<div class="dish-row" style="${unavail?'opacity:0.55':''}"><div class="dish-emoji">${d.emoji||'☕'}</div><div class="dish-info"><div style="display:flex;align-items:center;gap:6px"><div class="dish-name">${d.name}</div>${unavail?`<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:#fee2e2;color:#b91c1c">Sin stock</span>`:''}${stockChip}${(d.recipe||[]).length>0?`<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:#ede9fe;color:#5b21b6">🧾</span>`:''}</div><div class="dish-desc">${d.desc||''}</div><div class="dish-price-wrap"><span class="dish-price">$${Number(d.price).toLocaleString()}</span></div></div><div class="row-btns"><button class="btn btn-sm" onclick="toggleCafAvailability('${d._key}',${unavail})" style="font-size:12px;padding:4px 8px;border-radius:6px;border:0.5px solid ${unavail?'#10b981':'#ef4444'};color:${unavail?'#065f46':'#b91c1c'};background:${unavail?'#d1fae5':'#fee2e2'};cursor:pointer">${unavail?'✓ Habilitar':'✕ Sin stock'}</button><button class="btn btn-ghost btn-sm" onclick="editCafItem('${d._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteCafItem('${d._key}')">✕</button></div></div>`;
       });
       listH+=`</div>`;
     }
     listH+=`</div>`;
   });
-  if(cats.length===0)listH+=`<div class="empty-state">Primero creá una categoría de cafetería</div>`;
   listH+=`</div>`;
-  return tabsH+`<div class="admin-grid">${formH}${listH}</div>`;
+  return tabsH+`<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
 }
 function renderCafCategoriesTab(){
   const cats=getCafCats();
@@ -918,7 +948,7 @@ function renderCafCategoriesTab(){
 }
 window.setCafSubTab=tab=>{C.cafSubTab=tab;render();};
 window.toggleCafCatOpen=id=>{cafCatOpen[id]=cafCatOpen[id]===false;render();};
-window.uCafF=(field,val)=>{const o=C.editingCafItem||C.newCafItem;o[field]=(field==='price')?Number(val):val;if(field==='cat'){render();return;}};
+window.uCafF=(field,val)=>{const o=C.editingCafItem||C.newCafItem;if(field==='stock'||field==='alertAt'){o[field]=val===''||val==null?null:Math.max(0,Number(val));render();return;}o[field]=(field==='price')?Number(val):val;if(field==='cat'){render();return;}};
 window.uCafCat=(field,val)=>{const o=C.editingCafCat||C.newCafCat;o[field]=val;};
 window.addCafItem=()=>{
   const d=C.newCafItem;if(!d.name||!d.price){alert('Completá nombre y precio');return;}
