@@ -547,24 +547,64 @@ window.doLogin=async()=>{
 function renderAdmin(){
   showLogoutBtn(true);
   const mc=document.getElementById('main-content');
-  const tabs=['dishes','cafeteria','tables','orders','ratings','history'];
   const pc=pendingCount();
-  const tl={dishes:'Platos',cafeteria:'Cafetería',tables:'Mesas',orders:`Pedidos${pc>0?` <span class="badge">${pc}</span>`:''}`,ratings:'Calificaciones',history:'Cobrados'};
-  let h=`<div class="content"><div style="display:flex;gap:6px;margin-bottom:1.25rem;border-bottom:0.5px solid var(--border);padding-bottom:10px;flex-wrap:wrap">`;
-  tabs.forEach(t=>{const a=C.adminTab===t;h+=`<button onclick="adminTab('${t}')" style="padding:6px 14px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:${a?'500':'400'};background:${a?'var(--brand)':'transparent'};color:${a?'#fff':'var(--muted)'}">${tl[t]}</button>`;});
+
+  // ── Nivel 1: pestañas principales ──
+  const mainTabs=['tables','menu','stock','orders','history','ratings'];
+  const mainLabels={
+    tables:'Mesas',
+    menu:'Menú',
+    stock:'📦 Stock',
+    orders:`Pedidos${pc>0?` <span class="badge">${pc}</span>`:''}`,
+    history:'Cobrados',
+    ratings:'Calificaciones'
+  };
+  // Determinar tab activo de nivel 1
+  const dishTabs=['dishes','cafeteria'];
+  const activeMain=dishTabs.includes(C.adminTab)?'menu':
+    C.adminTab==='stock_tab'?'stock':C.adminTab;
+
+  let h=`<div class="content">`;
+  // Barra nivel 1
+  h+=`<div style="display:flex;gap:4px;margin-bottom:0;border-bottom:0.5px solid var(--border);padding-bottom:0;flex-wrap:wrap">`;
+  mainTabs.forEach(t=>{
+    const a=activeMain===t;
+    h+=`<button onclick="adminMainTab('${t}')" style="padding:8px 16px;border-radius:0;border:none;border-bottom:2px solid ${a?'var(--accent)':'transparent'};cursor:pointer;font-family:inherit;font-size:14px;font-weight:${a?'600':'400'};background:transparent;color:${a?'var(--text)':'var(--muted)'};margin-bottom:-1px">${mainLabels[t]}</button>`;
+  });
   h+=`</div>`;
-  if(C.adminTab==='dishes')h+=renderDishesTab();
-  else if(C.adminTab==='cafeteria')h+=renderCafeteriaTab();
-  else if(C.adminTab==='tables')h+=renderTablesTab();
-  else if(C.adminTab==='orders')h+=renderOrdersTab();
-  else if(C.adminTab==='ratings')h+=renderRatingsTab();
-  else h+=renderHistoryTab();
+
+  // ── Nivel 2: sub-nav de Menú ──
+  if(activeMain==='menu'){
+    const menuSub=C.adminTab==='cafeteria'?'cafeteria':'dishes';
+    h+=`<div style="display:flex;gap:4px;padding:8px 0 0;margin-bottom:1rem;border-bottom:0.5px solid var(--border)">`;
+    h+=`<button onclick="adminTab('dishes')" style="padding:6px 14px;border-radius:0;border:none;border-bottom:2px solid ${menuSub==='dishes'?'var(--brand)':'transparent'};cursor:pointer;font-family:inherit;font-size:13px;font-weight:${menuSub==='dishes'?'600':'400'};background:transparent;color:${menuSub==='dishes'?'var(--brand)':'var(--muted)'};margin-bottom:-1px">🍽 Platos</button>`;
+    h+=`<button onclick="adminTab('cafeteria')" style="padding:6px 14px;border-radius:0;border:none;border-bottom:2px solid ${menuSub==='cafeteria'?'var(--brand)':'transparent'};cursor:pointer;font-family:inherit;font-size:13px;font-weight:${menuSub==='cafeteria'?'600':'400'};background:transparent;color:${menuSub==='cafeteria'?'var(--brand)':'var(--muted)'};margin-bottom:-1px">☕ Cafetería</button>`;
+    h+=`</div>`;
+  } else {
+    h+=`<div style="margin-bottom:1.25rem"></div>`;
+  }
+
+  // ── Contenido ──
+  if(activeMain==='tables') h+=renderTablesTab();
+  else if(activeMain==='menu') h+=(C.adminTab==='cafeteria'?renderCafeteriaTab():renderDishesTab());
+  else if(activeMain==='stock') h+=renderStockTab();
+  else if(activeMain==='orders') h+=renderOrdersTab();
+  else if(activeMain==='history') h+=renderHistoryTab();
+  else if(activeMain==='ratings') h+=renderRatingsTab();
+
   h+=`</div>`;
   mc.innerHTML=h;
   const inp=document.getElementById('ing-input');
   if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addIngredient();}});
   if(C.manualOrder)updateManualSearch();
+  if(C.adminEditOrderKey)updateEditOrderSearch();
 }
+window.adminMainTab=t=>{
+  if(t==='menu'){C.adminTab=C.adminTab==='cafeteria'?'cafeteria':'dishes';}
+  else if(t==='stock'){C.adminTab='stock_tab';}
+  else{C.adminTab=t;}
+  render();
+};
 window.adminTab=t=>{C.adminTab=t;render();};
 window.toggleCatOpen=id=>{catOpen[id]=!catOpen[id];render();};
 
@@ -581,11 +621,9 @@ function renderDishesTab(){
   let tabsH=`<div style="display:flex;gap:6px;margin-bottom:1rem">
     <button onclick="setDishSubTab('platos')" style="padding:5px 14px;border-radius:20px;font-size:13px;border:none;cursor:pointer;font-family:inherit;background:${subTab==='platos'?'var(--brand)':'var(--bg)'};color:${subTab==='platos'?'#fff':'var(--muted)'}">Platos</button>
     <button onclick="setDishSubTab('categorias')" style="padding:5px 14px;border-radius:20px;font-size:13px;border:none;cursor:pointer;font-family:inherit;background:${subTab==='categorias'?'var(--brand)':'var(--bg)'};color:${subTab==='categorias'?'#fff':'var(--muted)'}">Categorías</button>
-    <button onclick="setDishSubTab('stock')" style="padding:5px 14px;border-radius:20px;font-size:13px;border:none;cursor:pointer;font-family:inherit;background:${subTab==='stock'?'var(--brand)':'var(--bg)'};color:${subTab==='stock'?'#fff':'var(--muted)'}">📦 Stock</button>
   </div>`;
 
   if(subTab==='categorias') return tabsH+renderCategoriesTab();
-  if(subTab==='stock') return tabsH+renderStockTab();
 
   // ── DISH FORM ──────────────────────────────────
   const sec=C.dishSections||{};
@@ -948,7 +986,12 @@ function renderCafCategoriesTab(){
 }
 window.setCafSubTab=tab=>{C.cafSubTab=tab;render();};
 window.toggleCafCatOpen=id=>{cafCatOpen[id]=cafCatOpen[id]===false;render();};
-window.uCafF=(field,val)=>{const o=C.editingCafItem||C.newCafItem;if(field==='stock'||field==='alertAt'){o[field]=val===''||val==null?null:Math.max(0,Number(val));render();return;}o[field]=(field==='price')?Number(val):val;if(field==='cat'){render();return;}};
+window.uCafF=(field,val)=>{
+  const o=C.editingCafItem||C.newCafItem;
+  if(field==='stock'||field==='alertAt'){
+    o[field]=val===''||val==null?null:Math.max(0,Number(val));
+    return;
+  }o[field]=(field==='price')?Number(val):val;if(field==='cat'){render();return;}};
 window.uCafCat=(field,val)=>{const o=C.editingCafCat||C.newCafCat;o[field]=val;};
 window.addCafItem=()=>{
   const d=C.newCafItem;if(!d.name||!d.price){alert('Completá nombre y precio');return;}
@@ -1338,11 +1381,11 @@ function renderOrdersTab(){
     return`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:1rem">
       ${emptyIngs.map(ing=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fee2e2;border:0.5px solid #fca5a5;border-radius:10px">
         <div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">🚫</span><div><div style="font-weight:500;font-size:14px;color:#b91c1c">Sin stock: ${ing.name}</div><div style="font-size:12px;color:#b91c1c">Stock: 0 ${ing.unit} · Los platos que lo usan fueron ocultados</div></div></div>
-        <button onclick="adminTab('dishes');C.dishSubTab='stock';render()" style="padding:5px 12px;border-radius:6px;border:0.5px solid #b91c1c;background:transparent;color:#b91c1c;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">Ver stock →</button>
+        <button onclick="adminMainTab('stock')" style="padding:5px 12px;border-radius:6px;border:0.5px solid #b91c1c;background:transparent;color:#b91c1c;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">Ver stock →</button>
       </div>`).join('')}
       ${warnIngs.map(ing=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fef3c7;border:0.5px solid #fcd34d;border-radius:10px">
         <div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">⚠️</span><div><div style="font-weight:500;font-size:14px;color:#92400e">Stock bajo: ${ing.name}</div><div style="font-size:12px;color:#92400e">Quedan ${ing.stock} ${ing.unit} (alerta ≤ ${ing.alertAt} ${ing.unit})</div></div></div>
-        <button onclick="adminTab('dishes');C.dishSubTab='stock';render()" style="padding:5px 12px;border-radius:6px;border:0.5px solid #92400e;background:transparent;color:#92400e;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">Reponer →</button>
+        <button onclick="adminMainTab('stock')" style="padding:5px 12px;border-radius:6px;border:0.5px solid #92400e;background:transparent;color:#92400e;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">Reponer →</button>
       </div>`).join('')}
     </div>`;
   })()}
@@ -1387,10 +1430,11 @@ function renderOrdersTab(){
     const isEditing=C.adminEditOrderKey===o._key;
     h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}</div><div class="order-time">${o.time}</div></div>`;
     if(isEditing){
-      // Panel de edición inline — usa _adminEditItems como fuente de verdad
       const editItems=window._adminEditItems||o.items||[];
+      const editTotal=editItems.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
       h+=`<div style="margin:8px 0;border:1px dashed #e5e7eb;border-radius:8px;padding:10px;background:#f9fafb">`;
       h+=`<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">Editar ítems del pedido</div>`;
+      // Items existentes
       editItems.forEach((item,idx)=>{
         const price=(item.finalPrice||item.price);
         h+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #f3f4f6">`;
@@ -1402,7 +1446,14 @@ function renderOrdersTab(){
         h+=`<button onclick="adminOrderRemoveItem(${idx})" style="width:28px;height:28px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit" title="Eliminar ítem">✕</button>`;
         h+=`</div></div>`;
       });
-      h+=`<div style="display:flex;gap:8px;margin-top:10px">`;
+      // Total parcial
+      h+=`<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:600;border-bottom:0.5px solid #e5e7eb;margin-bottom:10px"><span>Total</span><span style="color:var(--accent)">$${editTotal.toLocaleString()}</span></div>`;
+      // Buscador para agregar items
+      h+=`<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Agregar item</div>`;
+      h+=`<input id="edit-order-search" placeholder="Buscar plato o item de cafetería..." oninput="updateEditOrderSearch()" autocomplete="off" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;background:var(--card);outline:none">`;
+      h+=`<div id="edit-order-results" style="border:0.5px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;background:var(--card);margin-top:4px;display:none"></div></div>`;
+      // Botones
+      h+=`<div style="display:flex;gap:8px;margin-top:6px">`;
       h+=`<button onclick="adminSaveOrderEdit()" class="btn btn-primary btn-sm">Guardar cambios</button>`;
       h+=`<button onclick="adminCancelEdit()" class="btn btn-ghost btn-sm">Cancelar</button>`;
       h+=`<button onclick="adminDeleteOrder()" style="margin-left:auto;padding:5px 12px;border-radius:6px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">🗑 Cancelar pedido</button>`;
@@ -1502,7 +1553,13 @@ window.uF=(type,field,val)=>{
   const o=type==='dish'?(C.editingDish||C.newDish):(C.editingTable||C.newTable);
   if(field==='stock'||field==='alertAt'){
     o[field]=val===''||val==null?null:Math.max(0,Number(val));
-    render();return;
+    // Solo re-render si el badge de estado cambia (0, <=5, >5)
+    const prev=field==='stock'?C._prevStock:C._prevAlertAt;
+    const cur=o[field];
+    const bucket=n=>n===null?'null':n===0?'zero':n<=5?'low':'ok';
+    if(bucket(prev)!==bucket(cur)){render();}
+    if(field==='stock')C._prevStock=cur; else C._prevAlertAt=cur;
+    return;
   }
   o[field]=(field==='price'||field==='capacity'||field==='promoDiscount')?Number(val):val;
   // when toggling 2x1, clear discount and re-render
@@ -1729,6 +1786,48 @@ window.adminCancelEdit=()=>{
   C.adminEditOrderKey=null;
   window._adminEditKey=null;
   window._adminEditItems=null;
+  render();
+};
+
+// Búsqueda de items para agregar al pedido en edición
+window.updateEditOrderSearch=()=>{
+  const inp=document.getElementById('edit-order-search');
+  const list=document.getElementById('edit-order-results');
+  if(!list)return;
+  const val=inp?inp.value:'';
+  const search=val.toLowerCase().trim();
+  if(search.length<1){list.style.display='none';list.innerHTML='';return;}
+  const allItems=[
+    ...Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k,_src:'dishes'})),
+    ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria',emoji:v.emoji||'☕'}))
+  ].filter(d=>!d.unavailable&&d.name.toLowerCase().includes(search));
+  const seen=new Set();
+  const unique=allItems.filter(d=>{const k=d.name+'|'+d._src;if(seen.has(k))return false;seen.add(k);return true;});
+  list.style.display='block';
+  if(unique.length===0){list.innerHTML='<div style="padding:8px 12px;font-size:13px;color:var(--muted)">Sin resultados</div>';return;}
+  list.innerHTML=unique.map(d=>'<div onclick="addItemToEditOrder(\''+d._key+'\',\''+d._src+'\')" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'\'">'+
+    '<span style="font-size:16px">'+(d.emoji||'🍽️')+'</span>'+
+    '<div style="flex:1"><div style="font-size:13px;font-weight:500">'+d.name+'</div><div style="font-size:11px;color:var(--muted)">'+(d._src==='cafeteria'?'☕ Cafetería':'🍽 Restaurant')+(d.hasTypes&&(d.types||[]).length>0?' · variantes':'')+'</div></div>'+
+    '<span style="font-size:13px;font-weight:600;color:var(--accent)">$'+Number(d.price).toLocaleString()+'</span>'+
+    '</div>').join('');
+};
+window.addItemToEditOrder=(key,src)=>{
+  if(!window._adminEditItems)return;
+  const d=src==='cafeteria'?DB.cafeteriaItems[key]:DB.dishes[key];
+  if(!d)return;
+  // Si el plato tiene variantes, no podemos elegirlas aquí — agregar sin variante
+  const existing=window._adminEditItems.find(i=>i.name===d.name&&!i.selectedType);
+  if(existing){existing.qty+=1;}
+  else{
+    window._adminEditItems.push({
+      name:d.name,qty:1,price:Number(d.price),
+      finalPrice:Number(d.price),excluded:[],selectedType:null,
+      isCafeteria:src==='cafeteria',emoji:d.emoji||null
+    });
+  }
+  // Limpiar búsqueda y re-render
+  const inp=document.getElementById('edit-order-search');
+  if(inp)inp.value='';
   render();
 };
 window.adminOrderQty=(idx,delta)=>{
