@@ -60,7 +60,14 @@
     .ing-add-row{display:flex;gap:6px}
     .ing-add-row input{flex:1;padding:6px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:var(--card);color:var(--text);outline:none}
     .ing-tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 7px;border-radius:6px;background:#ede9fe;color:#5b21b6;margin-top:3px}
-    .dishes-layout{display:grid;grid-template-columns:340px 1fr;gap:1rem;align-items:start}
+    .dishes-layout{display:grid;grid-template-columns:420px 1fr;gap:1.25rem;align-items:start}
+    .dishes-form-panel{position:sticky;top:72px;max-height:calc(100vh - 88px);overflow-y:auto;border-radius:12px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+    .dishes-form-panel::-webkit-scrollbar{width:4px}.dishes-form-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+    .dishes-list-panel{min-height:0}
+    .form-section{border:0.5px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden}
+    .form-section-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;background:var(--bg);font-size:13px;font-weight:500;user-select:none}
+    .form-section-header:hover{background:#f3f4f6}
+    .form-section-body{padding:12px 14px;border-top:0.5px solid var(--border);background:var(--card)}
     .cat-sections{display:flex;flex-direction:column;gap:1rem}
     .cat-section{background:var(--card);border:0.5px solid var(--border);border-radius:12px;overflow:hidden}
     .cat-section-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;user-select:none}
@@ -108,7 +115,7 @@
     .customer-wrap{display:flex;min-height:calc(100vh - 56px)}
     .menu-col{flex:1;min-width:0;padding:1.25rem}
     .cart-col{width:290px;flex-shrink:0;border-left:0.5px solid var(--border);background:var(--card);display:flex;flex-direction:column;position:sticky;top:56px;height:calc(100vh - 56px);overflow:hidden}
-    @media(max-width:640px){.customer-wrap{flex-direction:column}.cart-col{width:100%;height:auto;position:relative;top:0;border-left:none;border-top:0.5px solid var(--border)}.dishes-layout{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}}
+    @media(max-width:640px){.customer-wrap{flex-direction:column}.cart-col{width:100%;height:auto;position:relative;top:0;border-left:none;border-top:0.5px solid var(--border)}.dishes-layout{grid-template-columns:1fr}.dishes-form-panel{position:relative;top:0;max-height:none}.metrics{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}}
     .cart-header{padding:1rem 1.25rem;border-bottom:0.5px solid var(--border);font-weight:500;font-size:15px;display:flex;align-items:center;justify-content:space-between}
     .cart-body{flex:1;overflow-y:auto;padding:1rem 1.25rem}
     .cart-footer{padding:1rem 1.25rem;border-top:0.5px solid var(--border)}
@@ -282,6 +289,7 @@ let C = {
   newCafItem:{name:'',desc:'',price:'',cat:'',emoji:'☕',customizable:false,ingredients:[],stock:null,recipe:[]},
   newIngInput:'', newTypeInput:'', typePickerDishId:null, showPaymentPicker:false, newTable:{label:'',capacity:''},
   newCat:{label:'',icon:'🍽️',isPromo:false,noRating:false}, editingCat:null,
+  dishSections:{promo:true,tipos:false,ings:false,receta:false,stock:false},
   // Cafetería state
   cafCat:'todos',
   editingCafItem:null, editingCafCat:null,
@@ -579,84 +587,139 @@ function renderDishesTab(){
   if(subTab==='categorias') return tabsH+renderCategoriesTab();
   if(subTab==='stock') return tabsH+renderStockTab();
 
-  // Build dish form using string concatenation (no nested template literals)
-  let formH='<div class="card" style="overflow-y:auto;max-height:680px">';
-  formH+='<div class="card-title">'+(C.editingDish?'Editar plato':'Agregar plato')+'</div>';
+  // ── DISH FORM ──────────────────────────────────
+  const sec=C.dishSections||{};
+  const toggleSec=name=>`toggleDishSection('${name}')`;
+
+  let formH='<div class="card" style="padding:0;overflow:hidden">';
+  // Header
+  formH+='<div style="padding:14px 16px;border-bottom:0.5px solid var(--border);background:var(--bg)">';
+  formH+='<div style="font-size:15px;font-weight:600">'+(C.editingDish?'✏️ Editar plato':'➕ Agregar plato')+'</div>';
+  formH+='</div>';
+  formH+='<div style="padding:14px 16px">';
+
+  // Categoría + Nombre en top
   formH+='<div class="form-group"><label>Categoría</label><select onchange="uF(\'dish\',\'cat\',this.value)">';
   formH+=cats.length===0?'<option value="">Sin categorías</option>':cats.map(c=>'<option value="'+c._key+'"'+(f.cat===c._key?' selected':'')+'>'+c.icon+' '+c.label+'</option>').join('');
   formH+='</select></div>';
   formH+='<div class="form-group"><label>Nombre</label><input placeholder="Nombre del plato" value="'+f.name+'" oninput="uF(\'dish\',\'name\',this.value)"></div>';
-  formH+='<div class="form-group"><label>Descripción</label><textarea oninput="uF(\'dish\',\'desc\',this.value)">'+f.desc+'</textarea></div>';
-  formH+='<div class="form-group"><label>Precio normal ($)</label><input type="number" placeholder="0" value="'+f.price+'" oninput="uF(\'dish\',\'price\',this.value)"></div>';
-  const is2x1=isPromo&&f.is2x1;
-  const finalPrice=isPromo&&!is2x1&&f.promoDiscount>0&&f.price?Math.round(Number(f.price)*(1-Number(f.promoDiscount)/100)):null;
+  formH+='<div class="form-group"><label>Descripción</label><textarea rows="2" style="resize:vertical;min-height:52px" oninput="uF(\'dish\',\'desc\',this.value)">'+f.desc+'</textarea></div>';
+
+  // Precio + Stock en misma fila
+  formH+='<div class="two-col" style="margin-bottom:10px">';
+  formH+='<div class="form-group" style="margin-bottom:0"><label>Precio ($)</label><input type="number" placeholder="0" value="'+f.price+'" oninput="uF(\'dish\',\'price\',this.value)"></div>';
+  const _s2=Number(f.stock);const _hasStock=f.stock!=null&&f.stock!=='';
+  formH+='<div class="form-group" style="margin-bottom:0"><label>Stock <span style="font-size:10px;color:var(--muted)">(opcional)</span></label><input type="number" min="0" placeholder="∞" value="'+(_hasStock?f.stock:'')+'" oninput="uF(\'dish\',\'stock\',this.value)"></div>';
+  formH+='</div>';
+
+  // Alerta stock (solo si tiene stock)
+  if(_hasStock){
+    const stockCol=_s2===0?'#b91c1c':_s2<=5?'#92400e':'#065f46';
+    const stockBg=_s2===0?'#fee2e2':_s2<=5?'#fef3c7':'#d1fae5';
+    const stockLabel=_s2===0?'Sin stock':_s2<=5?'⚠️ Bajo':'✓ OK';
+    formH+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">';
+    formH+='<span style="font-size:12px;padding:3px 10px;border-radius:6px;font-weight:600;background:'+stockBg+';color:'+stockCol+'">'+stockLabel+' ('+_s2+')</span>';
+    formH+='<div style="flex:1"><label style="font-size:11px;color:var(--muted)">Alerta ≤</label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uF(\'dish\',\'alertAt\',this.value)" style="padding:4px 8px;height:30px;font-size:12px"></div>';
+    formH+='</div>';
+  }
+
+  // ── Sección PROMO (solo si cat es promo)
   if(isPromo){
-    formH+='<div class="promo-section"><div style="font-size:13px;font-weight:500;color:#c2410c;margin-bottom:10px">🔥 Promo del día</div>';
-    formH+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><label class="toggle-switch"><input type="checkbox" '+(is2x1?'checked':'')+' onchange="uF(\'dish\',\'is2x1\',this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500;color:#92400e">Promoción 2x1</span></div>';
-    if(is2x1){
-      const p=Number(f.price)||0;
-      formH+='<div class="discount-preview"><span style="color:var(--muted)">Al pedir 2:</span><span style="text-decoration:line-through;color:var(--muted)">$'+(p*2).toLocaleString()+'</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">2x1</span><strong style="color:var(--accent)">$'+p.toLocaleString()+'</strong></div>';
-    } else {
-      formH+='<div class="form-group" style="margin-bottom:6px"><label style="color:#92400e">Descuento (%)</label><input type="number" min="0" max="99" placeholder="Ej: 20" value="'+(f.promoDiscount||'')+'" oninput="uF(\'dish\',\'promoDiscount\',this.value)" style="border-color:#fed7aa"></div>';
-      formH+=finalPrice
-        ?'<div class="discount-preview" id="discount-preview"><span style="color:var(--muted)">Normal:</span><span style="text-decoration:line-through;color:var(--muted)">$'+Number(f.price).toLocaleString()+'</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">-'+f.promoDiscount+'%</span><strong style="color:var(--accent)">$'+finalPrice.toLocaleString()+'</strong></div>'
-        :'<div class="discount-preview" id="discount-preview" style="font-size:12px;color:#92400e;margin-top:4px">Ingresá precio y descuento.</div>';
+    const open=sec.promo!==false;
+    formH+='<div class="form-section"><div class="form-section-header" onclick="toggleDishSection(\'promo\')">';
+    formH+='<span>🔥 Promo del día</span><span>'+(open?'▲':'▼')+'</span></div>';
+    if(open){
+      formH+='<div class="form-section-body">';
+      const is2x1=f.is2x1;
+      formH+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><label class="toggle-switch"><input type="checkbox" '+(is2x1?'checked':'')+' onchange="uF(\'dish\',\'is2x1\',this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500;color:#92400e">Promoción 2x1</span></div>';
+      if(is2x1){
+        const p=Number(f.price)||0;
+        formH+='<div class="discount-preview"><span style="color:var(--muted)">Al pedir 2:</span><span style="text-decoration:line-through;color:var(--muted)">$'+(p*2).toLocaleString()+'</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">2x1</span><strong style="color:var(--accent)">$'+p.toLocaleString()+'</strong></div>';
+      } else {
+        formH+='<div class="form-group" style="margin-bottom:6px"><label style="color:#92400e">Descuento (%)</label><input type="number" min="0" max="99" placeholder="Ej: 20" value="'+(f.promoDiscount||'')+'" oninput="uF(\'dish\',\'promoDiscount\',this.value)" style="border-color:#fed7aa"></div>';
+        const finalPrice=f.promoDiscount>0&&f.price?Math.round(Number(f.price)*(1-Number(f.promoDiscount)/100)):null;
+        formH+=finalPrice
+          ?'<div class="discount-preview" id="discount-preview"><span style="color:var(--muted)">Normal:</span><span style="text-decoration:line-through;color:var(--muted)">$'+Number(f.price).toLocaleString()+'</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">-'+f.promoDiscount+'%</span><strong style="color:var(--accent)">$'+finalPrice.toLocaleString()+'</strong></div>'
+          :'<div class="discount-preview" id="discount-preview" style="font-size:12px;color:#92400e">Ingresá precio y descuento.</div>';
+      }
+      formH+='</div>';
     }
     formH+='</div>';
   }
-  // TIPOS
+
+  // ── Sección TIPOS
   const types=f.types||[];
-  formH+='<div class="ing-section" style="margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(f.hasTypes?'10':'0')+'px"><label class="toggle-switch"><input type="checkbox" '+(f.hasTypes?'checked':'')+' onchange="toggleHasTypes(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Tiene tipos / variantes</span></div>';
-  if(f.hasTypes){
-    formH+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">El comensal deberá elegir uno antes de agregar al pedido. Ej: Pollo, Carne, Veggie.</div>';
-    formH+='<div class="ing-list">'+types.map((t,i)=>'<div class="ing-chip">'+t+'<button class="ing-chip-remove" onclick="removeType('+i+')">×</button></div>').join('')+(types.length===0?'<span style="font-size:12px;color:var(--muted)">Sin tipos aún</span>':'')+'</div>';
-    formH+='<div class="ing-add-row"><input id="type-input" placeholder="Ej: Pollo, Carne..." value="'+(C.newTypeInput||'')+'"><button class="btn btn-primary btn-sm" onclick="addType()">+ Agregar</button></div>';
-  } else {
-    formH+='<div style="font-size:12px;color:var(--muted);margin-top:8px">Activá para definir variantes del plato.</div>';
-  }
-  formH+='</div>';
-  // INGREDIENTES personalizables
-  formH+='<div class="ing-section"><div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(f.customizable?'10':'0')+'px"><label class="toggle-switch"><input type="checkbox" '+(f.customizable?'checked':'')+' onchange="toggleCustomizable(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Personalizar ingredientes</span></div>';
-  if(f.customizable){
-    formH+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">El comensal podrá destildar los ingredientes que no desea.</div>';
-    formH+='<div class="ing-list">'+ings.map((ing,i)=>'<div class="ing-chip">'+ing+'<button class="ing-chip-remove" onclick="removeIngredient('+i+')">×</button></div>').join('')+(ings.length===0?'<span style="font-size:12px;color:var(--muted)">Sin ingredientes aún</span>':'')+'</div>';
-    formH+='<div class="ing-add-row"><input id="ing-input" placeholder="Ej: Cebolla, Tomate..." value="'+C.newIngInput+'"><button class="btn btn-primary btn-sm" onclick="addIngredient()">+ Agregar</button></div>';
-  } else {
-    formH+='<div style="font-size:12px;color:var(--muted);margin-top:8px">Activá para definir ingredientes personalizables.</div>';
-  }
-  formH+='</div>';
-  // RECETA para stock
-  const allDishIngs=Object.entries(DB.ingredients||{}).map(([k,v])=>({...v,_key:k}));
-  if(allDishIngs.length>0){
-    const recipe=f.recipe||[];
-    formH+='<div class="ing-section" style="margin-bottom:10px"><div style="font-size:13px;font-weight:500;margin-bottom:6px">🧾 Receta (para control de stock)</div><div style="font-size:12px;color:var(--muted);margin-bottom:8px">Asociá ingredientes para descontar stock al entregar el pedido.</div>';
-    if(recipe.length>0){
-      formH+='<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">';
-      recipe.forEach((r,ri)=>{
-        const ing=DB.ingredients[r.ingredientId];
-        if(!ing)return;
-        formH+='<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--bg);border-radius:6px;border:0.5px solid var(--border)">'+
-          '<span style="flex:1;font-size:13px;font-weight:500">'+ing.name+'</span>'+
-          '<input type="number" min="0.1" step="0.1" value="'+r.qty+'" oninput="updateRecipeQty('+ri+',this.value,\'dish\')" style="width:70px;padding:4px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px">'+
-          '<span style="font-size:12px;color:var(--muted);min-width:20px">'+ing.unit+'</span>'+
-          '<button onclick="removeFromRecipe('+ri+',\'dish\')" style="width:24px;height:24px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;cursor:pointer;font-size:13px;font-family:inherit">✕</button>'+
-          '</div>';
-      });
-      formH+='</div>';
+  const openTipos=sec.tipos||false;
+  formH+='<div class="form-section"><div class="form-section-header" onclick="toggleDishSection(\'tipos\')">';
+  formH+='<span>↕ Tipos / variantes'+(types.length>0?' <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 7px;border-radius:10px">'+types.length+'</span>':'')+'</span><span>'+(openTipos?'▲':'▼')+'</span></div>';
+  if(openTipos){
+    formH+='<div class="form-section-body">';
+    if(!f.hasTypes){
+      formH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">El comensal debe elegir uno antes de agregar</span><label class="toggle-switch"><input type="checkbox" onchange="toggleHasTypes(this.checked)"><span class="toggle-slider"></span></label></div>';
+    } else {
+      formH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Activo — comensal debe elegir uno</span><label class="toggle-switch"><input type="checkbox" checked onchange="toggleHasTypes(this.checked)"><span class="toggle-slider"></span></label></div>';
+      formH+='<div class="ing-list">'+types.map((t,i)=>'<div class="ing-chip">'+t+'<button class="ing-chip-remove" onclick="removeType('+i+')">×</button></div>').join('')+(types.length===0?'<span style="font-size:12px;color:var(--muted)">Sin tipos aún</span>':'')+'</div>';
+      formH+='<div class="ing-add-row"><input id="type-input" placeholder="Ej: Pollo, Carne..." value="'+(C.newTypeInput||'')+'"><button class="btn btn-primary btn-sm" onclick="addType()">+ Agregar</button></div>';
     }
-    formH+='<select onchange="addToRecipe(this.value,\'dish\');this.value=\'\'" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;background:var(--bg)"><option value="">+ Agregar ingrediente a la receta...</option>';
-    allDishIngs.filter(ing=>!(recipe||[]).some(r=>r.ingredientId===ing._key)).forEach(ing=>{formH+='<option value="'+ing._key+'">'+ing.name+' (stock: '+(ing.stock||0)+' '+ing.unit+')</option>';});
-    formH+='</select></div>';
+    formH+='</div>';
   }
-  // STOCK directo del plato
-  const _s2=Number(f.stock);const _hasStock=f.stock!=null&&f.stock!=='';
-  const stockBadge2=_hasStock?('<span style="font-size:12px;padding:3px 10px;border-radius:6px;font-weight:600;background:'+(_s2===0?'#fee2e2':_s2<=5?'#fef3c7':'#d1fae5')+';color:'+(_s2===0?'#b91c1c':_s2<=5?'#92400e':'#065f46')+'">'+(_s2===0?'Sin stock':_s2<=5?'⚠️ Bajo':'✓ OK')+'</span>'):'';
-  formH+='<div class="two-col" style="margin-bottom:10px">';
-  formH+='<div class="form-group" style="margin-bottom:0"><label>Stock del plato <span style="font-size:11px;color:var(--muted);font-weight:400">(opcional)</span></label><div style="display:flex;align-items:center;gap:8px"><input type="number" min="0" placeholder="Sin límite" value="'+(_hasStock?f.stock:'')+'" oninput="uF(\'dish\',\'stock\',this.value)" style="flex:1">'+stockBadge2+'</div></div>';
-  formH+='<div class="form-group" style="margin-bottom:0"><label>Alerta cuando quede ≤ <span style="font-size:11px;color:var(--muted);font-weight:400">(opcional)</span></label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uF(\'dish\',\'alertAt\',this.value)"></div>';
   formH+='</div>';
-  // Botones guardar
-  formH+='<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="'+(C.editingDish?'saveEditDish()':'addDish()') +'">'+(C.editingDish?'Guardar cambios':'Agregar plato')+'</button>'+(C.editingDish?'<button class="btn btn-ghost" onclick="cancelEditDish()">Cancelar</button>':'')+'</div></div>';
+
+  // ── Sección INGREDIENTES personalizables
+  const openIngs=sec.ings||false;
+  formH+='<div class="form-section"><div class="form-section-header" onclick="toggleDishSection(\'ings\')">';
+  formH+='<span>🧩 Personalización'+(ings.length>0?' <span style="font-size:11px;background:#ede9fe;color:#5b21b6;padding:1px 7px;border-radius:10px">'+ings.length+' ing.</span>':'')+'</span><span>'+(openIngs?'▲':'▼')+'</span></div>';
+  if(openIngs){
+    formH+='<div class="form-section-body">';
+    if(!f.customizable){
+      formH+='<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;color:var(--muted)">Comensal puede destildar ingredientes</span><label class="toggle-switch"><input type="checkbox" onchange="toggleCustomizable(this.checked)"><span class="toggle-slider"></span></label></div>';
+    } else {
+      formH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Activo</span><label class="toggle-switch"><input type="checkbox" checked onchange="toggleCustomizable(this.checked)"><span class="toggle-slider"></span></label></div>';
+      formH+='<div class="ing-list">'+ings.map((ing,i)=>'<div class="ing-chip">'+ing+'<button class="ing-chip-remove" onclick="removeIngredient('+i+')">×</button></div>').join('')+(ings.length===0?'<span style="font-size:12px;color:var(--muted)">Sin ingredientes</span>':'')+'</div>';
+      formH+='<div class="ing-add-row"><input id="ing-input" placeholder="Ej: Cebolla, Tomate..." value="'+C.newIngInput+'"><button class="btn btn-primary btn-sm" onclick="addIngredient()">+ Agregar</button></div>';
+    }
+    formH+='</div>';
+  }
+  formH+='</div>';
+
+  // ── Sección RECETA
+  const allDishIngs=Object.entries(DB.ingredients||{}).map(([k,v])=>({...v,_key:k}));
+  const recipe=f.recipe||[];
+  const openReceta=sec.receta||false;
+  if(allDishIngs.length>0){
+    formH+='<div class="form-section"><div class="form-section-header" onclick="toggleDishSection(\'receta\')">';
+    formH+='<span>🧾 Receta'+(recipe.length>0?' <span style="font-size:11px;background:#d1fae5;color:#065f46;padding:1px 7px;border-radius:10px">'+recipe.length+' ing.</span>':'')+'</span><span>'+(openReceta?'▲':'▼')+'</span></div>';
+    if(openReceta){
+      formH+='<div class="form-section-body">';
+      formH+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Ingredientes descontados al entregar</div>';
+      if(recipe.length>0){
+        formH+='<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">';
+        recipe.forEach((r,ri)=>{
+          const ing=DB.ingredients[r.ingredientId];
+          if(!ing)return;
+          formH+='<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;background:var(--bg);border-radius:6px;border:0.5px solid var(--border)">'+
+            '<span style="flex:1;font-size:12px;font-weight:500">'+ing.name+'</span>'+
+            '<input type="number" min="0.1" step="0.1" value="'+r.qty+'" oninput="updateRecipeQty('+ri+',this.value,\'dish\')" style="width:60px;padding:3px 6px;border:0.5px solid var(--border);border-radius:5px;font-family:inherit;font-size:12px">'+
+            '<span style="font-size:11px;color:var(--muted);min-width:16px">'+ing.unit+'</span>'+
+            '<button onclick="removeFromRecipe('+ri+',\'dish\')" style="width:22px;height:22px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;cursor:pointer;font-size:12px;font-family:inherit">✕</button>'+
+            '</div>';
+        });
+        formH+='</div>';
+      }
+      formH+='<select onchange="addToRecipe(this.value,\'dish\');this.value=\'\'" style="width:100%;padding:6px 10px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;background:var(--bg)"><option value="">+ Agregar ingrediente...</option>';
+      allDishIngs.filter(ing=>!recipe.some(r=>r.ingredientId===ing._key)).forEach(ing=>{formH+='<option value="'+ing._key+'">'+ing.name+' ('+( ing.stock||0)+' '+ing.unit+')</option>';});
+      formH+='</select></div>';
+    }
+    formH+='</div>';
+  }
+
+  formH+='</div>'; // end padding div
+
+  // Botones fijos al fondo
+  formH+='<div style="padding:12px 16px;border-top:0.5px solid var(--border);background:var(--bg);display:flex;gap:8px">';
+  formH+='<button class="btn btn-primary" style="flex:1" onclick="'+(C.editingDish?'saveEditDish()':'addDish()')+'">'+(C.editingDish?'💾 Guardar cambios':'➕ Agregar plato')+'</button>';
+  if(C.editingDish) formH+='<button class="btn btn-ghost" onclick="cancelEditDish()">Cancelar</button>';
+  formH+='</div></div>';
 
   const dishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k}));
   let listH=`<div class="cat-sections">`;
@@ -697,7 +760,7 @@ function renderDishesTab(){
     listH+=`</div>`;
   });
   listH+=`</div>`;
-  return tabsH+`<div class="dishes-layout">${formH}<div>${listH}</div></div>`;
+  return tabsH+`<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
 }
 
 // ── CATEGORIES TAB ────────────────────────────────
@@ -1477,6 +1540,7 @@ window.cancelEditTable=()=>{C.editingTable=null;render();};
 window.deleteTable=key=>{if(tableOccupied(key)){alert('Mesa con pedidos activos');return;}if(confirm('¿Eliminar?'))remove(ref(db,`tables/${key}`));};
 // ── GLOBAL HELPERS for inline onclick ─────────────
 window.setDishSubTab=tab=>{C.dishSubTab=tab;render();};
+window.toggleDishSection=name=>{if(!C.dishSections)C.dishSections={};C.dishSections[name]=!C.dishSections[name];render();};
 window.setCustomerNameInput=val=>{C.customerNameInput=val;};
 window.goToModeChoice=()=>{C.customerStep='modeChoice';render();};
 
