@@ -651,7 +651,10 @@ function renderDishesTab(){
   // STOCK directo del plato
   const _s2=Number(f.stock);const _hasStock=f.stock!=null&&f.stock!=='';
   const stockBadge2=_hasStock?('<span style="font-size:12px;padding:3px 10px;border-radius:6px;font-weight:600;background:'+(_s2===0?'#fee2e2':_s2<=5?'#fef3c7':'#d1fae5')+';color:'+(_s2===0?'#b91c1c':_s2<=5?'#92400e':'#065f46')+'">'+(_s2===0?'Sin stock':_s2<=5?'⚠️ Bajo':'✓ OK')+'</span>'):'';
-  formH+='<div class="form-group" style="margin-bottom:10px"><label>Stock del plato <span style="font-size:11px;color:var(--muted);font-weight:400">(opcional)</span></label><div style="display:flex;align-items:center;gap:8px"><input type="number" min="0" placeholder="Sin límite" value="'+(_hasStock?f.stock:'')+'" oninput="uF(\'dish\',\'stock\',this.value)" style="flex:1">'+stockBadge2+'</div></div>';
+  formH+='<div class="two-col" style="margin-bottom:10px">';
+  formH+='<div class="form-group" style="margin-bottom:0"><label>Stock del plato <span style="font-size:11px;color:var(--muted);font-weight:400">(opcional)</span></label><div style="display:flex;align-items:center;gap:8px"><input type="number" min="0" placeholder="Sin límite" value="'+(_hasStock?f.stock:'')+'" oninput="uF(\'dish\',\'stock\',this.value)" style="flex:1">'+stockBadge2+'</div></div>';
+  formH+='<div class="form-group" style="margin-bottom:0"><label>Alerta cuando quede ≤ <span style="font-size:11px;color:var(--muted);font-weight:400">(opcional)</span></label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uF(\'dish\',\'alertAt\',this.value)"></div>';
+  formH+='</div>';
   // Botones guardar
   formH+='<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="'+(C.editingDish?'saveEditDish()':'addDish()') +'">'+(C.editingDish?'Guardar cambios':'Agregar plato')+'</button>'+(C.editingDish?'<button class="btn btn-ghost" onclick="cancelEditDish()">Cancelar</button>':'')+'</div></div>';
 
@@ -959,6 +962,41 @@ function renderStockTab(){
   });
   listH+=`</div>`;
 
+  // Platos/items con stock directo (sin receta)
+  const directStockDishes=[
+    ...Object.entries(DB.dishes).filter(([,d])=>d.stock!=null&&(!d.recipe||d.recipe.length===0)).map(([k,d])=>({...d,_key:k,_src:'dishes'})),
+    ...Object.entries(DB.cafeteriaItems||{}).filter(([,d])=>d.stock!=null&&(!d.recipe||d.recipe.length===0)).map(([k,d])=>({...d,_key:k,_src:'cafeteria'}))
+  ];
+  if(directStockDishes.length>0){
+    listH+=`<div style="margin-top:1.5rem"><div style="font-size:14px;font-weight:600;margin-bottom:10px;color:var(--text)">📦 Stock directo por plato/item</div><div style="display:flex;flex-direction:column;gap:8px">`;
+    directStockDishes.forEach(d=>{
+      const low=d.alertAt!=null&&(d.stock||0)<=d.alertAt;
+      const empty=(d.stock||0)===0;
+      const col=empty?'#ef4444':low?'#f59e0b':'#10b981';
+      listH+=`<div class="card" style="${low?'border-color:'+col+';':''}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="font-size:14px;font-weight:600">${d.name}</span>
+              <span style="font-size:11px;color:var(--muted)">${d._src==='cafeteria'?'☕ Cafetería':'🍽 Restaurant'}</span>
+              ${empty?`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#fee2e2;color:#b91c1c">Sin stock</span>`:
+                low?`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#fef3c7;color:#92400e">⚠️ Stock bajo</span>`:''}
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:20px;font-weight:700;color:${col}">${d.stock||0}</span>
+              <span style="font-size:13px;color:var(--muted)">unidades${d.alertAt!=null?` · alerta ≤ ${d.alertAt}`:''}</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:4px;align-items:center">
+            <input id="restock-dish-${d._key}" type="number" min="1" step="1" placeholder="+N" style="width:60px;padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px">
+            <button onclick="restockDish('${d._key}','${d._src}')" style="padding:5px 10px;border-radius:6px;border:0.5px solid #10b981;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar</button>
+          </div>
+        </div>
+      </div>`;
+    });
+    listH+=`</div></div>`;
+  }
+
   return `<div class="admin-grid">${formH}${listH}</div>`;
 }
 
@@ -1002,7 +1040,17 @@ window.restockIng=async key=>{
   const newStock=(ing.stock||0)+qty;
   await update(ref(db,`ingredients/${key}`),{stock:newStock});
   if(inp)inp.value='';
-  // checkIngredientStock will auto-enable dishes
+};
+window.restockDish=async(key,src)=>{
+  const inp=document.getElementById(`restock-dish-${key}`);
+  const qty=Number(inp?inp.value:0);
+  if(!qty||qty<=0){alert('Ingresá una cantidad');return;}
+  const dbPath=src==='cafeteria'?'cafeteriaItems':'dishes';
+  const d=src==='cafeteria'?DB.cafeteriaItems[key]:DB.dishes[key];
+  if(!d)return;
+  const newStock=(d.stock||0)+qty;
+  await update(ref(db,`${dbPath}/${key}`),{stock:newStock});
+  if(inp)inp.value='';
 };
 
 // Recipe helpers for dish/caf forms
@@ -1359,6 +1407,10 @@ function renderHistoryTab(){
 // ─── ADMIN ACTIONS ────────────────────────────────
 window.uF=(type,field,val)=>{
   const o=type==='dish'?(C.editingDish||C.newDish):(C.editingTable||C.newTable);
+  if(field==='stock'||field==='alertAt'){
+    o[field]=val===''||val==null?null:Math.max(0,Number(val));
+    render();return;
+  }
   o[field]=(field==='price'||field==='capacity'||field==='promoDiscount')?Number(val):val;
   // when toggling 2x1, clear discount and re-render
   if(type==='dish'&&field==='is2x1'){
@@ -1410,12 +1462,12 @@ window.addDish=()=>{
   // Si el cat no es un key válido de Firebase, usar el primero disponible
   const validCat=cats.find(c=>c._key===d.cat);
   if(!validCat&&cats.length>0)d.cat=cats[0]._key;
-  push(ref(db,'dishes'),{...d,ingredients:d.ingredients||[],types:d.types||[],hasTypes:d.hasTypes||false,is2x1:d.is2x1===true,promoDiscount:d.promoDiscount||0,unavailable:false});
+  push(ref(db,'dishes'),{...d,ingredients:d.ingredients||[],types:d.types||[],hasTypes:d.hasTypes||false,is2x1:d.is2x1===true,promoDiscount:d.promoDiscount||0,unavailable:false,stock:d.stock!=null?Number(d.stock):null,alertAt:d.alertAt!=null?Number(d.alertAt):null,recipe:d.recipe||[]});
   C.newDish={name:'',desc:'',price:'',cat:cats.length>0?cats[0]._key:'',emoji:'🍽️',customizable:false,ingredients:[],types:[],hasTypes:false,promoDiscount:0,is2x1:false};
   C.newIngInput='';render();
 };
 window.editDish=key=>{C.editingDish={...DB.dishes[key],_key:key,ingredients:[...(DB.dishes[key].ingredients||[])]};render();};
-window.saveEditDish=()=>{const {_key,...data}=C.editingDish;set(ref(db,`dishes/${_key}`),{...data,is2x1:data.is2x1===true,promoDiscount:data.promoDiscount||0});C.editingDish=null;render();};
+window.saveEditDish=()=>{const {_key,...data}=C.editingDish;set(ref(db,`dishes/${_key}`),{...data,is2x1:data.is2x1===true,promoDiscount:data.promoDiscount||0,stock:data.stock!=null?Number(data.stock):null,alertAt:data.alertAt!=null?Number(data.alertAt):null,recipe:data.recipe||[]});C.editingDish=null;render();};
 window.cancelEditDish=()=>{C.editingDish=null;render();};
 window.deleteDish=key=>{if(confirm('¿Eliminar este plato?'))remove(ref(db,`dishes/${key}`));};
 window.addTable=()=>{const t=C.newTable;if(!t.label){alert('Ingresá un nombre');return;}push(ref(db,'tables'),{...t});C.newTable={label:'',capacity:''};render();};
@@ -1539,19 +1591,33 @@ window.submitManualOrder=async()=>{
 
 window.markDelivered=async key=>{
   await update(ref(db,`orders/${key}`),{status:'delivered'});
-  // Descontar stock de ingredientes
   const o=DB.orders[key];
   if(o&&o.items){
     for(const item of o.items){
-      // Buscar el plato/item de cafetería
-      const dish=Object.entries(DB.dishes).find(([,d])=>d.name===item.name);
-      const cafItem=Object.entries(DB.cafeteriaItems||{}).find(([,d])=>d.name===item.name);
-      const recipe=(dish&&dish[1].recipe)||(cafItem&&cafItem[1].recipe)||[];
-      for(const r of recipe){
-        const ing=DB.ingredients[r.ingredientId];
-        if(ing==null)continue;
-        const newStock=Math.max(0,(ing.stock||0)-r.qty*item.qty);
-        await update(ref(db,`ingredients/${r.ingredientId}`),{stock:newStock});
+      const dishEntry=Object.entries(DB.dishes).find(([,d])=>d.name===item.name);
+      const cafEntry=Object.entries(DB.cafeteriaItems||{}).find(([,d])=>d.name===item.name);
+      const d=dishEntry?dishEntry[1]:cafEntry?cafEntry[1]:null;
+      const dKey=dishEntry?dishEntry[0]:cafEntry?cafEntry[0]:null;
+      const dbPath=dishEntry?'dishes':cafEntry?'cafeteriaItems':null;
+      if(!d||!dKey||!dbPath)continue;
+      const recipe=d.recipe||[];
+      if(recipe.length>0){
+        // Descontar por ingredientes de la receta
+        for(const r of recipe){
+          const ing=DB.ingredients[r.ingredientId];
+          if(ing==null)continue;
+          const newStock=Math.max(0,(ing.stock||0)-r.qty*item.qty);
+          await update(ref(db,`ingredients/${r.ingredientId}`),{stock:newStock});
+        }
+      } else if(d.stock!=null){
+        // Sin receta: descontar stock directo del plato
+        const newStock=Math.max(0,(d.stock||0)-item.qty);
+        await update(ref(db,`${dbPath}/${dKey}`),{stock:newStock});
+        if(newStock===0){
+          showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
+        } else if(d.alertAt!=null&&newStock<=d.alertAt){
+          showNotif('alert','⚠️ Stock bajo: '+d.name,'Quedan '+newStock);
+        }
       }
     }
   }
