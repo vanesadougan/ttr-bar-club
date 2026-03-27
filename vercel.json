@@ -1,6 +1,8 @@
 {
   "rewrites": [
     { "source": "/mozas", "destination": "/index.html" },
+    { "source": "/menu", "destination": "/index.html" },
+    { "source": "/menu/", "destination": "/index.html" },
     { "source": "/mesa/:tableId", "destination": "/index.html" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
