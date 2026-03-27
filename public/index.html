@@ -716,8 +716,8 @@ function renderCajaTab(){
       const cats=[{v:'proveedor',l:'🏪 Gasto proveedor'},{v:'personal',l:'👥 Pago personal'}];
       cats.forEach(c=>{const sel=(C.cajaGastoTipo||'')==c.v;h+=`<button onclick="setCajaGastoTipo('${c.v}')" style="padding:10px;border-radius:8px;border:0.5px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'#fff5f7':'var(--card)'};color:${sel?'var(--accent)':'var(--text)'};font-size:13px;font-weight:${sel?'600':'400'};cursor:pointer;font-family:inherit">${c.l}</button>`;});
       h+=`</div>`;
-      h+=`<div class="two-col"><div class="form-group" style="margin-bottom:10px"><label>Monto ($)</label><input type="number" min="0" placeholder="0" id="caja-monto" value="${C.cajaMonto||''}" oninput="C.cajaMonto=this.value"></div>`;
-      h+=`<div class="form-group" style="margin-bottom:10px"><label>Descripción <span style="font-size:11px;color:var(--muted)">(opcional)</span></label><input placeholder="Ej: Verdulería, Sueldo..." id="caja-desc" value="${C.cajaDesc||''}" oninput="C.cajaDesc=this.value"></div></div>`;
+      h+=`<div class="two-col"><div class="form-group" style="margin-bottom:10px"><label>Monto ($)</label><input type="number" min="0" placeholder="0" id="caja-monto"></div>`;
+      h+=`<div class="form-group" style="margin-bottom:10px"><label>Descripción <span style="font-size:11px;color:var(--muted)">(opcional)</span></label><input placeholder="Ej: Verdulería, Sueldo..." id="caja-desc"></div></div>`;
       h+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="cajaGuardarGasto()">Guardar gasto</button><button class="btn btn-ghost" onclick="cajaCancelarModal()">Cancelar</button></div>`;
       h+=`</div>`;
     }
@@ -768,12 +768,15 @@ window.cajaConfirmarApertura=async()=>{
 window.cajaGasto=()=>{C.cajaModal='gasto';C.cajaGastoTipo='proveedor';C.cajaMonto='';C.cajaDesc='';render();};
 window.setCajaGastoTipo=t=>{C.cajaGastoTipo=t;render();};
 window.cajaGuardarGasto=async()=>{
-  const monto=Number(C.cajaMonto||0);
+  const montoInp=document.getElementById('caja-monto');
+  const descInp=document.getElementById('caja-desc');
+  const monto=Number(montoInp?montoInp.value:0);
+  const desc=(descInp?descInp.value:'').trim();
   if(!monto||monto<=0){alert('Ingresá un monto mayor a 0');return;}
   const tipo=C.cajaGastoTipo||'proveedor';
   const concepto=tipo==='personal'?'Pago personal':'Gasto proveedor';
   const hoy=new Date().toISOString().slice(0,10);
-  await push(ref(db,'caja'),{tipo,concepto,monto:-monto,fecha:hoy,ts:Date.now(),desc:C.cajaDesc||''});
+  await push(ref(db,'caja'),{tipo,concepto,monto:-monto,fecha:hoy,ts:Date.now(),desc});
   C.cajaModal=null;C.cajaMonto='';C.cajaDesc='';render();
 };
 window.cajaCancelarModal=()=>{C.cajaModal=null;render();};
