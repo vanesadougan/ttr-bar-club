@@ -2076,7 +2076,7 @@ function renderOrdersTab(){
   const billedGroups={};
   billedOrders.forEach(o=>{
     const key=o.tableId+'|'+(o.orderMode==='individual'&&o.personName?o.personName:'__general__');
-    if(!billedGroups[key])billedGroups[key]={tableId:o.tableId,orderMode:o.orderMode,personName:o.personName,paymentMethod:o.paymentMethod,orders:[]};
+    if(!billedGroups[key])billedGroups[key]={tableId:o.tableId,orderMode:o.orderMode,personName:o.personName,paymentMethod:o.paymentMethod,takenBy:o.takenBy||null,orders:[]};
     billedGroups[key].orders.push(o);
   });
   const billedGroupList=Object.values(billedGroups);
@@ -2090,10 +2090,11 @@ function renderOrdersTab(){
     const allItems=Object.values(seen);
     const total=allItems.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
     const chip=g.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${g.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
+    const waiterChipBilled=g.takenBy?`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px;font-weight:500">👩 ${g.takenBy}</span>`:'';
     const pm=g.paymentMethod||g.orders.find(o=>o.paymentMethod)?.paymentMethod||null;
     const pmLabels={efectivo:'Efectivo',credito:'Créd.',debito:'Déb.',transferencia:'Transfer.',mercadopago:'Mercado Pago'};
     h+=`<div class="order-card" style="border:1.5px solid #c4b5fd;background:#faf5ff">`;
-    h+=`<div class="order-header"><div class="order-tname">${tableLabel(g.tableId)}${chip}</div><div style="font-size:12px;color:#7c3aed;font-weight:500">⚡ Pide cuenta${pm?` · <strong>${pmLabels[pm]||pm}</strong>`:''}</div></div>`;
+    h+=`<div class="order-header"><div class="order-tname">${tableLabel(g.tableId)}${chip}${waiterChipBilled}</div><div style="font-size:12px;color:#7c3aed;font-weight:500">⚡ Pide cuenta${pm?` · <strong>${pmLabels[pm]||pm}</strong>`:''}</div></div>`;
     h+=`<div class="order-items-text">`;
     allItems.forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <em>(${i.selectedType})</em>`:''} <span style="color:var(--accent)">$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span><br>`;});
     h+=`</div>`;
