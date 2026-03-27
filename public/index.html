@@ -1072,43 +1072,55 @@ function buildWaiterMenuH(){
   if(hasCaf){menuH+='<div style="display:flex;background:#f3f4f6;border-radius:10px;padding:3px;gap:2px;margin-bottom:.75rem;width:fit-content">'+
     '<button onclick="setWaiterSection(\'platos\')" style="padding:6px 16px;border-radius:8px;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:'+(section==='platos'?'#fff':'transparent')+';color:'+(section==='platos'?'var(--text)':'var(--muted)')+'">🍽 Restaurant</button>'+
     '<button onclick="setWaiterSection(\'cafeteria\')" style="padding:6px 16px;border-radius:8px;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:'+(section==='cafeteria'?'#fff':'transparent')+';color:'+(section==='cafeteria'?'var(--text)':'var(--muted)')+'">☕ Cafetería</button></div>';}
-  // Modal picker ANTES del grid
-  const custId=C.waiterCustDishId;
-  if(custId){
-    const d=DB.dishes[custId]||DB.cafeteriaItems[custId];
-    if(d){
-      const isCaf=!!DB.cafeteriaItems[custId];const src=isCaf?'caf':'dish';
-      const hasTypes=!isCaf&&d.hasTypes&&(d.types||[]).length>0;
-      const hasCustom=d.customizable&&(d.ingredients||[]).length>0;
-      const selType=C.waiterPickType||null;
-      const selExcl=new Set(C.waiterPickExcl||[]);
-      const catIcon=!isCaf?(getCats().find(c=>c._key===d.cat)||{}).icon||'🍽':(d.emoji||'☕');
-      menuH+=`<div class="cust-modal"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:20px">${catIcon}</span><div><div style="font-size:16px;font-weight:500">${d.name}</div><div style="font-size:12px;color:var(--muted)">${hasTypes&&!selType?'Elegí una variante':'Destildá lo que no querés'}</div></div></div>`;
-      if(hasTypes){
-        menuH+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">`;
-        (d.types||[]).forEach(t=>{const sel=selType===t;menuH+=`<button onclick="waiterPickType('${t.replace(/'/g,"\\'")}' )" style="padding:8px 16px;border-radius:20px;border:0.5px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'var(--accent)':'var(--card)'};color:${sel?'#fff':'var(--text)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${t}</button>`;});
-        menuH+=`</div>`;
-      }
-      if(hasCustom&&(!hasTypes||selType)){
-        menuH+=`<div class="cust-ing-list">`;
-        (d.ingredients||[]).forEach(ing=>{const ex=selExcl.has(ing);menuH+=`<div class="cust-ing-row${ex?' excluded':''}" onclick="waiterToggleExcl('${ing.replace(/'/g,"\\'")}')"><div style="display:flex;align-items:center;gap:8px"><div class="cust-check ${ex?'unchecked':'checked'}">${ex?'':'✓'}</div><span class="${ex?'strikethrough':''}">${ing}</span></div>${ex?'<span style="font-size:11px;color:#b45309">Sin esto</span>':''}</div>`;});
-        menuH+=`</div>`;
-      }
-      const canConfirm=!hasTypes||selType;
-      menuH+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" ${canConfirm?'':'disabled'} onclick="waiterConfirmDish('${custId}','${src}')">Agregar al pedido</button><button class="btn btn-ghost" onclick="waiterCancelPick()">Cancelar</button></div></div>`;
-    }
-  }
   if(section==='cafeteria'){
     const allItems=Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
     const cats=getCafCats().filter(c=>allItems.some(d=>d.cat===c._key));
-    menuH+='<div class="cat-tabs">';cats.forEach(c=>{menuH+='<button class="cat-tab'+(C.waiterCafCat===c._key?' active':'')+'" onclick="setWaiterCafCat(\''+c._key+'\')">'+c.icon+' '+c.label+'</button>';});menuH+='</div><div class="menu-grid">';
+    menuH+='<div class="cat-tabs">';cats.forEach(c=>{menuH+='<button class="cat-tab'+(C.waiterCafCat===c._key?' active':'')+'" onclick="setWaiterCafCat(\''+c._key+'\')">'+c.icon+' '+c.label+'</button>';});menuH+='</div>';
+  // Modal picker — después del cat-tabs, igual que comensal
+  if(C.waiterCustDishId){
+    const _d=DB.dishes[C.waiterCustDishId]||DB.cafeteriaItems[C.waiterCustDishId];
+    if(_d){
+      const _isCaf=!!DB.cafeteriaItems[C.waiterCustDishId];
+      const _src=_isCaf?'caf':'dish';
+      const _hasTypes=!_isCaf&&_d.hasTypes&&(_d.types||[]).length>0;
+      const _hasCustom=_d.customizable&&(_d.ingredients||[]).length>0;
+      const _selType=C.waiterPickType||null;
+      const _selExcl=new Set(C.waiterPickExcl||[]);
+      const _catIcon=!_isCaf?(getCats().find(c=>c._key===_d.cat)||{}).icon||'🍽':(_d.emoji||'☕');
+      menuH+=`<div class="cust-modal"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:20px">${_catIcon}</span><div><div style="font-size:16px;font-weight:500">${_d.name}</div><div style="font-size:12px;color:var(--muted)">${_hasTypes&&!_selType?'Elegí una variante':'Destildá lo que no querés'}</div></div></div>`;
+      if(_hasTypes){menuH+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">`;(_d.types||[]).forEach(_t=>{const _s=_selType===_t;menuH+=`<button onclick="waiterPickType('${_t.replace(/'/g,"\'")}' )" style="padding:8px 16px;border-radius:20px;border:0.5px solid ${_s?'var(--accent)':'var(--border)'};background:${_s?'var(--accent)':'var(--card)'};color:${_s?'#fff':'var(--text)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${_t}</button>`;});menuH+=`</div>`;}
+      if(_hasCustom&&(!_hasTypes||_selType)){menuH+=`<div class="cust-ing-list">`;(_d.ingredients||[]).forEach(_ing=>{const _ex=_selExcl.has(_ing);menuH+=`<div class="cust-ing-row${_ex?' excluded':''}" onclick="waiterToggleExcl('${_ing.replace(/'/g,"\'")}')"><div style="display:flex;align-items:center;gap:8px"><div class="cust-check ${_ex?'unchecked':'checked'}">${_ex?'':'✓'}</div><span class="${_ex?'strikethrough':''}">${_ing}</span></div>${_ex?'<span style="font-size:11px;color:#b45309">Sin esto</span>':''}</div>`;});menuH+=`</div>`;}
+      const _canConfirm=!_hasTypes||_selType;
+      menuH+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" ${_canConfirm?'':'disabled'} onclick="waiterConfirmDish('${C.waiterCustDishId}','${_src}')">Agregar al pedido</button><button class="btn btn-ghost" onclick="waiterCancelPick()">Cancelar</button></div></div>`;
+    }
+  }
+    menuH+='<div class="menu-grid">';
     const filtered=C.waiterCafCat&&C.waiterCafCat!=='todos'?allItems.filter(d=>d.cat===C.waiterCafCat):allItems;
     filtered.forEach(d=>{const ci=C.waiterCart[d._key];const q=ci?ci.qty:0;const excl=ci&&ci.excluded&&ci.excluded.length?'<div class="excl-note">sin: '+ci.excluded.join(', ')+'</div>':'';menuH+='<div class="menu-card"><div class="menu-card-name">'+(d.emoji||'☕')+' '+d.name+'</div><div class="menu-card-desc">'+(d.desc||'')+'</div>'+excl+'<div class="menu-card-footer"><span class="menu-card-price">$'+Number(d.price).toLocaleString()+'</span>'+(q===0?'<button class="add-btn" onclick="waiterAddDish(\''+d._key+'\',\'caf\')">+</button>':'<div class="qty-ctrl"><button class="qty-btn" onclick="waiterRemove(\''+d._key+'\')">−</button><span class="qty-val">'+q+'</span><button class="qty-btn" onclick="waiterQuickAdd(\''+d._key+'\',\'caf\')">+</button></div>')+'</div></div>';});
     menuH+='</div>';
   } else {
     const allDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
     const cats=getCats();const catIds=cats.map(c=>c._key).filter(id=>allDishes.some(d=>d.cat===id));
-    menuH+='<div class="cat-tabs">';catIds.forEach(cid=>{const cat=cats.find(c=>c._key===cid);menuH+='<button class="cat-tab'+(C.waiterCat===cid?' active':'')+(cat&&cat.isPromo?' promo-tab':'')+'" onclick="setWaiterCat(\''+cid+'\')">'+(cat?cat.icon+' '+cat.label:cid)+'</button>';});menuH+='</div><div class="menu-grid">';
+    menuH+='<div class="cat-tabs">';catIds.forEach(cid=>{const cat=cats.find(c=>c._key===cid);menuH+='<button class="cat-tab'+(C.waiterCat===cid?' active':'')+(cat&&cat.isPromo?' promo-tab':'')+'" onclick="setWaiterCat(\''+cid+'\')">'+(cat?cat.icon+' '+cat.label:cid)+'</button>';});menuH+='</div>';
+  // Modal picker — después del cat-tabs, igual que comensal
+  if(C.waiterCustDishId){
+    const _d=DB.dishes[C.waiterCustDishId]||DB.cafeteriaItems[C.waiterCustDishId];
+    if(_d){
+      const _isCaf=!!DB.cafeteriaItems[C.waiterCustDishId];
+      const _src=_isCaf?'caf':'dish';
+      const _hasTypes=!_isCaf&&_d.hasTypes&&(_d.types||[]).length>0;
+      const _hasCustom=_d.customizable&&(_d.ingredients||[]).length>0;
+      const _selType=C.waiterPickType||null;
+      const _selExcl=new Set(C.waiterPickExcl||[]);
+      const _catIcon=!_isCaf?(getCats().find(c=>c._key===_d.cat)||{}).icon||'🍽':(_d.emoji||'☕');
+      menuH+=`<div class="cust-modal"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:20px">${_catIcon}</span><div><div style="font-size:16px;font-weight:500">${_d.name}</div><div style="font-size:12px;color:var(--muted)">${_hasTypes&&!_selType?'Elegí una variante':'Destildá lo que no querés'}</div></div></div>`;
+      if(_hasTypes){menuH+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">`;(_d.types||[]).forEach(_t=>{const _s=_selType===_t;menuH+=`<button onclick="waiterPickType('${_t.replace(/'/g,"\'")}' )" style="padding:8px 16px;border-radius:20px;border:0.5px solid ${_s?'var(--accent)':'var(--border)'};background:${_s?'var(--accent)':'var(--card)'};color:${_s?'#fff':'var(--text)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${_t}</button>`;});menuH+=`</div>`;}
+      if(_hasCustom&&(!_hasTypes||_selType)){menuH+=`<div class="cust-ing-list">`;(_d.ingredients||[]).forEach(_ing=>{const _ex=_selExcl.has(_ing);menuH+=`<div class="cust-ing-row${_ex?' excluded':''}" onclick="waiterToggleExcl('${_ing.replace(/'/g,"\'")}')"><div style="display:flex;align-items:center;gap:8px"><div class="cust-check ${_ex?'unchecked':'checked'}">${_ex?'':'✓'}</div><span class="${_ex?'strikethrough':''}">${_ing}</span></div>${_ex?'<span style="font-size:11px;color:#b45309">Sin esto</span>':''}</div>`;});menuH+=`</div>`;}
+      const _canConfirm=!_hasTypes||_selType;
+      menuH+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" ${_canConfirm?'':'disabled'} onclick="waiterConfirmDish('${C.waiterCustDishId}','${_src}')">Agregar al pedido</button><button class="btn btn-ghost" onclick="waiterCancelPick()">Cancelar</button></div></div>`;
+    }
+  }
+    menuH+='<div class="menu-grid">';
     const filtered=C.waiterCat&&C.waiterCat!=='todos'?allDishes.filter(d=>d.cat===C.waiterCat):allDishes;
     filtered.forEach(d=>{
       const hasTypes=d.hasTypes&&(d.types||[]).length>0;const hasCustom=d.customizable&&(d.ingredients||[]).length>0;
