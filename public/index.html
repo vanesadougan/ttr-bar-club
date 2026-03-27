@@ -375,6 +375,7 @@ onValue(ref(db,'orders'), snap=>{
   }
   firstLoad = false;
   archivarPedidosViejos(); // Archivar pedidos >60 días en segundo plano
+  limpiarAlertsViejas();   // Borrar alerts con más de 4 horas
   if(C.mode==='admin' && C.adminTab==='orders' && Object.keys(DB.orders).length > Object.keys(prevKeys).length){
     render(); highlightNewOrder();
   } else {
@@ -3237,6 +3238,22 @@ window.scrollToCart=()=>{
 
 // Start
 setInterval(updateClock,60000);
+// ── LIMPIEZA DE ALERTS VIEJAS ─────────────────────
+// Borra alerts con más de 4 horas de Firebase
+async function limpiarAlertsViejas(){
+  const HORAS=4;
+  const limite=Date.now()-HORAS*60*60*1000;
+  const viejas=Object.entries(DB.alerts||{}).filter(([,a])=>{
+    const ts=a.createdAt||0;
+    return ts>0&&ts<limite;
+  });
+  for(const [k] of viejas){
+    try{ await remove(ref(db,`alerts/${k}`)); }
+    catch(e){ console.warn('Error borrando alert',k,e); }
+  }
+  if(viejas.length>0)console.log(`Borradas ${viejas.length} alert${viejas.length!==1?'s':''} con más de ${HORAS} horas.`);
+}
+
 // ── ARCHIVADO AUTOMÁTICO DE PEDIDOS ──────────────
 // Mueve pedidos con más de 60 días a /archivo/YYYY-MM y los elimina de /orders
 async function archivarPedidosViejos(){
