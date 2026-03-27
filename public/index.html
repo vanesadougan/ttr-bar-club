@@ -314,7 +314,7 @@ function dishFinalPrice(d,qty){
   return d.promoDiscount>0?Math.round(d.price*(1-d.promoDiscount/100)):d.price;
 }
 function tableLabel(tid){const t=DB.tables[tid];return t?t.label:`Mesa ${tid}`;}
-function tableOccupied(tid){return Object.values(DB.orders).some(o=>o.tableId===tid&&o.status!=='cobrado');}
+function tableOccupied(tid){return Object.values(DB.orders).some(o=>o.tableId===tid&&o.status!=='cobrado'&&o.status!=='deudor');}
 function pendingCount(){return Object.values(DB.orders).filter(o=>o.status==='pending'||o.status==='billed').length;}
 function starsHtml(avg,size){let h='';for(let i=1;i<=5;i++)h+=`<span class="${i<=Math.round(avg)?'star-lit':'star-empty'}" style="font-size:${size||14}px">${i<=Math.round(avg)?'★':'☆'}</span>`;return h;}
 
@@ -909,7 +909,7 @@ window.selectWaiter=(id,name)=>{C.waiterId=id;C.waiterName=name;C.waiterStep='me
 function renderWaiterMesasScreen(mc){
   const myOrders=Object.entries(DB.orders)
     .map(([k,v])=>({...v,_key:k}))
-    .filter(o=>o.takenBy===C.waiterName && o.status!=='cobrado')
+    .filter(o=>o.takenBy===C.waiterName && o.status!=='cobrado'&&o.status!=='deudor')
     .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 
   const byTable={};
@@ -1191,7 +1191,7 @@ window.waiterRequestBill=async tableId=>{
 };
 window.waiterMarkCobrado=async tableId=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
-  const orders=Object.entries(DB.orders).filter(([,o])=>o.takenBy===C.waiterName&&o.tableId===tableId&&(o.status==='billed'||o.status==='delivered'||o.status==='pending'));
+  const orders=Object.entries(DB.orders).filter(([,o])=>o.takenBy===C.waiterName&&o.tableId===tableId&&(o.status==='billed'||o.status==='delivered'||o.status==='pending')&&o.status!=='deudor');
   // Verificar método de pago
   const pm=orders.find(([,o])=>o.paymentMethod)?.[1]?.paymentMethod||C.waiterPayMethod||null;
   let finalPm=pm;
@@ -1960,7 +1960,7 @@ window.copyQR=url=>{navigator.clipboard.writeText(url).then(()=>alert('Link copi
 // ── ORDERS TAB ────────────────────────────────────
 function renderOrdersTab(){
   const orders=Object.entries(DB.orders).map(([k,v])=>({...v,_key:k})).sort((a,b)=>b.createdAt-a.createdAt);
-  const active=orders.filter(o=>o.status!=='cobrado');
+  const active=orders.filter(o=>o.status!=='cobrado'&&o.status!=='deudor');
   const pendingAlerts=Object.entries(DB.alerts||{}).filter(([,a])=>a.status==='pending');
   const pendingCount=new Set(orders.filter(o=>o.status==='pending').map(o=>o.tableId+'|'+(o.orderMode==='individual'&&o.personName?o.personName:'__general__'))).size;
   const deliveredCount=new Set(orders.filter(o=>o.status==='delivered').map(o=>o.tableId+'|'+(o.orderMode==='individual'&&o.personName?o.personName:'__general__'))).size;
@@ -2161,15 +2161,10 @@ function renderOrdersTab(){
 
 // ── DEUDORES TAB ──────────────────────────────────
 function renderDeudoresTab(){
-  const deudores=Object.entries(DB.deudores||{})
+  const deudores=Object.entries(DB.orders)
     .map(([k,v])=>({...v,_key:k}))
-    .filter(d=>d.status!=='cobrado')
+    .filter(o=>o.status==='deudor')
     .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-  const cobrados=Object.entries(DB.deudores||{})
-    .map(([k,v])=>({...v,_key:k}))
-    .filter(d=>d.status==='cobrado')
-    .sort((a,b)=>(b.cobradoAt||0)-(a.cobradoAt||0))
-    .slice(0,10); // últimos 10 cobrados
 
   let h='<div style="max-width:720px">';
   h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">`;
@@ -2177,57 +2172,38 @@ function renderDeudoresTab(){
   h+=`</div>`;
 
   if(deudores.length===0){
-    h+=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px;margin-bottom:1.5rem">`;
+    h+=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">`;
     h+=`<div style="font-size:40px;margin-bottom:12px">✅</div>`;
     h+=`<div style="font-size:16px;font-weight:500">Sin deudas pendientes</div>`;
     h+=`</div>`;
   } else {
-    deudores.forEach(d=>{
-      const fecha=d.createdAt?new Date(d.createdAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
-      const total=(d.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-      const table=DB.tables[d.tableId];
+    deudores.forEach(o=>{
+      const fecha=o.createdAt?new Date(o.createdAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+      const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+      const table=DB.tables[o.tableId];
       h+=`<div class="card" style="margin-bottom:.875rem;border-left:3px solid #dc2626">`;
       h+=`<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">`;
       h+=`<div>`;
-      h+=`<div style="font-size:16px;font-weight:700">${d.nombre} ${d.apellido}</div>`;
-      h+=`<div style="font-size:12px;color:var(--muted);margin-top:2px">${fecha} · ${table?table.label:d.tableId}${d.personName?' · '+d.personName:''}</div>`;
+      h+=`<div style="font-size:16px;font-weight:700">${o.deudorNombre||''} ${o.deudorApellido||''}</div>`;
+      h+=`<div style="font-size:12px;color:var(--muted);margin-top:2px">${fecha} · ${table?table.label:o.tableId}${o.personName?' · '+o.personName:''}</div>`;
       h+=`</div>`;
       h+=`<div style="font-size:20px;font-weight:700;color:#dc2626">$${total.toLocaleString()}</div>`;
       h+=`</div>`;
-      // Items
       h+=`<div style="display:flex;flex-direction:column;gap:3px;margin-bottom:12px">`;
-      (d.items||[]).forEach(i=>{
+      (o.items||[]).forEach(i=>{
         h+=`<div style="font-size:13px;color:var(--muted)">${i.qty}× <strong style="color:var(--text)">${i.name}</strong>${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:''} <span style="color:var(--accent)">$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;
       });
       h+=`</div>`;
-      h+=`<button onclick="cobrarDeudor('${d._key}')" style="width:100%;padding:9px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrado ✓ — registrar pago</button>`;
+      h+=`<button onclick="cobrarDeudor('${o._key}')" style="width:100%;padding:9px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrado ✓ — registrar pago</button>`;
       h+=`</div>`;
     });
   }
-
-  // Historial de cobrados recientes
-  if(cobrados.length>0){
-    h+=`<div style="margin-top:1.5rem"><div style="font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Cobrados recientemente</div>`;
-    cobrados.forEach(d=>{
-      const fecha=d.cobradoAt?new Date(d.cobradoAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}):'—';
-      const total=(d.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-      const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
-      h+=`<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border);margin-bottom:6px">`;
-      h+=`<div style="flex:1"><div style="font-size:13px;font-weight:500">${d.nombre} ${d.apellido}</div><div style="font-size:11px;color:var(--muted)">${fecha}${d.paymentMethod?' · '+pmL[d.paymentMethod]:''}</div></div>`;
-      h+=`<div style="font-size:14px;font-weight:700;color:#065f46">$${total.toLocaleString()}</div>`;
-      h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">✓ Cobrado</span>`;
-      h+=`</div>`;
-    });
-    h+=`</div>`;
-  }
-
   h+=`</div>`;
   return h;
 }
 
 window.marcarDeudor=async key=>{
   const o=DB.orders[key];if(!o)return;
-  // Pedir nombre y apellido via modal
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
   overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
@@ -2250,21 +2226,8 @@ window.marcarDeudor=async key=>{
     const apellido=(document.getElementById('deudor-apellido')?.value||'').trim();
     if(!nombre||!apellido){alert('Ingresá nombre y apellido');return;}
     cleanup();
-    const table=DB.tables[o.tableId];
-    await push(ref(db,'deudores'),{
-      nombre,apellido,
-      tableId:o.tableId,tableLabel:table?table.label:o.tableId,
-      personName:o.personName||null,
-      items:o.items||[],
-      orderMode:o.orderMode||null,
-      takenBy:o.takenBy||null,
-      createdAt:o.createdAt||Date.now(),
-      registradoAt:Date.now(),
-      status:'pendiente'
-    });
-    // Marcar el pedido original como cobrado para sacarlo de pedidos activos
-    await update(ref(db,`orders/${key}`),{status:'cobrado'});
-    // Navegar a deudores
+    // El pedido pasa a status 'deudor' con nombre/apellido guardados en el mismo registro
+    await update(ref(db,`orders/${key}`),{status:'deudor',deudorNombre:nombre,deudorApellido:apellido,deudorRegistradoAt:Date.now()});
     C.adminTab='deudores';render();
   };
 };
@@ -2273,13 +2236,15 @@ window.cobrarDeudor=async key=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
   const pm=await showPaymentChoiceModal(null);
   if(!pm)return;
-  const d=DB.deudores[key];if(!d)return;
-  const total=(d.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-  await update(ref(db,`deudores/${key}`),{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()});
+  const o=DB.orders[key];if(!o)return;
+  const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+  // Pasar el pedido a cobrado, conservando que vino de deuda
+  await update(ref(db,`orders/${key}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now()});
   // Registrar en caja
-  if(total>0){
+  if(total>0&&getCajaAbierta()){
     const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
-    const concepto=`Deudor: ${d.nombre} ${d.apellido} (${pmL[pm]||pm})`;
+    const table=DB.tables[o.tableId];
+    const concepto=`Deudor: ${o.deudorNombre} ${o.deudorApellido} · ${table?table.label:o.tableId} (${pmL[pm]||pm})`;
     const hoy=new Date().toISOString().slice(0,10);
     await push(ref(db,'caja'),{tipo:'venta',concepto,monto:total,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm});
   }
@@ -2312,12 +2277,12 @@ function renderHistoryTab(){
   const fmtTime=ts=>{if(!ts)return'';const d=new Date(ts);return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');};
 
   // Pedidos cobrados normales
-  const ordersCol=Object.entries(DB.orders).map(([k,v])=>({...v,_key:k,_tipo:'pedido'})).filter(o=>o.status==='cobrado');
+  const ordersCol=Object.entries(DB.orders).map(([k,v])=>({...v,_key:k,_tipo:'pedido'})).filter(o=>o.status==='cobrado'&&!o.fromDeuda);
 
-  // Deudas cobradas — usar cobradoAt como fecha de referencia
-  const deudoresCol=Object.entries(DB.deudores||{})
+  // Pedidos cobrados que vinieron de deuda
+  const deudoresCol=Object.entries(DB.orders)
     .map(([k,v])=>({...v,_key:k,_tipo:'deuda'}))
-    .filter(d=>d.status==='cobrado');
+    .filter(o=>o.status==='cobrado'&&o.fromDeuda===true);
 
   // Combinar y ordenar por fecha descendente
   const all=[...ordersCol,...deudoresCol].sort((a,b)=>{
@@ -2373,7 +2338,7 @@ function renderHistoryTab(){
       // Card de deuda cobrada
       h+=`<div class="order-card" style="border-left:3px solid #dc2626">`;
       h+=`<div class="order-header">`;
-      h+=`<div class="order-tname">${o.tableLabel||o.tableId} <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#fee2e2;color:#b91c1c">💳 Deuda</span> <span style="font-size:13px;font-weight:500;color:var(--text)">${o.nombre} ${o.apellido}</span></div>`;
+      h+=`<div class="order-tname">${tableLabel(o.tableId)} <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#fee2e2;color:#b91c1c">💳 Deuda</span> <span style="font-size:13px;font-weight:500;color:var(--text)">${o.deudorNombre||''} ${o.deudorApellido||''}</span></div>`;
       h+=`<div class="order-time">${dateStr}</div>`;
       h+=`</div>`;
       h+=`<div class="order-items-text">`;
