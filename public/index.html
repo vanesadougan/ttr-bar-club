@@ -849,10 +849,10 @@ window.cajaDescargar=()=>{
   URL.revokeObjectURL(a.href);
 };
 window.cajaCierre=async()=>{
-  // 1. Verificar pedidos sin cobrar
+  // 1. Verificar pedidos sin cobrar (los deudores no bloquean el cierre)
   const hoy=new Date().toISOString().slice(0,10);
   const sinCobrar=Object.values(DB.orders).filter(o=>{
-    if(o.status==='cobrado')return false;
+    if(o.status==='cobrado'||o.status==='deudor')return false;
     const fecha=o.createdAt?new Date(o.createdAt).toISOString().slice(0,10):null;
     return fecha===hoy;
   });
