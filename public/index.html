@@ -651,6 +651,7 @@ function renderWaiterMode(){
   const mc=document.getElementById('main-content');
   const step=C.waiterStep||'select';
   if(step==='select')renderWaiterSelectScreen(mc);
+  else if(step==='mesas')renderWaiterMesasScreen(mc);
   else if(step==='mesa')renderWaiterMesaScreen(mc);
   else if(step==='modeChoice')renderWaiterModeChoice(mc);
   else if(step==='nameInput')renderWaiterNameInput(mc);
@@ -664,7 +665,98 @@ function renderWaiterSelectScreen(mc){
   h+=`</div></div></div></div>`;
   mc.innerHTML=h;
 }
-window.selectWaiter=(id,name)=>{C.waiterId=id;C.waiterName=name;C.waiterStep='mesa';render();};
+window.selectWaiter=(id,name)=>{C.waiterId=id;C.waiterName=name;C.waiterStep='mesas';render();};
+
+function renderWaiterMesasScreen(mc){
+  // Pedidos activos tomados por esta moza (pending o delivered sin cobrar)
+  const myOrders=Object.entries(DB.orders)
+    .map(([k,v])=>({...v,_key:k}))
+    .filter(o=>o.takenBy===C.waiterName && o.status!=='cobrado')
+    .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+
+  // Agrupar por mesa
+  const byTable={};
+  myOrders.forEach(o=>{
+    if(!byTable[o.tableId])byTable[o.tableId]=[];
+    byTable[o.tableId].push(o);
+  });
+
+  const initial=`<div style="width:40px;height:40px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;flex-shrink:0">${C.waiterName[0].toUpperCase()}</div>`;
+
+  let h=`<div class="content" style="max-width:640px">`;
+  // Header
+  h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-bottom:1rem;border-bottom:0.5px solid var(--border)">`;
+  h+=`<div style="display:flex;align-items:center;gap:10px">${initial}<div><div style="font-size:18px;font-weight:600">${C.waiterName}</div><div style="font-size:12px;color:var(--muted)">${Object.keys(byTable).length} mesa${Object.keys(byTable).length!==1?'s':''} en curso</div></div></div>`;
+  h+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="setWaiterStep('mesa')">+ Nueva mesa</button><button class="btn btn-ghost btn-sm" onclick="setWaiterStep('select')" style="font-size:12px">Cambiar moza</button></div>`;
+  h+=`</div>`;
+
+  if(Object.keys(byTable).length===0){
+    h+=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted)"><div style="font-size:40px;margin-bottom:12px">🍽️</div><div style="font-size:16px;font-weight:500;margin-bottom:6px">Sin mesas en curso</div><div style="font-size:14px">Tocá "+ Nueva mesa" para tomar el primer pedido</div></div>`;
+  } else {
+    Object.entries(byTable).forEach(([tableId,orders])=>{
+      const table=DB.tables[tableId];
+      const tableLabel=table?table.label:tableId;
+
+      // Construir resumen acumulado de items
+      const itemMap={};
+      orders.filter(o=>o.status!=='cobrado').forEach(o=>{
+        (o.items||[]).forEach(item=>{
+          const key=item.name+(item.selectedType?'|'+item.selectedType:'');
+          if(!itemMap[key])itemMap[key]={name:item.name,type:item.selectedType||null,qty:0,price:item.finalPrice||item.price,statuses:{}};
+          itemMap[key].qty+=item.qty;
+          itemMap[key].statuses[o.status]=(itemMap[key].statuses[o.status]||0)+item.qty;
+        });
+      });
+
+      const totalMesa=orders.filter(o=>o.status!=='cobrado').reduce((s,o)=>{
+        return s+(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0);
+      },0);
+      const pendingCount=orders.filter(o=>o.status==='pending').length;
+      const deliveredCount=orders.filter(o=>o.status==='delivered').length;
+
+      h+=`<div class="card" style="margin-bottom:1rem">`;
+      // Mesa header
+      h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">`;
+      h+=`<div style="display:flex;align-items:center;gap:10px">`;
+      h+=`<div style="font-size:22px;font-weight:700;color:var(--brand)">${tableLabel}</div>`;
+      h+=`<div style="display:flex;gap:6px;flex-wrap:wrap">`;
+      if(pendingCount>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#fef3c7;color:#92400e">⏳ ${pendingCount} pendiente${pendingCount!==1?'s':''}</span>`;
+      if(deliveredCount>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">✓ ${deliveredCount} entregado${deliveredCount!==1?'s':''}</span>`;
+      h+=`</div></div>`;
+      h+=`<button class="btn btn-primary btn-sm" onclick="waiterAddToMesa('${tableId}')">+ Agregar</button>`;
+      h+=`</div>`;
+
+      // Resumen de items
+      h+=`<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:12px">`;
+      Object.values(itemMap).forEach(item=>{
+        const pendQty=item.statuses['pending']||0;
+        const delivQty=item.statuses['delivered']||0;
+        h+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg);border-radius:8px">`;
+        h+=`<span style="flex:1;font-size:13px;font-weight:500">${item.qty}× ${item.name}${item.type?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${item.type}</span>`:''}</span>`;
+        h+=`<span style="font-size:12px;color:var(--muted)">$${((item.finalPrice||item.price||0)*item.qty).toLocaleString()}</span>`;
+        const badges=[];
+        if(pendQty>0)badges.push(`<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e">⏳${pendQty}</span>`);
+        if(delivQty>0)badges.push(`<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:#d1fae5;color:#065f46">✓${delivQty}</span>`);
+        if(badges.length)h+=`<div style="display:flex;gap:3px">${badges.join('')}</div>`;
+        h+=`</div>`;
+      });
+      h+=`</div>`;
+
+      // Total
+      h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;border-top:0.5px solid var(--border)">`;
+      h+=`<span style="font-size:13px;color:var(--muted)">Total acumulado</span>`;
+      h+=`<span style="font-size:16px;font-weight:700;color:var(--accent)">$${totalMesa.toLocaleString()}</span>`;
+      h+=`</div>`;
+      h+=`</div>`;
+    });
+  }
+
+  h+=`</div>`;
+  mc.innerHTML=h;
+}
+window.waiterAddToMesa=tableId=>{
+  C.waiterTableId=tableId;C.waiterCart={};C.waiterStep='modeChoice';render();
+};
 function renderWaiterMesaScreen(mc){
   const tables=Object.entries(DB.tables).map(([k,v])=>({...v,_key:k}));
   let h=`<div class="content"><div class="mesa-screen"><div style="width:100%;max-width:480px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:1.5rem"><div style="width:40px;height:40px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700">${C.waiterName[0].toUpperCase()}</div><div><div style="font-size:16px;font-weight:600">${C.waiterName}</div><div style="font-size:12px;color:var(--muted)">Seleccioná una mesa</div></div></div><div class="mesa-grid">`;
@@ -690,7 +782,7 @@ function renderWaiterMenu(mc){
   const section=C.waiterMenuSection||'platos';
   const ct=waiterCartCount();
   const hasCaf=Object.keys(DB.cafeteriaCategories||{}).length>0||Object.values(DB.cafeteriaItems||{}).filter(d=>!d.unavailable).length>0;
-  let menuH=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;flex-wrap:wrap"><button class="back-btn" onclick="setWaiterStep('modeChoice')">← Mesa</button><div style="font-size:13px;color:var(--muted)"><strong style="color:var(--text)">${table?table.label:''}</strong><span class="${C.waiterOrderMode==='individual'?'order-type-chip ot-individual':'order-type-chip ot-general'}" style="margin-left:6px">${C.waiterOrderMode==='individual'?'👤 '+C.waiterPersonName:'👥 General'}</span><span style="margin-left:6px;font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px">👩 ${C.waiterName}</span></div></div>`;
+  let menuH=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;flex-wrap:wrap"><button class="back-btn" onclick="setWaiterStep('mesas')">← Mis mesas</button><div style="font-size:13px;color:var(--muted)"><strong style="color:var(--text)">${table?table.label:''}</strong><span class="${C.waiterOrderMode==='individual'?'order-type-chip ot-individual':'order-type-chip ot-general'}" style="margin-left:6px">${C.waiterOrderMode==='individual'?'👤 '+C.waiterPersonName:'👥 General'}</span><span style="margin-left:6px;font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px">👩 ${C.waiterName}</span></div></div>`;
   if(hasCaf){menuH+=`<div style="display:flex;background:#f3f4f6;border-radius:10px;padding:3px;gap:2px;margin-bottom:.75rem;width:fit-content"><button onclick="setWaiterSection('platos')" style="padding:6px 16px;border-radius:8px;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:${section==='platos'?'#fff':'transparent'};color:${section==='platos'?'var(--text)':'var(--muted)'}">🍽 Restaurant</button><button onclick="setWaiterSection('cafeteria')" style="padding:6px 16px;border-radius:8px;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:${section==='cafeteria'?'#fff':'transparent'};color:${section==='cafeteria'?'var(--text)':'var(--muted)'}">☕ Cafetería</button></div>`;}
   if(section==='cafeteria'){
     const allItems=Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
@@ -726,7 +818,7 @@ window.setWaiterSection=s=>{C.waiterMenuSection=s;render();};
 window.setWaiterCat=id=>{C.waiterCat=id;render();};
 window.setWaiterCafCat=id=>{C.waiterCafCat=id;render();};
 window.setWaiterStep=s=>{C.waiterStep=s;render();};
-window.waiterNuevaMesa=()=>{C.waiterStep='mesa';C.waiterTableId=null;C.waiterCart={};render();};
+window.waiterNuevaMesa=()=>{C.waiterTableId=null;C.waiterCart={};C.waiterStep='mesas';render();};
 window.waiterLimpiarCarrito=()=>{C.waiterCart={};render();};
 window.waiterQuickAdd=(id,src)=>{if(!C.waiterCart[id])C.waiterCart[id]={qty:0};C.waiterCart[id].qty++;render();};
 window.waiterRemove=id=>{if(C.waiterCart[id]){if(C.waiterCart[id].qty>1)C.waiterCart[id].qty--;else delete C.waiterCart[id];}render();};
@@ -734,7 +826,7 @@ window.waiterPlaceOrder=async()=>{
   if(waiterCartCount()===0)return;
   const items=Object.entries(C.waiterCart).map(([id,v])=>{const dP=DB.dishes[id];const dC=DB.cafeteriaItems[id];const d=dP||dC;if(!d)return null;const isCaf=!!dC;return{name:d.name,qty:v.qty,price:Number(d.price),finalPrice:isCaf?Number(d.price):dishFinalPrice(d,v.qty),excluded:[],selectedType:null,isCafeteria:isCaf,emoji:d.emoji||null};}).filter(Boolean);
   await push(ref(db,'orders'),{tableId:C.waiterTableId,items,status:'pending',time:nowStr(),billRequested:false,orderMode:C.waiterOrderMode,personName:C.waiterOrderMode==='individual'?C.waiterPersonName:null,createdAt:Date.now(),takenBy:C.waiterName});
-  C.waiterCart={};C.waiterStep='mesa';C.waiterTableId=null;render();
+  C.waiterCart={};C.waiterStep='mesas';C.waiterTableId=null;render();
 };
 
 window.toggleCatOpen=id=>{catOpen[id]=!catOpen[id];render();};
