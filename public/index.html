@@ -271,11 +271,12 @@ function getCats(){
 const catOpen={};
 
 // Local reactive state (synced from Firebase)
-let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}, cancellations:{}, cafeteriaItems:{}, cafeteriaCategories:{}, ingredients:{}, waiters:{} };
+let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}, cancellations:{}, cafeteriaItems:{}, cafeteriaCategories:{}, ingredients:{}, waiters:{}, caja:{} };
 
 // Customer flow state (local only)
 let C = {
   mode:'admin', adminTab:'dishes', waiterStep:'select', waiterId:null, waiterName:'', waiterTableId:null, waiterOrderMode:null, waiterPersonName:'', waiterCart:{}, waiterCustDishId:null, waiterCafCustId:null, waiterMenuSection:'platos', waiterCat:null, waiterCafCat:null, waiterPayMesa:null, waiterPayMethod:null,
+  cajaModal:null, cajaGastoTipo:'proveedor', cajaMonto:'', cajaDesc:'', cajaInicial:'',
   customerStep:'mesa', customerTableId:null,
   orderMode:null, customerName:'', customerNameInput:'',
   customerCat:'todos', customerMenuSection:'platos', cart:{}, custDishId:null,
@@ -346,6 +347,7 @@ onValue(ref(db,'cancellations'), snap=>{ DB.cancellations = snap.val()||{}; if(!
 onValue(ref(db,'cafeteriaItems'), snap=>{ DB.cafeteriaItems = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'cafeteriaCategories'), snap=>{ DB.cafeteriaCategories = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'waiters'), snap=>{ DB.waiters = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'caja'), snap=>{ DB.caja = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'ingredients'), snap=>{
   DB.ingredients = snap.val()||{};
   if(!firstLoad) checkIngredientStock();
@@ -562,11 +564,12 @@ function renderAdmin(){
   const pc=pendingCount();
 
   // ── Nivel 1: pestañas principales ──
-  const mainTabs=['tables','menu','stock','orders','history','ratings','mozas'];
+  const mainTabs=['tables','menu','stock','orders','history','ratings','mozas','caja'];
   const mainLabels={
     tables:'Mesas',
     menu:'Menú',
     mozas:'Mozas',
+    caja:'💰 Caja',
     stock:'📦 Stock',
     orders:`Pedidos${pc>0?` <span class="badge">${pc}</span>`:''}`,
     history:'Cobrados',
@@ -574,7 +577,7 @@ function renderAdmin(){
   };
   // Determinar tab activo de nivel 1
   const dishTabs=['dishes','cafeteria'];
-  const activeMain=dishTabs.includes(C.adminTab)?'menu':C.adminTab==='mozas'?'mozas':
+  const activeMain=dishTabs.includes(C.adminTab)?'menu':C.adminTab==='mozas'?'mozas':C.adminTab==='caja'?'caja':
     C.adminTab==='stock_tab'?'stock':C.adminTab;
 
   let h=`<div class="content">`;
@@ -605,6 +608,7 @@ function renderAdmin(){
   else if(activeMain==='history') h+=renderHistoryTab();
   else if(activeMain==='ratings') h+=renderRatingsTab();
   else if(activeMain==='mozas') h+=renderWaitersAdminTab();
+  else if(activeMain==='caja') h+=renderCajaTab();
 
   h+=`</div>`;
   mc.innerHTML=h;
@@ -617,6 +621,7 @@ window.adminMainTab=t=>{
   if(t==='menu'){C.adminTab=C.adminTab==='cafeteria'?'cafeteria':'dishes';}
   else if(t==='stock'){C.adminTab='stock_tab';}
   else if(t==='mozas'){C.adminTab='mozas';}
+  else if(t==='caja'){C.adminTab='caja';}
   else{C.adminTab=t;}
   render();
 };
@@ -643,6 +648,167 @@ window.editWaiter=key=>{C.editingWaiter={...DB.waiters[key],_key:key};render();}
 window.saveEditWaiter=()=>{const {_key,...data}=C.editingWaiter;set(ref(db,`waiters/${_key}`),data);C.editingWaiter=null;render();};
 window.cancelEditWaiter=()=>{C.editingWaiter=null;render();};
 window.deleteWaiter=key=>{if(confirm('¿Eliminar esta moza/mozo?'))remove(ref(db,`waiters/${key}`));};
+
+// ── CAJA DIARIA ───────────────────────────────────
+function getCajaHoy(){
+  const hoy=new Date().toISOString().slice(0,10);
+  return Object.entries(DB.caja||{})
+    .map(([k,v])=>({...v,_key:k}))
+    .filter(m=>m.fecha===hoy)
+    .sort((a,b)=>a.ts-b.ts);
+}
+function getCajaAbierta(){
+  const hoy=new Date().toISOString().slice(0,10);
+  return Object.values(DB.caja||{}).some(m=>m.fecha===hoy&&m.tipo==='apertura');
+}
+function renderCajaTab(){
+  const movs=getCajaHoy();
+  const abierta=getCajaAbierta();
+  const hoy=new Date().toLocaleDateString('es-AR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const pmLabels={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+
+  // Calcular saldo
+  const saldo=movs.reduce((s,m)=>s+(m.monto||0),0);
+  const ingresos=movs.filter(m=>m.monto>0).reduce((s,m)=>s+m.monto,0);
+  const egresos=movs.filter(m=>m.monto<0).reduce((s,m)=>s+m.monto,0);
+
+  let h='<div style="max-width:720px">';
+
+  // Header caja
+  h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:10px">`;
+  h+=`<div><div style="font-size:18px;font-weight:600">💰 Caja del día</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${hoy}</div></div>`;
+  h+=`<div style="display:flex;gap:8px;flex-wrap:wrap">`;
+  if(!abierta){
+    h+=`<button class="btn btn-primary" onclick="cajaApertura()">Apertura de caja</button>`;
+  } else {
+    h+=`<button class="btn btn-outline btn-sm" onclick="cajaGasto()">+ Cargar gasto</button>`;
+    h+=`<button onclick="cajaCierre()" style="padding:6px 14px;border-radius:8px;border:0.5px solid #065f46;background:#d1fae5;color:#065f46;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Cierre de caja ↓</button>`;
+  }
+  h+=`</div></div>`;
+
+  if(!abierta){
+    h+=`<div style="text-align:center;padding:4rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">`;
+    h+=`<div style="font-size:40px;margin-bottom:12px">🔒</div>`;
+    h+=`<div style="font-size:16px;font-weight:500;margin-bottom:6px">Caja cerrada</div>`;
+    h+=`<div style="font-size:13px">Realizá la apertura para registrar movimientos del día</div>`;
+    h+=`</div>`;
+  } else {
+    // Métricas resumen
+    h+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem">`;
+    h+=`<div class="card" style="text-align:center;padding:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Ingresos</div><div style="font-size:20px;font-weight:700;color:#065f46">$${ingresos.toLocaleString('es-AR')}</div></div>`;
+    h+=`<div class="card" style="text-align:center;padding:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Egresos</div><div style="font-size:20px;font-weight:700;color:#b91c1c">$${Math.abs(egresos).toLocaleString('es-AR')}</div></div>`;
+    h+=`<div class="card" style="text-align:center;padding:14px;border-color:${saldo>=0?'#10b981':'#ef4444'}"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Saldo</div><div style="font-size:20px;font-weight:700;color:${saldo>=0?'var(--accent)':'#b91c1c'}">$${saldo.toLocaleString('es-AR')}</div></div>`;
+    h+=`</div>`;
+
+    // Formulario modal si está abierto
+    if(C.cajaModal==='gasto'){
+      h+=`<div class="card" style="margin-bottom:1.25rem;border-color:var(--accent)">`;
+      h+=`<div class="card-title">Cargar gasto</div>`;
+      h+=`<div class="two-col" style="margin-bottom:10px">`;
+      const cats=[{v:'proveedor',l:'🏪 Gasto proveedor'},{v:'personal',l:'👥 Pago personal'}];
+      cats.forEach(c=>{const sel=(C.cajaGastoTipo||'')==c.v;h+=`<button onclick="setCajaGastoTipo('${c.v}')" style="padding:10px;border-radius:8px;border:0.5px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'#fff5f7':'var(--card)'};color:${sel?'var(--accent)':'var(--text)'};font-size:13px;font-weight:${sel?'600':'400'};cursor:pointer;font-family:inherit">${c.l}</button>`;});
+      h+=`</div>`;
+      h+=`<div class="two-col"><div class="form-group" style="margin-bottom:10px"><label>Monto ($)</label><input type="number" min="0" placeholder="0" id="caja-monto" value="${C.cajaMonto||''}" oninput="C.cajaMonto=this.value"></div>`;
+      h+=`<div class="form-group" style="margin-bottom:10px"><label>Descripción <span style="font-size:11px;color:var(--muted)">(opcional)</span></label><input placeholder="Ej: Verdulería, Sueldo..." id="caja-desc" value="${C.cajaDesc||''}" oninput="C.cajaDesc=this.value"></div></div>`;
+      h+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="cajaGuardarGasto()">Guardar gasto</button><button class="btn btn-ghost" onclick="cajaCancelarModal()">Cancelar</button></div>`;
+      h+=`</div>`;
+    }
+    if(C.cajaModal==='apertura'){
+      h+=`<div class="card" style="margin-bottom:1.25rem;border-color:var(--accent)">`;
+      h+=`<div class="card-title">Apertura de caja</div>`;
+      h+=`<div class="form-group" style="margin-bottom:10px"><label>Saldo inicial ($) <span style="font-size:11px;color:var(--muted)">(opcional)</span></label><input type="number" min="0" placeholder="0" id="caja-inicial" value="${C.cajaInicial||''}"></div>`;
+      h+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="cajaConfirmarApertura()">Confirmar apertura</button><button class="btn btn-ghost" onclick="cajaCancelarModal()">Cancelar</button></div>`;
+      h+=`</div>`;
+    }
+
+    // Tabla de movimientos
+    h+=`<div class="card">`;
+    h+=`<div style="display:grid;grid-template-columns:90px 1fr auto auto;gap:0;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:0 8px 8px;border-bottom:0.5px solid var(--border)">`;
+    h+=`<span>Hora</span><span>Concepto</span><span style="text-align:right">Debe</span><span style="text-align:right">Haber</span></div>`;
+    if(movs.length===0){h+=`<div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">Sin movimientos aún</div>`;}
+    movs.forEach((m,i)=>{
+      const hora=new Date(m.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+      const esIngreso=m.monto>=0;
+      const bg=i%2===0?'':'background:#fafaf9';
+      h+=`<div style="display:grid;grid-template-columns:90px 1fr auto auto;gap:8px;padding:8px 8px;border-bottom:0.5px solid var(--border);align-items:center;${bg}">`;
+      h+=`<span style="font-size:12px;color:var(--muted)">${hora}</span>`;
+      h+=`<span style="font-size:13px">${m.concepto}${m.desc?` <span style="font-size:11px;color:var(--muted)">· ${m.desc}</span>`:''}</span>`;
+      h+=`<span style="font-size:13px;font-weight:500;text-align:right;color:${esIngreso?'var(--muted)':'#b91c1c'}">${!esIngreso?'$'+Math.abs(m.monto).toLocaleString('es-AR'):''}</span>`;
+      h+=`<span style="font-size:13px;font-weight:500;text-align:right;color:${esIngreso?'#065f46':'var(--muted)'}">${esIngreso?'$'+m.monto.toLocaleString('es-AR'):''}</span>`;
+      h+=`</div>`;
+    });
+    // Totales finales
+    h+=`<div style="display:grid;grid-template-columns:90px 1fr auto auto;gap:8px;padding:10px 8px;font-weight:700;font-size:14px;background:#f8f7f4">`;
+    h+=`<span></span><span>SALDO</span>`;
+    h+=`<span style="text-align:right;color:#b91c1c">${egresos<0?'$'+Math.abs(egresos).toLocaleString('es-AR'):''}</span>`;
+    h+=`<span style="text-align:right;color:#065f46">$${ingresos.toLocaleString('es-AR')}</span>`;
+    h+=`</div>`;
+    h+=`</div>`;
+  }
+  h+=`</div>`;
+  return h;
+}
+
+// Apertura
+window.cajaApertura=()=>{C.cajaModal='apertura';C.cajaInicial='';render();};
+window.cajaConfirmarApertura=async()=>{
+  const inp=document.getElementById('caja-inicial');
+  const monto=Number(inp?inp.value:0)||0;
+  const hoy=new Date().toISOString().slice(0,10);
+  if(monto>0){
+    await push(ref(db,'caja'),{tipo:'apertura',concepto:'Saldo inicial',monto,fecha:hoy,ts:Date.now(),desc:''});
+  } else {
+    await push(ref(db,'caja'),{tipo:'apertura',concepto:'Apertura de caja',monto:0,fecha:hoy,ts:Date.now(),desc:''});
+  }
+  C.cajaModal=null;render();
+};
+// Gasto
+window.cajaGasto=()=>{C.cajaModal='gasto';C.cajaGastoTipo='proveedor';C.cajaMonto='';C.cajaDesc='';render();};
+window.setCajaGastoTipo=t=>{C.cajaGastoTipo=t;render();};
+window.cajaGuardarGasto=async()=>{
+  const monto=Number(C.cajaMonto||0);
+  if(!monto||monto<=0){alert('Ingresá un monto mayor a 0');return;}
+  const tipo=C.cajaGastoTipo||'proveedor';
+  const concepto=tipo==='personal'?'Pago personal':'Gasto proveedor';
+  const hoy=new Date().toISOString().slice(0,10);
+  await push(ref(db,'caja'),{tipo,concepto,monto:-monto,fecha:hoy,ts:Date.now(),desc:C.cajaDesc||''});
+  C.cajaModal=null;C.cajaMonto='';C.cajaDesc='';render();
+};
+window.cajaCancelarModal=()=>{C.cajaModal=null;render();};
+
+// Cierre — genera Excel con SheetJS via CDN
+window.cajaCierre=()=>{
+  const movs=getCajaHoy();
+  const hoy=new Date().toLocaleDateString('es-AR');
+  // Construir CSV simple si no hay SheetJS
+  const rows=[['Hora','Concepto','Descripción','Debe','Haber','Saldo']];
+  let saldoAcum=0;
+  movs.forEach(m=>{
+    const hora=new Date(m.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    saldoAcum+=m.monto;
+    rows.push([
+      hora,
+      m.concepto,
+      m.desc||'',
+      m.monto<0?Math.abs(m.monto):'',
+      m.monto>=0?m.monto:'',
+      saldoAcum
+    ]);
+  });
+  const ingresos=movs.filter(m=>m.monto>0).reduce((s,m)=>s+m.monto,0);
+  const egresos=movs.filter(m=>m.monto<0).reduce((s,m)=>s+m.monto,0);
+  rows.push([]);
+  rows.push(['','TOTALES','',Math.abs(egresos),ingresos,saldoAcum]);
+
+  // Generar CSV
+  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`caja_${hoy.replace(/\//g,'-')}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
 
 // ── MODO MOZO/A ───────────────────────────────────
 function renderWaiterMode(){
@@ -904,7 +1070,7 @@ function renderWaiterMenu(mc){
     });
     menuH+='</div>';
   }
-  // Modal picker
+  // Modal picker — idéntico al del comensal
   const custId=C.waiterCustDishId;
   if(custId){
     const d=DB.dishes[custId]||DB.cafeteriaItems[custId];
@@ -912,21 +1078,29 @@ function renderWaiterMenu(mc){
       const isCaf=!!DB.cafeteriaItems[custId];const src=isCaf?'caf':'dish';
       const hasTypes=!isCaf&&d.hasTypes&&(d.types||[]).length>0;
       const hasCustom=d.customizable&&(d.ingredients||[]).length>0;
-      const selType=C.waiterPickType||null;const selExcl=C.waiterPickExcl||[];
-      let modal='<div class="cust-modal"><div style="font-size:15px;font-weight:600;margin-bottom:12px">'+d.name+'</div>';
+      const selType=C.waiterPickType||null;
+      const selExcl=new Set(C.waiterPickExcl||[]);
+      const catIcon=!isCaf?(getCats().find(c=>c._key===d.cat)||{}).icon||'🍽':(d.emoji||'☕');
+      menuH+=`<div class="cust-modal">`;
+      menuH+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:20px">${catIcon}</span><div><div style="font-size:16px;font-weight:500">${d.name}</div><div style="font-size:12px;color:var(--muted)">${hasTypes&&!selType?'Elegí una variante':'Destildá lo que no querés'}</div></div></div>`;
       if(hasTypes){
-        modal+='<div style="font-size:13px;font-weight:500;margin-bottom:8px;color:var(--muted)">Elegí una variante</div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">';
-        (d.types||[]).forEach(t=>{modal+='<button onclick="waiterPickType(\''+t.replace(/'/g,"\\'")+'\')" style="padding:6px 14px;border-radius:20px;border:0.5px solid '+(selType===t?'var(--accent)':'var(--border)')+';background:'+(selType===t?'var(--accent)':'var(--card)')+';color:'+(selType===t?'#fff':'var(--text)')+';font-size:13px;cursor:pointer;font-family:inherit">'+t+'</button>';});
-        modal+='</div>';
+        menuH+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">`;
+        (d.types||[]).forEach(t=>{
+          const sel=selType===t;
+          menuH+=`<button onclick="waiterPickType('${t.replace(/'/g,"\\'")}' )" style="padding:8px 16px;border-radius:20px;border:0.5px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'var(--accent)':'var(--card)'};color:${sel?'#fff':'var(--text)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${t}</button>`;
+        });
+        menuH+=`</div>`;
       }
-      if(hasCustom){
-        modal+='<div style="font-size:13px;font-weight:500;margin-bottom:8px;color:var(--muted)">Personalizar ingredientes</div><div class="cust-ing-list">';
-        (d.ingredients||[]).forEach(ing=>{const excl=selExcl.includes(ing);modal+='<div class="cust-ing-row'+(excl?' excluded':'')+'" onclick="waiterToggleExcl(\''+ing.replace(/'/g,"\\'")+'\')"><span class="'+(excl?'strikethrough':'')+'">'+ing+'</span><div class="cust-check'+(excl?'':' checked')+'">'+(excl?'':'✓')+'</div></div>';});
-        modal+='</div>';
+      if(hasCustom&&(!hasTypes||selType)){
+        menuH+=`<div class="cust-ing-list">`;
+        (d.ingredients||[]).forEach(ing=>{
+          const ex=selExcl.has(ing);
+          menuH+=`<div class="cust-ing-row${ex?' excluded':''}" onclick="waiterToggleExcl('${ing.replace(/'/g,"\\'")}')"><div style="display:flex;align-items:center;gap:8px"><div class="cust-check ${ex?'unchecked':'checked'}">${ex?'':'✓'}</div><span class="${ex?'strikethrough':''}">${ing}</span></div>${ex?`<span style="font-size:11px;color:#b45309">Sin esto</span>`:''}</div>`;
+        });
+        menuH+=`</div>`;
       }
       const canConfirm=!hasTypes||selType;
-      modal+='<div style="display:flex;gap:8px"><button class="btn btn-primary" '+(canConfirm?'':'disabled style="opacity:.4"')+' onclick="waiterConfirmDish(\''+custId+'\',\''+src+'\')">Agregar al pedido</button><button class="btn btn-ghost" onclick="waiterCancelPick()">Cancelar</button></div></div>';
-      menuH+=modal;
+      menuH+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" ${canConfirm?'':'disabled'} onclick="waiterConfirmDish('${custId}','${src}')">Agregar al pedido</button><button class="btn btn-ghost" onclick="waiterCancelPick()">Cancelar</button></div></div>`;
     }
   }
   // Carrito
@@ -995,6 +1169,7 @@ window.waiterToggleExcl=ing=>{
   if(!C.waiterPickExcl)C.waiterPickExcl=[];
   const i=C.waiterPickExcl.indexOf(ing);
   if(i>=0)C.waiterPickExcl.splice(i,1);else C.waiterPickExcl.push(ing);
+  // Re-render solo el modal sin full render para no perder scroll
   render();
 };
 window.waiterConfirmDish=(dishId,src)=>{
@@ -2321,7 +2496,25 @@ window.dismissCancellation=async()=>{
   C.customerStep='menu';
   render();
 };
-window.markCobrado=key=>update(ref(db,`orders/${key}`),{status:'cobrado'});
+window.markCobrado=async key=>{
+  await update(ref(db,`orders/${key}`),{status:'cobrado'});
+  // Si la caja está abierta hoy, registrar ingreso automáticamente
+  if(getCajaAbierta()){
+    const o=DB.orders[key];
+    if(o&&o.items){
+      const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+      if(total>0){
+        const table=DB.tables[o.tableId];
+        const tLabel=table?table.label:o.tableId;
+        const pm=o.paymentMethod;
+        const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+        const concepto=`${tLabel}${o.personName?' · '+o.personName:''}${pm?' ('+pmL[pm]+')':''}`;
+        const hoy=new Date().toISOString().slice(0,10);
+        await push(ref(db,'caja'),{tipo:'venta',concepto,monto:total,fecha:hoy,ts:Date.now(),desc:''});
+      }
+    }
+  }
+};
 window.clearHistory=async()=>{
   const cobradoKeys=Object.entries(DB.orders).filter(([,o])=>o.status==='cobrado').map(([k])=>k);
   if(!cobradoKeys.length)return;
