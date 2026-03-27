@@ -723,26 +723,40 @@ function renderCajaTab(){
     }
 
     // Tabla de movimientos
-    h+=`<div class="card">`;
-    h+=`<div style="display:grid;grid-template-columns:90px 1fr auto auto;gap:0;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;padding:0 8px 8px;border-bottom:0.5px solid var(--border)">`;
-    h+=`<span>Hora</span><span>Concepto</span><span style="text-align:right">Debe</span><span style="text-align:right">Haber</span></div>`;
-    if(movs.length===0){h+=`<div style="padding:2rem;text-align:center;color:var(--muted);font-size:13px">Sin movimientos aún</div>`;}
+    h+=`<div class="card" style="padding:0;overflow:hidden">`;
+    // Header
+    h+=`<div style="display:grid;grid-template-columns:80px 1fr 110px 110px;background:#f8f7f4;padding:10px 16px;border-bottom:1.5px solid var(--border)">`;
+    h+=`<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Hora</span>`;
+    h+=`<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Concepto</span>`;
+    h+=`<span style="font-size:11px;font-weight:700;color:#b91c1c;text-transform:uppercase;letter-spacing:.06em;text-align:right">Debe (−)</span>`;
+    h+=`<span style="font-size:11px;font-weight:700;color:#065f46;text-transform:uppercase;letter-spacing:.06em;text-align:right">Haber (+)</span>`;
+    h+=`</div>`;
+    if(movs.length===0){
+      h+=`<div style="padding:2.5rem;text-align:center;color:var(--muted);font-size:13px">Sin movimientos aún</div>`;
+    }
     movs.forEach((m,i)=>{
       const hora=new Date(m.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
       const esIngreso=m.monto>=0;
-      const bg=i%2===0?'':'background:#fafaf9';
-      h+=`<div style="display:grid;grid-template-columns:90px 1fr auto auto;gap:8px;padding:8px 8px;border-bottom:0.5px solid var(--border);align-items:center;${bg}">`;
+      const rowBg=i%2===0?'background:#fff':'background:#fafaf9';
+      h+=`<div style="display:grid;grid-template-columns:80px 1fr 110px 110px;padding:10px 16px;border-bottom:0.5px solid var(--border);align-items:center;${rowBg}">`;
       h+=`<span style="font-size:12px;color:var(--muted)">${hora}</span>`;
-      h+=`<span style="font-size:13px">${m.concepto}${m.desc?` <span style="font-size:11px;color:var(--muted)">· ${m.desc}</span>`:''}</span>`;
-      h+=`<span style="font-size:13px;font-weight:500;text-align:right;color:${esIngreso?'var(--muted)':'#b91c1c'}">${!esIngreso?'$'+Math.abs(m.monto).toLocaleString('es-AR'):''}</span>`;
-      h+=`<span style="font-size:13px;font-weight:500;text-align:right;color:${esIngreso?'#065f46':'var(--muted)'}">${esIngreso?'$'+m.monto.toLocaleString('es-AR'):''}</span>`;
+      h+=`<span style="font-size:13px;font-weight:500">${m.concepto}${m.desc?`<span style="font-size:11px;color:var(--muted);font-weight:400"> · ${m.desc}</span>`:''}</span>`;
+      // Debe
+      h+=`<div style="text-align:right">`;
+      if(!esIngreso) h+=`<span style="font-size:13px;font-weight:600;color:#b91c1c;background:#fef2f2;padding:2px 8px;border-radius:6px">$${Math.abs(m.monto).toLocaleString('es-AR')}</span>`;
+      h+=`</div>`;
+      // Haber
+      h+=`<div style="text-align:right">`;
+      if(esIngreso) h+=`<span style="font-size:13px;font-weight:600;color:#065f46;background:#f0fdf4;padding:2px 8px;border-radius:6px">$${m.monto.toLocaleString('es-AR')}</span>`;
+      h+=`</div>`;
       h+=`</div>`;
     });
-    // Totales finales
-    h+=`<div style="display:grid;grid-template-columns:90px 1fr auto auto;gap:8px;padding:10px 8px;font-weight:700;font-size:14px;background:#f8f7f4">`;
-    h+=`<span></span><span>SALDO</span>`;
-    h+=`<span style="text-align:right;color:#b91c1c">${egresos<0?'$'+Math.abs(egresos).toLocaleString('es-AR'):''}</span>`;
-    h+=`<span style="text-align:right;color:#065f46">$${ingresos.toLocaleString('es-AR')}</span>`;
+    // Fila totales
+    h+=`<div style="display:grid;grid-template-columns:80px 1fr 110px 110px;padding:12px 16px;background:#1a1a2e;align-items:center;border-top:2px solid var(--border)">`;
+    h+=`<span></span>`;
+    h+=`<span style="font-size:13px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.05em">Saldo del día</span>`;
+    h+=`<div style="text-align:right">${egresos<0?`<span style="font-size:14px;font-weight:700;color:#fca5a5">$${Math.abs(egresos).toLocaleString('es-AR')}</span>`:''}</div>`;
+    h+=`<div style="text-align:right"><span style="font-size:15px;font-weight:700;color:${saldo>=0?'#86efac':'#fca5a5'}">$${saldo.toLocaleString('es-AR')}</span></div>`;
     h+=`</div>`;
     h+=`</div>`;
   }
