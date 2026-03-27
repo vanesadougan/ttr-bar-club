@@ -3120,6 +3120,7 @@ window.confirmCust=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.c
 window.quickAdd=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;renderMenuWithCart(document.getElementById('main-content'));};
 window.removeFromCart=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;else delete C.cart[id];}renderMenuWithCart(document.getElementById('main-content'));};
 window.setCat=c=>{C.customerCat=c;C.custDishId=null;render();};
+window.setCafCat=c=>{C.cafCat=c;render();};
 window.setMenuSection=section=>{C.customerMenuSection=section;C.cafCat='todos';C.custDishId=null;render();};
 window.initCustomerCat=()=>{
   const cats=getCats();
