@@ -862,15 +862,10 @@ window.cajaCierre=async()=>{
   if(!ok)return;
   // 3. Descargar CSV
   cajaDescargarArchivo(movs);
-  // 4. Eliminar todos los movimientos de caja (ya quedaron en el CSV)
-  const movKeys=Object.entries(DB.caja||{})
-    .filter(([k])=>k!=='_cajaEstado'&&k!=='__estado')
-    .map(([k])=>k);
-  for(const k of movKeys){
-    await remove(ref(db,`caja/${k}`));
-  }
-  // 5. Cerrar el flag global
+  // 4. Eliminar todos los movimientos: borrar todo /caja y recrear solo el estado
   const hoy2=new Date().toISOString().slice(0,10);
+  await remove(ref(db,'caja'));
+  // 5. Escribir solo el flag de cierre
   await set(ref(db,'caja/_cajaEstado'),{abierta:false,fechaCierre:hoy2,ts:Date.now()});
   render();
 };
