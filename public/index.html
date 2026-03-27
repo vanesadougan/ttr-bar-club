@@ -271,7 +271,7 @@ function getCats(){
 const catOpen={};
 
 // Local reactive state (synced from Firebase)
-let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}, cancellations:{}, cafeteriaItems:{}, cafeteriaCategories:{}, ingredients:{}, waiters:{}, caja:{} };
+let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}, cancellations:{}, cafeteriaItems:{}, cafeteriaCategories:{}, ingredients:{}, waiters:{}, caja:{}, deudores:{} };
 
 // Customer flow state (local only)
 let C = {
@@ -348,6 +348,7 @@ onValue(ref(db,'cafeteriaItems'), snap=>{ DB.cafeteriaItems = snap.val()||{}; if
 onValue(ref(db,'cafeteriaCategories'), snap=>{ DB.cafeteriaCategories = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'waiters'), snap=>{ DB.waiters = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'caja'), snap=>{ DB.caja = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'deudores'), snap=>{ DB.deudores = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'ingredients'), snap=>{
   DB.ingredients = snap.val()||{};
   if(!firstLoad) checkIngredientStock();
@@ -566,12 +567,13 @@ function renderAdmin(){
   const pc=pendingCount();
 
   // ── Nivel 1: pestañas principales ──
-  const mainTabs=['tables','menu','stock','orders','history','ratings','mozas','caja'];
+  const mainTabs=['tables','menu','stock','orders','history','ratings','mozas','caja','deudores'];
   const mainLabels={
     tables:'Mesas',
     menu:'Menú',
     mozas:'Mozas',
     caja:'💰 Caja',
+    deudores:'💳 Deudores',
     stock:'📦 Stock',
     orders:`Pedidos${pc>0?` <span class="badge">${pc}</span>`:''}`,
     history:'Cobrados',
@@ -579,7 +581,7 @@ function renderAdmin(){
   };
   // Determinar tab activo de nivel 1
   const dishTabs=['dishes','cafeteria'];
-  const activeMain=dishTabs.includes(C.adminTab)?'menu':C.adminTab==='mozas'?'mozas':C.adminTab==='caja'?'caja':
+  const activeMain=dishTabs.includes(C.adminTab)?'menu':C.adminTab==='mozas'?'mozas':C.adminTab==='caja'?'caja':C.adminTab==='deudores'?'deudores':
     C.adminTab==='stock_tab'?'stock':C.adminTab;
 
   let h=`<div class="content">`;
@@ -611,6 +613,7 @@ function renderAdmin(){
   else if(activeMain==='ratings') h+=renderRatingsTab();
   else if(activeMain==='mozas') h+=renderWaitersAdminTab();
   else if(activeMain==='caja') h+=renderCajaTab();
+  else if(activeMain==='deudores') h+=renderDeudoresTab();
 
   h+=`</div>`;
   mc.innerHTML=h;
@@ -624,6 +627,7 @@ window.adminMainTab=t=>{
   else if(t==='stock'){C.adminTab='stock_tab';}
   else if(t==='mozas'){C.adminTab='mozas';}
   else if(t==='caja'){C.adminTab='caja';}
+  else if(t==='deudores'){C.adminTab='deudores';}
   else{C.adminTab=t;}
   render();
 };
@@ -2143,15 +2147,144 @@ function renderOrdersTab(){
     if(o.status==='pending'){
       h+=`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`;
       h+=`<button class="btn btn-sm" onclick="adminEditOrder('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️ Editar</button>`;
+      h+=`<button class="btn btn-sm" onclick="marcarDeudor('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor</button>`;
     }
     if(o.status==='delivered'){
       h+=`<button class="btn btn-sm" onclick="markCobrado('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
       h+=` <button class="btn btn-sm" onclick="printOrderPDF('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #0369a1;color:#0369a1;background:#e0f2fe;cursor:pointer;font-family:inherit">📄 PDF</button>`;
+      h+=` <button class="btn btn-sm" onclick="marcarDeudor('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor</button>`;
     }
     h+=`</div></div></div>`;
   });
   return h+`</div>`;
 }
+
+// ── DEUDORES TAB ──────────────────────────────────
+function renderDeudoresTab(){
+  const deudores=Object.entries(DB.deudores||{})
+    .map(([k,v])=>({...v,_key:k}))
+    .filter(d=>d.status!=='cobrado')
+    .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const cobrados=Object.entries(DB.deudores||{})
+    .map(([k,v])=>({...v,_key:k}))
+    .filter(d=>d.status==='cobrado')
+    .sort((a,b)=>(b.cobradoAt||0)-(a.cobradoAt||0))
+    .slice(0,10); // últimos 10 cobrados
+
+  let h='<div style="max-width:720px">';
+  h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">`;
+  h+=`<div><div style="font-size:18px;font-weight:600">💳 Deudores</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${deudores.length} deuda${deudores.length!==1?'s':''} pendiente${deudores.length!==1?'s':''}</div></div>`;
+  h+=`</div>`;
+
+  if(deudores.length===0){
+    h+=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px;margin-bottom:1.5rem">`;
+    h+=`<div style="font-size:40px;margin-bottom:12px">✅</div>`;
+    h+=`<div style="font-size:16px;font-weight:500">Sin deudas pendientes</div>`;
+    h+=`</div>`;
+  } else {
+    deudores.forEach(d=>{
+      const fecha=d.createdAt?new Date(d.createdAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
+      const total=(d.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+      const table=DB.tables[d.tableId];
+      h+=`<div class="card" style="margin-bottom:.875rem;border-left:3px solid #dc2626">`;
+      h+=`<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">`;
+      h+=`<div>`;
+      h+=`<div style="font-size:16px;font-weight:700">${d.nombre} ${d.apellido}</div>`;
+      h+=`<div style="font-size:12px;color:var(--muted);margin-top:2px">${fecha} · ${table?table.label:d.tableId}${d.personName?' · '+d.personName:''}</div>`;
+      h+=`</div>`;
+      h+=`<div style="font-size:20px;font-weight:700;color:#dc2626">$${total.toLocaleString()}</div>`;
+      h+=`</div>`;
+      // Items
+      h+=`<div style="display:flex;flex-direction:column;gap:3px;margin-bottom:12px">`;
+      (d.items||[]).forEach(i=>{
+        h+=`<div style="font-size:13px;color:var(--muted)">${i.qty}× <strong style="color:var(--text)">${i.name}</strong>${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:''} <span style="color:var(--accent)">$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;
+      });
+      h+=`</div>`;
+      h+=`<button onclick="cobrarDeudor('${d._key}')" style="width:100%;padding:9px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrado ✓ — registrar pago</button>`;
+      h+=`</div>`;
+    });
+  }
+
+  // Historial de cobrados recientes
+  if(cobrados.length>0){
+    h+=`<div style="margin-top:1.5rem"><div style="font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">Cobrados recientemente</div>`;
+    cobrados.forEach(d=>{
+      const fecha=d.cobradoAt?new Date(d.cobradoAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}):'—';
+      const total=(d.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+      const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+      h+=`<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border);margin-bottom:6px">`;
+      h+=`<div style="flex:1"><div style="font-size:13px;font-weight:500">${d.nombre} ${d.apellido}</div><div style="font-size:11px;color:var(--muted)">${fecha}${d.paymentMethod?' · '+pmL[d.paymentMethod]:''}</div></div>`;
+      h+=`<div style="font-size:14px;font-weight:700;color:#065f46">$${total.toLocaleString()}</div>`;
+      h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">✓ Cobrado</span>`;
+      h+=`</div>`;
+    });
+    h+=`</div>`;
+  }
+
+  h+=`</div>`;
+  return h;
+}
+
+window.marcarDeudor=async key=>{
+  const o=DB.orders[key];if(!o)return;
+  // Pedir nombre y apellido via modal
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="font-size:16px;font-weight:600;margin-bottom:4px">💳 Registrar deudor</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:16px">Ingresá los datos del deudor para registrar la deuda pendiente</div>
+    <div class="form-group" style="margin-bottom:10px"><label>Nombre</label><input id="deudor-nombre" placeholder="Nombre" style="width:100%;padding:8px 10px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:14px;font-family:inherit"></div>
+    <div class="form-group" style="margin-bottom:16px"><label>Apellido</label><input id="deudor-apellido" placeholder="Apellido" style="width:100%;padding:8px 10px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:14px;font-family:inherit"></div>
+    <div style="display:flex;gap:8px">
+      <button id="deudor-ok" class="btn btn-primary" style="flex:1">Registrar deuda</button>
+      <button id="deudor-cancel" class="btn btn-ghost">Cancelar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(()=>document.getElementById('deudor-nombre')?.focus(),50);
+  const cleanup=()=>document.body.removeChild(overlay);
+  document.getElementById('deudor-cancel').onclick=cleanup;
+  overlay.addEventListener('click',e=>{if(e.target===overlay)cleanup();});
+  document.getElementById('deudor-ok').onclick=async()=>{
+    const nombre=(document.getElementById('deudor-nombre')?.value||'').trim();
+    const apellido=(document.getElementById('deudor-apellido')?.value||'').trim();
+    if(!nombre||!apellido){alert('Ingresá nombre y apellido');return;}
+    cleanup();
+    const table=DB.tables[o.tableId];
+    await push(ref(db,'deudores'),{
+      nombre,apellido,
+      tableId:o.tableId,tableLabel:table?table.label:o.tableId,
+      personName:o.personName||null,
+      items:o.items||[],
+      orderMode:o.orderMode||null,
+      takenBy:o.takenBy||null,
+      createdAt:o.createdAt||Date.now(),
+      registradoAt:Date.now(),
+      status:'pendiente'
+    });
+    // Marcar el pedido original como cobrado para sacarlo de pedidos activos
+    await update(ref(db,`orders/${key}`),{status:'cobrado'});
+    // Navegar a deudores
+    C.adminTab='deudores';render();
+  };
+};
+
+window.cobrarDeudor=async key=>{
+  if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
+  const pm=await showPaymentChoiceModal(null);
+  if(!pm)return;
+  const d=DB.deudores[key];if(!d)return;
+  const total=(d.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+  await update(ref(db,`deudores/${key}`),{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()});
+  // Registrar en caja
+  if(total>0){
+    const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+    const concepto=`Deudor: ${d.nombre} ${d.apellido} (${pmL[pm]||pm})`;
+    const hoy=new Date().toISOString().slice(0,10);
+    await push(ref(db,'caja'),{tipo:'venta',concepto,monto:total,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm});
+  }
+  render();
+};
 
 // ── RATINGS TAB ───────────────────────────────────
 function renderRatingsTab(){
