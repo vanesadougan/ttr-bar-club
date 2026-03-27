@@ -654,12 +654,13 @@ function getCajaHoy(){
   const hoy=new Date().toISOString().slice(0,10);
   return Object.entries(DB.caja||{})
     .map(([k,v])=>({...v,_key:k}))
-    .filter(m=>m.fecha===hoy)
+    .filter(m=>m.fecha===hoy&&!m.cerrado)
     .sort((a,b)=>a.ts-b.ts);
 }
 function getCajaAbierta(){
   const hoy=new Date().toISOString().slice(0,10);
-  return Object.values(DB.caja||{}).some(m=>m.fecha===hoy&&m.tipo==='apertura');
+  // Abierta si hay apertura hoy Y no está cerrada
+  return Object.values(DB.caja||{}).some(m=>m.fecha===hoy&&m.tipo==='apertura'&&!m.cerrado);
 }
 function renderCajaTab(){
   const movs=getCajaHoy();
@@ -682,7 +683,8 @@ function renderCajaTab(){
     h+=`<button class="btn btn-primary" onclick="cajaApertura()">Apertura de caja</button>`;
   } else {
     h+=`<button class="btn btn-outline btn-sm" onclick="cajaGasto()">+ Cargar gasto</button>`;
-    h+=`<button onclick="cajaCierre()" style="padding:6px 14px;border-radius:8px;border:0.5px solid #065f46;background:#d1fae5;color:#065f46;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Cierre de caja ↓</button>`;
+    h+=`<button class="btn btn-ghost btn-sm" onclick="cajaDescargar()" style="border-color:var(--border)">↓ Descargar estado</button>`;
+    h+=`<button onclick="cajaCierre()" style="padding:6px 14px;border-radius:8px;border:0.5px solid #b91c1c;background:#fee2e2;color:#b91c1c;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">🔒 Cierre de caja</button>`;
   }
   h+=`</div></div>`;
 
@@ -796,37 +798,66 @@ window.cajaGuardarGasto=async()=>{
 window.cajaCancelarModal=()=>{C.cajaModal=null;render();};
 
 // Cierre — genera Excel con SheetJS via CDN
-window.cajaCierre=()=>{
-  const movs=getCajaHoy();
-  const hoy=new Date().toLocaleDateString('es-AR');
-  // Construir CSV simple si no hay SheetJS
-  const rows=[['Hora','Concepto','Descripción','Debe','Haber','Saldo']];
+function cajaGenerarCSV(movs, hoy){
+  const rows=[['Hora','Concepto','Descripción','Debe (-)','Haber (+)','Saldo acumulado']];
   let saldoAcum=0;
   movs.forEach(m=>{
     const hora=new Date(m.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
     saldoAcum+=m.monto;
-    rows.push([
-      hora,
-      m.concepto,
-      m.desc||'',
+    rows.push([hora, m.concepto, m.desc||'',
       m.monto<0?Math.abs(m.monto):'',
       m.monto>=0?m.monto:'',
-      saldoAcum
-    ]);
+      saldoAcum]);
   });
   const ingresos=movs.filter(m=>m.monto>0).reduce((s,m)=>s+m.monto,0);
   const egresos=movs.filter(m=>m.monto<0).reduce((s,m)=>s+m.monto,0);
   rows.push([]);
   rows.push(['','TOTALES','',Math.abs(egresos),ingresos,saldoAcum]);
-
-  // Generar CSV
-  const csv=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  rows.push(['','Fecha cierre',hoy,'','','']);
+  return rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+}
+function cajaDescargarArchivo(movs){
+  const hoy=new Date().toLocaleDateString('es-AR');
+  const csv=cajaGenerarCSV(movs, hoy);
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download=`caja_${hoy.replace(/\//g,'-')}.csv`;
   a.click();
   URL.revokeObjectURL(a.href);
+}
+window.cajaDescargar=()=>cajaDescargarArchivo(getCajaHoy());
+window.cajaCierre=async()=>{
+  // 1. Verificar pedidos sin cobrar
+  const hoy=new Date().toISOString().slice(0,10);
+  const sinCobrar=Object.values(DB.orders).filter(o=>{
+    if(o.status==='cobrado')return false;
+    // Solo pedidos del día de hoy
+    const fecha=o.createdAt?new Date(o.createdAt).toISOString().slice(0,10):null;
+    return fecha===hoy;
+  });
+  if(sinCobrar.length>0){
+    alert(`⚠️ No se puede cerrar la caja.\n\nHay ${sinCobrar.length} pedido${sinCobrar.length>1?'s':''} sin cobrar del día de hoy.\n\nCobralos primero desde el panel de Pedidos o Cobrados.`);
+    return;
+  }
+  // 2. Confirmar cierre
+  const movs=getCajaHoy();
+  const saldo=movs.reduce((s,m)=>s+(m.monto||0),0);
+  const ok=confirm(`¿Cerrar la caja del día?\n\nSaldo final: $${saldo.toLocaleString('es-AR')}\n\nSe descargará el resumen y se cerrará la caja. Esta acción no se puede deshacer.`);
+  if(!ok)return;
+  // 3. Descargar CSV
+  cajaDescargarArchivo(movs);
+  // 4. Marcar todos los movimientos de hoy como cerrados (agregar flag cierre)
+  const movKeys=Object.entries(DB.caja||{})
+    .filter(([,v])=>v.fecha===hoy)
+    .map(([k])=>k);
+  for(const k of movKeys){
+    await update(ref(db,`caja/${k}`),{cerrado:true});
+  }
+  // 5. Agregar movimiento de cierre para que getCajaAbierta devuelva false mañana
+  //    marcamos con tipo='cierre' y fecha de hoy — mañana getCajaAbierta no encontrará 'apertura' del nuevo día
+  // (no hace falta agregar nada extra — la apertura se detecta por fecha, mañana no habrá)
+  render();
 };
 
 // ── MODO MOZO/A ───────────────────────────────────
