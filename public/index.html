@@ -652,14 +652,17 @@ window.deleteWaiter=key=>{if(confirm('¿Eliminar esta moza/mozo?'))remove(ref(db
 // ── CAJA DIARIA ───────────────────────────────────
 function getCajaHoy(){
   return Object.entries(DB.caja||{})
-    .filter(([k])=>k!=='__estado')
+    .filter(([k])=>k!=='_cajaEstado')
     .map(([k,v])=>({...v,_key:k}))
     .filter(m=>!m.cerrado)
     .sort((a,b)=>a.ts-b.ts);
 }
 function getCajaAbierta(){
-  // La caja está abierta si hay un flag global en DB.caja
-  return DB.caja&&DB.caja.__estado&&DB.caja.__estado.abierta===true;
+  // La caja está abierta si el flag global indica abierta:true
+  if(DB.caja&&DB.caja._cajaEstado)return DB.caja._cajaEstado.abierta===true;
+  // Fallback por si hay datos con clave vieja
+  if(DB.caja&&DB.caja.__estado)return DB.caja.__estado.abierta===true;
+  return false;
 }
 function renderCajaTab(){
   const movs=getCajaHoy();
@@ -774,7 +777,7 @@ window.cajaConfirmarApertura=async()=>{
   const monto=Number(inp?inp.value:0)||0;
   const hoy=new Date().toISOString().slice(0,10);
   // Marcar caja como abierta con flag persistente
-  await set(ref(db,'caja/__estado'),{abierta:true,fechaApertura:hoy,ts:Date.now()});
+  await set(ref(db,'caja/_cajaEstado'),{abierta:true,fechaApertura:hoy,ts:Date.now()});
   await push(ref(db,'caja'),{
     tipo:'apertura',
     concepto:monto>0?'Saldo inicial':'Apertura de caja',
@@ -863,13 +866,13 @@ window.cajaCierre=async()=>{
   // 4. Marcar todos los movimientos como cerrados
   const hoy2=new Date().toISOString().slice(0,10);
   const movKeys=Object.entries(DB.caja||{})
-    .filter(([k,v])=>k!=='__estado'&&!v.cerrado)
+    .filter(([k,v])=>k!=='_cajaEstado'&&!v.cerrado)
     .map(([k])=>k);
   for(const k of movKeys){
     await update(ref(db,`caja/${k}`),{cerrado:true});
   }
   // 5. Cerrar el flag global
-  await set(ref(db,'caja/__estado'),{abierta:false,fechaCierre:hoy2,ts:Date.now()});
+  await set(ref(db,'caja/_cajaEstado'),{abierta:false,fechaCierre:hoy2,ts:Date.now()});
   render();
 };
 
@@ -1188,9 +1191,28 @@ window.waiterRequestBill=async tableId=>{
   C.waiterPayMesa=null;C.waiterPayMethod=null;render();
 };
 window.waiterMarkCobrado=async tableId=>{
+  if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
   const orders=Object.entries(DB.orders).filter(([,o])=>o.takenBy===C.waiterName&&o.tableId===tableId&&(o.status==='billed'||o.status==='delivered'||o.status==='pending'));
+  // Verificar método de pago
+  const pm=orders.find(([,o])=>o.paymentMethod)?.[1]?.paymentMethod||C.waiterPayMethod||null;
+  let finalPm=pm;
+  if(!finalPm){
+    finalPm=await showPaymentChoiceModal(null);
+    if(!finalPm)return;
+  }
   for(const [k] of orders){
-    await update(ref(db,`orders/${k}`),{status:'cobrado'});
+    await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:finalPm});
+  }
+  // Registrar en caja
+  if(getCajaAbierta()){
+    const total=orders.reduce((s,[,o])=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
+    if(total>0){
+      const table=DB.tables[tableId];const tLabel=table?table.label:tableId;
+      const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+      const concepto=`${tLabel} (${pmL[finalPm]||finalPm})`;
+      const hoy=new Date().toISOString().slice(0,10);
+      await push(ref(db,'caja'),{tipo:'venta',concepto,monto:total,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:finalPm});
+    }
   }
   render();
 };
