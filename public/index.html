@@ -275,7 +275,7 @@ let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}
 
 // Customer flow state (local only)
 let C = {
-  mode:'admin', adminTab:'dishes', waiterStep:'select', waiterId:null, waiterName:'', waiterTableId:null, waiterOrderMode:null, waiterPersonName:'', waiterCart:{}, waiterCustDishId:null, waiterCafCustId:null, waiterMenuSection:'platos', waiterCat:'todos', waiterCafCat:'todos',
+  mode:'admin', adminTab:'dishes', waiterStep:'select', waiterId:null, waiterName:'', waiterTableId:null, waiterOrderMode:null, waiterPersonName:'', waiterCart:{}, waiterCustDishId:null, waiterCafCustId:null, waiterMenuSection:'platos', waiterCat:null, waiterCafCat:null, waiterPayMesa:null, waiterPayMethod:null,
   customerStep:'mesa', customerTableId:null,
   orderMode:null, customerName:'', customerNameInput:'',
   customerCat:'todos', customerMenuSection:'platos', cart:{}, custDishId:null,
@@ -768,11 +768,40 @@ function renderWaiterMesasScreen(mc){
         });
       }
 
-      // ── Total ──
+      // ── Total + acciones de cobro ──
+      const allBilled=orders.every(o=>o.status==='billed'||o.status==='cobrado');
+      const hasBilled=orders.some(o=>o.status==='billed');
+      const isShowingPayPicker=C.waiterPayMesa===tableId;
+      const pmLabels={efectivo:'💵 Efectivo',credito:'💳 Crédito',debito:'💳 Débito',transferencia:'📱 Transferencia',mercadopago:'📱 Mercado Pago'};
+
       h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border)">`;
       h+=`<span style="font-size:13px;color:var(--muted)">Total</span>`;
       h+=`<span style="font-size:16px;font-weight:700;color:var(--accent)">$${totalMesa.toLocaleString()}</span>`;
       h+=`</div>`;
+
+      if(isShowingPayPicker){
+        const selPm=C.waiterPayMethod||null;
+        h+=`<div style="margin-top:12px;padding:12px;background:#f8f7f4;border-radius:10px;border:0.5px solid var(--border)">`;
+        h+=`<div style="font-size:13px;font-weight:600;margin-bottom:10px">Medio de pago</div>`;
+        h+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">`;
+        ['efectivo','debito','credito','transferencia','mercadopago'].forEach(pm=>{
+          const sel=selPm===pm;
+          h+=`<button onclick="waiterSelectPayMethod('${pm}')" style="padding:8px 10px;border-radius:8px;border:0.5px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'#fff5f7':'var(--card)'};color:${sel?'var(--accent)':'var(--text)'};font-size:12px;font-weight:${sel?'600':'400'};cursor:pointer;font-family:inherit;text-align:left">${pmLabels[pm]}</button>`;
+        });
+        h+=`</div>`;
+        h+=`<div style="display:flex;gap:6px">`;
+        h+=`<button class="btn btn-primary" onclick="waiterRequestBill('${tableId}')" ${selPm?'':'disabled style="opacity:.4"'}>Pedir cuenta ✓</button>`;
+        h+=`<button class="btn btn-ghost btn-sm" onclick="waiterCancelPayPicker()">Cancelar</button>`;
+        h+=`</div></div>`;
+      } else if(hasBilled){
+        const pm=orders.find(o=>o.paymentMethod)?.paymentMethod;
+        h+=`<div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">`;
+        h+=`<span style="font-size:12px;color:#5b21b6;font-weight:500">💜 Cuenta pedida${pm?' · '+pmLabels[pm]:''}</span>`;
+        h+=`<button onclick="waiterMarkCobrado('${tableId}')" style="padding:6px 14px;border-radius:8px;border:0.5px solid #065f46;background:#d1fae5;color:#065f46;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
+        h+=`</div>`;
+      } else {
+        h+=`<button onclick="waiterOpenPayPicker('${tableId}')" style="margin-top:10px;width:100%;padding:8px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">💜 Pedir cuenta</button>`;
+      }
 
       h+=`</div>`;
     });
@@ -897,7 +926,7 @@ function renderWaiterMenu(mc){
       }
       const canConfirm=!hasTypes||selType;
       modal+='<div style="display:flex;gap:8px"><button class="btn btn-primary" '+(canConfirm?'':'disabled style="opacity:.4"')+' onclick="waiterConfirmDish(\''+custId+'\',\''+src+'\')">Agregar al pedido</button><button class="btn btn-ghost" onclick="waiterCancelPick()">Cancelar</button></div></div>';
-      menuH=modal+menuH;
+      menuH+=modal;
     }
   }
   // Carrito
@@ -930,6 +959,24 @@ window.setWaiterCat=id=>{C.waiterCat=id;render();};
 window.setWaiterCafCat=id=>{C.waiterCafCat=id;render();};
 window.waiterNuevaMesa=()=>{C.waiterTableId=null;C.waiterCart={};C.waiterCat=null;C.waiterCafCat=null;C.waiterStep='mesas';render();};
 window.waiterLimpiarCarrito=()=>{C.waiterCart={};render();};
+window.waiterOpenPayPicker=tableId=>{C.waiterPayMesa=tableId;C.waiterPayMethod=null;render();};
+window.waiterCancelPayPicker=()=>{C.waiterPayMesa=null;C.waiterPayMethod=null;render();};
+window.waiterSelectPayMethod=pm=>{C.waiterPayMethod=pm;render();};
+window.waiterRequestBill=async tableId=>{
+  if(!C.waiterPayMethod){alert('Seleccioná el medio de pago');return;}
+  const orders=Object.entries(DB.orders).filter(([,o])=>o.takenBy===C.waiterName&&o.tableId===tableId&&o.status!=='cobrado');
+  for(const [k] of orders){
+    await update(ref(db,`orders/${k}`),{status:'billed',billRequested:true,paymentMethod:C.waiterPayMethod});
+  }
+  C.waiterPayMesa=null;C.waiterPayMethod=null;render();
+};
+window.waiterMarkCobrado=async tableId=>{
+  const orders=Object.entries(DB.orders).filter(([,o])=>o.takenBy===C.waiterName&&o.tableId===tableId&&(o.status==='billed'||o.status==='delivered'||o.status==='pending'));
+  for(const [k] of orders){
+    await update(ref(db,`orders/${k}`),{status:'cobrado'});
+  }
+  render();
+};
 // Picker functions
 window.waiterAddDish=(dishId,src)=>{
   const d=src==='caf'?DB.cafeteriaItems[dishId]:DB.dishes[dishId];
