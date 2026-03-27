@@ -687,11 +687,19 @@ function renderCajaTab(){
   h+=`</div></div>`;
 
   if(!abierta){
-    h+=`<div style="text-align:center;padding:4rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">`;
-    h+=`<div style="font-size:40px;margin-bottom:12px">🔒</div>`;
-    h+=`<div style="font-size:16px;font-weight:500;margin-bottom:6px">Caja cerrada</div>`;
-    h+=`<div style="font-size:13px">Realizá la apertura para registrar movimientos del día</div>`;
-    h+=`</div>`;
+    if(C.cajaModal==='apertura'){
+      h+=`<div class="card" style="border-color:var(--accent)">`;
+      h+=`<div class="card-title">Apertura de caja</div>`;
+      h+=`<div class="form-group" style="margin-bottom:14px"><label>Saldo inicial ($) <span style="font-size:11px;color:var(--muted)">(opcional — si arrancás con efectivo en caja)</span></label><input type="number" min="0" placeholder="0" id="caja-inicial" style="font-size:18px;padding:10px 14px"></div>`;
+      h+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="cajaConfirmarApertura()">Confirmar apertura</button><button class="btn btn-ghost" onclick="cajaCancelarModal()">Cancelar</button></div>`;
+      h+=`</div>`;
+    } else {
+      h+=`<div style="text-align:center;padding:4rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">`;
+      h+=`<div style="font-size:40px;margin-bottom:12px">🔒</div>`;
+      h+=`<div style="font-size:16px;font-weight:500;margin-bottom:6px">Caja cerrada</div>`;
+      h+=`<div style="font-size:13px">Realizá la apertura para registrar movimientos del día</div>`;
+      h+=`</div>`;
+    }
   } else {
     // Métricas resumen
     h+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem">`;
@@ -711,13 +719,6 @@ function renderCajaTab(){
       h+=`<div class="two-col"><div class="form-group" style="margin-bottom:10px"><label>Monto ($)</label><input type="number" min="0" placeholder="0" id="caja-monto" value="${C.cajaMonto||''}" oninput="C.cajaMonto=this.value"></div>`;
       h+=`<div class="form-group" style="margin-bottom:10px"><label>Descripción <span style="font-size:11px;color:var(--muted)">(opcional)</span></label><input placeholder="Ej: Verdulería, Sueldo..." id="caja-desc" value="${C.cajaDesc||''}" oninput="C.cajaDesc=this.value"></div></div>`;
       h+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="cajaGuardarGasto()">Guardar gasto</button><button class="btn btn-ghost" onclick="cajaCancelarModal()">Cancelar</button></div>`;
-      h+=`</div>`;
-    }
-    if(C.cajaModal==='apertura'){
-      h+=`<div class="card" style="margin-bottom:1.25rem;border-color:var(--accent)">`;
-      h+=`<div class="card-title">Apertura de caja</div>`;
-      h+=`<div class="form-group" style="margin-bottom:10px"><label>Saldo inicial ($) <span style="font-size:11px;color:var(--muted)">(opcional)</span></label><input type="number" min="0" placeholder="0" id="caja-inicial" value="${C.cajaInicial||''}"></div>`;
-      h+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="cajaConfirmarApertura()">Confirmar apertura</button><button class="btn btn-ghost" onclick="cajaCancelarModal()">Cancelar</button></div>`;
       h+=`</div>`;
     }
 
@@ -755,11 +756,12 @@ window.cajaConfirmarApertura=async()=>{
   const inp=document.getElementById('caja-inicial');
   const monto=Number(inp?inp.value:0)||0;
   const hoy=new Date().toISOString().slice(0,10);
-  if(monto>0){
-    await push(ref(db,'caja'),{tipo:'apertura',concepto:'Saldo inicial',monto,fecha:hoy,ts:Date.now(),desc:''});
-  } else {
-    await push(ref(db,'caja'),{tipo:'apertura',concepto:'Apertura de caja',monto:0,fecha:hoy,ts:Date.now(),desc:''});
-  }
+  await push(ref(db,'caja'),{
+    tipo:'apertura',
+    concepto:monto>0?'Saldo inicial':'Apertura de caja',
+    monto:monto>0?monto:0,
+    fecha:hoy,ts:Date.now(),desc:''
+  });
   C.cajaModal=null;render();
 };
 // Gasto
