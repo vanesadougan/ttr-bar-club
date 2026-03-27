@@ -93,7 +93,7 @@
     .order-items-text{font-size:13px;color:var(--muted);margin-bottom:6px;line-height:1.7}
     .order-footer{display:flex;align-items:center;justify-content:space-between}
     .status{font-size:12px;font-weight:500;padding:3px 9px;border-radius:6px}
-    .status-pending{background:#fef3c7;color:#92400e}.status-delivered{background:#d1fae5;color:#065f46}.status-billed{background:#ede9fe;color:#5b21b6}.status-cobrado{background:#d1fae5;color:#065f46}
+    .status-pending{background:#fef3c7;color:#92400e}.status-delivered{background:#d1fae5;color:#065f46}.status-billed{background:#ede9fe;color:#5b21b6}.status-cobrado{background:#d1fae5;color:#065f46}.status-deuda{background:#fee2e2;color:#b91c1c}
     .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1rem}
     .metric{background:var(--bg);border-radius:10px;padding:12px;text-align:center;border:0.5px solid var(--border)}
     .metric-val{font-size:22px;font-weight:600;color:var(--accent)}.metric-lbl{font-size:11px;color:var(--muted);margin-top:2px}
@@ -2310,20 +2310,37 @@ function renderHistoryTab(){
   const yesterdayStr=yesterday.toLocaleDateString('es-AR');
   const fmtDate=ts=>{if(!ts)return'';const d=new Date(ts);return d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});};
   const fmtTime=ts=>{if(!ts)return'';const d=new Date(ts);return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');};
-  const all=Object.entries(DB.orders).map(([k,v])=>({...v,_key:k})).filter(o=>o.status==='cobrado').sort((a,b)=>b.createdAt-a.createdAt);
-  const cobradoKeys=all.map(o=>o._key);
-  // filtros: hoy, ayer, todos
+
+  // Pedidos cobrados normales
+  const ordersCol=Object.entries(DB.orders).map(([k,v])=>({...v,_key:k,_tipo:'pedido'})).filter(o=>o.status==='cobrado');
+
+  // Deudas cobradas — usar cobradoAt como fecha de referencia
+  const deudoresCol=Object.entries(DB.deudores||{})
+    .map(([k,v])=>({...v,_key:k,_tipo:'deuda'}))
+    .filter(d=>d.status==='cobrado');
+
+  // Combinar y ordenar por fecha descendente
+  const all=[...ordersCol,...deudoresCol].sort((a,b)=>{
+    const ta=a._tipo==='deuda'?(a.cobradoAt||a.createdAt||0):(a.createdAt||0);
+    const tb=b._tipo==='deuda'?(b.cobradoAt||b.createdAt||0):(b.createdAt||0);
+    return tb-ta;
+  });
+
+  const cobradoKeys=ordersCol.map(o=>o._key);
+
+  const getTs=o=>o._tipo==='deuda'?(o.cobradoAt||o.createdAt||0):(o.createdAt||0);
+
   const fil=all.filter(o=>{
-    if(!o.createdAt)return C.historyFilter==='todos';
-    const d=new Date(o.createdAt).toLocaleDateString('es-AR');
+    const ts=getTs(o);
+    if(!ts)return C.historyFilter==='todos';
+    const d=new Date(ts).toLocaleDateString('es-AR');
     if(C.historyFilter==='hoy')return d===todayStr;
     if(C.historyFilter==='ayer')return d===yesterdayStr;
     return true;
   });
-  // totales por filtro
-  const totalHoy=all.filter(o=>o.createdAt&&new Date(o.createdAt).toLocaleDateString('es-AR')===todayStr).reduce((s,o)=>(o.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,s),0);
-  const totalAyer=all.filter(o=>o.createdAt&&new Date(o.createdAt).toLocaleDateString('es-AR')===yesterdayStr).reduce((s,o)=>(o.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,s),0);
+
   const totalFil=fil.reduce((s,o)=>(o.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,s),0);
+
   let h=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">`;
   h+=`<div style="display:flex;gap:6px;flex-wrap:wrap">`;
   [['hoy','Hoy'],['ayer','Ayer'],['todos','Todos']].forEach(([val,lbl])=>{
@@ -2337,23 +2354,46 @@ function renderHistoryTab(){
   h+=`</div>`;
   if(fil.length>0){
     h+=`<div style="padding:10px 14px;background:var(--card);border:0.5px solid var(--border);border-radius:10px;margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center">`;
-    h+=`<span style="font-size:13px;color:var(--muted)">${fil.length} pedido${fil.length!==1?'s':''}</span>`;
+    h+=`<span style="font-size:13px;color:var(--muted)">${fil.length} registro${fil.length!==1?'s':''}</span>`;
     h+=`<span style="font-size:16px;font-weight:700;color:var(--accent)">$${totalFil.toLocaleString()}</span>`;
     h+=`</div>`;
   }
+
   h+=`<div class="orders-list">`;
-  if(fil.length===0)h+=`<div class="empty-state">No hay pedidos cobrados${C.historyFilter!=='todos'?' '+C.historyFilter:''}</div>`;
-  const pmLabels={efectivo:'Efectivo',credito:'Tarjeta de crédito',debito:'Tarjeta de débito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+  if(fil.length===0)h+=`<div class="empty-state">No hay registros cobrados${C.historyFilter!=='todos'?' '+C.historyFilter:''}</div>`;
+  const pmLabels={efectivo:'💵 Efectivo',credito:'💳 Créd.',debito:'💳 Déb.',transferencia:'📱 Transfer.',mercadopago:'📱 Mercado Pago'};
+
   fil.forEach(o=>{
     const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-    const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
-    const waiterChip=o.takenBy?`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px;font-weight:500">👩 ${o.takenBy}</span>`:'';
-    const dateStr=o.createdAt?`${fmtDate(o.createdAt)} ${fmtTime(o.createdAt)}`:(o.time||'');
-    h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}${waiterChip}</div><div class="order-time">${dateStr}</div></div><div class="order-items-text">`;
-    (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}<br>`;});
-    h+=`</div><div class="order-footer"><span class="status status-cobrado">Cobrado</span>`;
-    if(o.paymentMethod)h+=`<span style="font-size:12px;color:var(--muted)">${pmLabels[o.paymentMethod]||o.paymentMethod}</span>`;
-    h+=`<span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span></div></div>`;
+    const ts=getTs(o);
+    const dateStr=ts?`${fmtDate(ts)} ${fmtTime(ts)}`:(o.time||'');
+    const pm=o.paymentMethod;
+
+    if(o._tipo==='deuda'){
+      // Card de deuda cobrada
+      h+=`<div class="order-card" style="border-left:3px solid #dc2626">`;
+      h+=`<div class="order-header">`;
+      h+=`<div class="order-tname">${o.tableLabel||o.tableId} <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#fee2e2;color:#b91c1c">💳 Deuda</span> <span style="font-size:13px;font-weight:500;color:var(--text)">${o.nombre} ${o.apellido}</span></div>`;
+      h+=`<div class="order-time">${dateStr}</div>`;
+      h+=`</div>`;
+      h+=`<div class="order-items-text">`;
+      (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <em>(${i.selectedType})</em>`:''}<br>`;});
+      h+=`</div>`;
+      h+=`<div class="order-footer"><span class="status status-deuda">💳 Deuda</span>`;
+      if(pm)h+=`<span style="font-size:12px;color:var(--muted)">${pmLabels[pm]||pm}</span>`;
+      h+=`<span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span></div></div>`;
+    } else {
+      // Card de pedido normal cobrado
+      const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
+      const waiterChip=o.takenBy?`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px;font-weight:500">👩 ${o.takenBy}</span>`:'';
+      h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}${waiterChip}</div><div class="order-time">${dateStr}</div></div>`;
+      h+=`<div class="order-items-text">`;
+      (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}<br>`;});
+      h+=`</div>`;
+      h+=`<div class="order-footer"><span class="status status-cobrado">Cobrado</span>`;
+      if(pm)h+=`<span style="font-size:12px;color:var(--muted)">${pmLabels[pm]||pm}</span>`;
+      h+=`<span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span></div></div>`;
+    }
   });
   return h+`</div>`;
 }
