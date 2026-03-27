@@ -567,17 +567,17 @@ function renderAdmin(){
   const pc=pendingCount();
 
   // ── Nivel 1: pestañas principales ──
-  const mainTabs=['tables','menu','stock','orders','history','ratings','mozas','caja','deudores'];
+  const mainTabs=['tables','mozas','menu','orders','history','deudores','caja','stock','ratings'];
   const mainLabels={
-    tables:'Mesas',
-    menu:'Menú',
-    mozas:'Mozas',
-    caja:'💰 Caja',
+    tables:'🪑 Mesas',
+    mozas:'👩 Mozas',
+    menu:'🍽 Menú',
+    orders:`📋 Pedidos${pc>0?` <span class="badge">${pc}</span>`:''}`,
+    history:'📜 Historial',
     deudores:'💳 Deudores',
+    caja:'💰 Caja',
     stock:'📦 Stock',
-    orders:`Pedidos${pc>0?` <span class="badge">${pc}</span>`:''}`,
-    history:'Cobrados',
-    ratings:'Calificaciones'
+    ratings:'⭐ Calificaciones'
   };
   // Determinar tab activo de nivel 1
   const dishTabs=['dishes','cafeteria'];
