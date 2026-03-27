@@ -374,6 +374,7 @@ onValue(ref(db,'orders'), snap=>{
     });
   }
   firstLoad = false;
+  archivarPedidosViejos(); // Archivar pedidos >60 días en segundo plano
   if(C.mode==='admin' && C.adminTab==='orders' && Object.keys(DB.orders).length > Object.keys(prevKeys).length){
     render(); highlightNewOrder();
   } else {
@@ -652,9 +653,8 @@ window.deleteWaiter=key=>{if(confirm('¿Eliminar esta moza/mozo?'))remove(ref(db
 // ── CAJA DIARIA ───────────────────────────────────
 function getCajaHoy(){
   return Object.entries(DB.caja||{})
-    .filter(([k])=>k!=='_cajaEstado')
+    .filter(([k])=>k!=='_cajaEstado'&&k!=='__estado')
     .map(([k,v])=>({...v,_key:k}))
-    .filter(m=>!m.cerrado)
     .sort((a,b)=>a.ts-b.ts);
 }
 function getCajaAbierta(){
@@ -848,7 +848,6 @@ window.cajaCierre=async()=>{
   const hoy=new Date().toISOString().slice(0,10);
   const sinCobrar=Object.values(DB.orders).filter(o=>{
     if(o.status==='cobrado')return false;
-    // Solo pedidos del día de hoy
     const fecha=o.createdAt?new Date(o.createdAt).toISOString().slice(0,10):null;
     return fecha===hoy;
   });
@@ -859,19 +858,19 @@ window.cajaCierre=async()=>{
   // 2. Confirmar cierre
   const movs=getCajaHoy();
   const saldo=movs.reduce((s,m)=>s+(m.monto||0),0);
-  const ok=confirm(`¿Cerrar la caja del día?\n\nSaldo final: $${saldo.toLocaleString('es-AR')}\n\nSe descargará el resumen y se cerrará la caja. Esta acción no se puede deshacer.`);
+  const ok=confirm(`¿Cerrar la caja del día?\n\nSaldo final: $${saldo.toLocaleString('es-AR')}\n\nSe descargará el resumen y se eliminarán los movimientos de la base de datos. Esta acción no se puede deshacer.`);
   if(!ok)return;
   // 3. Descargar CSV
   cajaDescargarArchivo(movs);
-  // 4. Marcar todos los movimientos como cerrados
-  const hoy2=new Date().toISOString().slice(0,10);
+  // 4. Eliminar todos los movimientos de caja (ya quedaron en el CSV)
   const movKeys=Object.entries(DB.caja||{})
-    .filter(([k,v])=>k!=='_cajaEstado'&&!v.cerrado)
+    .filter(([k])=>k!=='_cajaEstado'&&k!=='__estado')
     .map(([k])=>k);
   for(const k of movKeys){
-    await update(ref(db,`caja/${k}`),{cerrado:true});
+    await remove(ref(db,`caja/${k}`));
   }
   // 5. Cerrar el flag global
+  const hoy2=new Date().toISOString().slice(0,10);
   await set(ref(db,'caja/_cajaEstado'),{abierta:false,fechaCierre:hoy2,ts:Date.now()});
   render();
 };
@@ -3243,6 +3242,39 @@ window.scrollToCart=()=>{
 
 // Start
 setInterval(updateClock,60000);
+// ── ARCHIVADO AUTOMÁTICO DE PEDIDOS ──────────────
+// Mueve pedidos con más de 60 días a /archivo/YYYY-MM y los elimina de /orders
+async function archivarPedidosViejos(){
+  const DIAS=60;
+  const limite=Date.now()-DIAS*24*60*60*1000;
+  const viejos=Object.entries(DB.orders).filter(([,o])=>{
+    const ts=o.createdAt||0;
+    return ts>0&&ts<limite;
+  });
+  if(viejos.length===0)return;
+  // Agrupar por mes para organizar el archivo
+  const porMes={};
+  viejos.forEach(([k,o])=>{
+    const d=new Date(o.createdAt);
+    const mes=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    if(!porMes[mes])porMes[mes]={};
+    porMes[mes][k]=o;
+  });
+  // Guardar en /archivo/YYYY-MM y borrar de /orders
+  for(const [mes,pedidos] of Object.entries(porMes)){
+    for(const [k,o] of Object.entries(pedidos)){
+      try{
+        await set(ref(db,`archivo/${mes}/${k}`),o);
+        await remove(ref(db,`orders/${k}`));
+      }catch(e){
+        console.warn('Error archivando pedido',k,e);
+      }
+    }
+  }
+  const total=viejos.length;
+  console.log(`Archivados ${total} pedido${total!==1?'s':''} con más de ${DIAS} días.`);
+}
+
 initRoute();
 </script>
 </body>
