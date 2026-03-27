@@ -651,16 +651,15 @@ window.deleteWaiter=key=>{if(confirm('¿Eliminar esta moza/mozo?'))remove(ref(db
 
 // ── CAJA DIARIA ───────────────────────────────────
 function getCajaHoy(){
-  const hoy=new Date().toISOString().slice(0,10);
   return Object.entries(DB.caja||{})
+    .filter(([k])=>k!=='__estado')
     .map(([k,v])=>({...v,_key:k}))
-    .filter(m=>m.fecha===hoy&&!m.cerrado)
+    .filter(m=>!m.cerrado)
     .sort((a,b)=>a.ts-b.ts);
 }
 function getCajaAbierta(){
-  const hoy=new Date().toISOString().slice(0,10);
-  // Abierta si hay apertura hoy Y no está cerrada
-  return Object.values(DB.caja||{}).some(m=>m.fecha===hoy&&m.tipo==='apertura'&&!m.cerrado);
+  // La caja está abierta si hay un flag global en DB.caja
+  return DB.caja&&DB.caja.__estado&&DB.caja.__estado.abierta===true;
 }
 function renderCajaTab(){
   const movs=getCajaHoy();
@@ -772,6 +771,8 @@ window.cajaConfirmarApertura=async()=>{
   const inp=document.getElementById('caja-inicial');
   const monto=Number(inp?inp.value:0)||0;
   const hoy=new Date().toISOString().slice(0,10);
+  // Marcar caja como abierta con flag persistente
+  await set(ref(db,'caja/__estado'),{abierta:true,fechaApertura:hoy,ts:Date.now()});
   await push(ref(db,'caja'),{
     tipo:'apertura',
     concepto:monto>0?'Saldo inicial':'Apertura de caja',
@@ -826,7 +827,17 @@ function cajaDescargarArchivo(movs){
   a.click();
   URL.revokeObjectURL(a.href);
 }
-window.cajaDescargar=()=>cajaDescargarArchivo(getCajaHoy());
+window.cajaDescargar=()=>{
+  const movs=getCajaHoy();
+  const hoy=new Date().toLocaleDateString('es-AR');
+  const csv=cajaGenerarCSV(movs,hoy);
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`caja_${hoy.replace(/\//g,'-')}_parcial.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
 window.cajaCierre=async()=>{
   // 1. Verificar pedidos sin cobrar
   const hoy=new Date().toISOString().slice(0,10);
@@ -847,16 +858,16 @@ window.cajaCierre=async()=>{
   if(!ok)return;
   // 3. Descargar CSV
   cajaDescargarArchivo(movs);
-  // 4. Marcar todos los movimientos de hoy como cerrados (agregar flag cierre)
+  // 4. Marcar todos los movimientos como cerrados
+  const hoy2=new Date().toISOString().slice(0,10);
   const movKeys=Object.entries(DB.caja||{})
-    .filter(([,v])=>v.fecha===hoy)
+    .filter(([k,v])=>k!=='__estado'&&!v.cerrado)
     .map(([k])=>k);
   for(const k of movKeys){
     await update(ref(db,`caja/${k}`),{cerrado:true});
   }
-  // 5. Agregar movimiento de cierre para que getCajaAbierta devuelva false mañana
-  //    marcamos con tipo='cierre' y fecha de hoy — mañana getCajaAbierta no encontrará 'apertura' del nuevo día
-  // (no hace falta agregar nada extra — la apertura se detecta por fecha, mañana no habrá)
+  // 5. Cerrar el flag global
+  await set(ref(db,'caja/__estado'),{abierta:false,fechaCierre:hoy2,ts:Date.now()});
   render();
 };
 
