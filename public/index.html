@@ -2344,7 +2344,7 @@ function renderHistoryTab(){
       h+=`<div class="order-items-text">`;
       (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <em>(${i.selectedType})</em>`:''}<br>`;});
       h+=`</div>`;
-      h+=`<div class="order-footer"><span class="status status-deuda">💳 Deuda</span>`;
+      h+=`<div class="order-footer"><span class="status status-cobrado">Cobrado</span>`;
       if(pm)h+=`<span style="font-size:12px;color:var(--muted)">${pmLabels[pm]||pm}</span>`;
       h+=`<span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span></div></div>`;
     } else {
