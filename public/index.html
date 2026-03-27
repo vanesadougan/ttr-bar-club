@@ -453,11 +453,22 @@ let isCustomerRoute = false;
 let pendingTableId = null; // store URL param until tables are loaded
 
 let isWaiterRoute = false;
+let isMenuRoute = false;
 function initRoute(){
   const path = window.location.pathname;
   if(path==='/mozas'||path==='/mozas/'){
     isWaiterRoute = true;
     C.mode='waiter';
+    document.getElementById('modetabs').style.display='none';
+    render();
+    return;
+  }
+  if(path==='/menu'||path==='/menu/'){
+    isMenuRoute = true;
+    C.mode='customer';
+    C.customerStep='menu';
+    C.orderMode='general';
+    C.customerTableId=null;
     document.getElementById('modetabs').style.display='none';
     render();
     return;
@@ -495,6 +506,7 @@ function render(){
   updateClock();
   updateTopbarCart();
   // If customer route, skip auth entirely
+  if(isMenuRoute){ renderMenuOnly(document.getElementById('main-content')); return; }
   if(isCustomerRoute){ renderCustomer(); return; }
   // Admin requires login
   if(C.mode==='admin' && !currentUser){ renderLogin(); return; }
@@ -536,7 +548,7 @@ function renderLogin(){
         </div>
         <button onclick="doLogin()" id="login-btn" style="width:100%;padding:11px;background:#e94560;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit">Entrar</button>
       </div>
-      <div style="margin-top:1.5rem;font-size:12px;color:#9ca3af;letter-spacing:.03em">by <span style="font-style:italic">SolDougan</span></div>
+      <div style="margin-top:1.5rem;font-size:12px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div>
     </div>`;
   setTimeout(()=>{ const el=document.getElementById('login-email'); if(el) el.focus(); },50);
 }
@@ -902,7 +914,7 @@ function renderWaiterSelectScreen(mc){
   }
   let h=`<div class="content"><div class="mesa-screen"><div style="width:100%;max-width:480px"><div class="mesa-title" style="margin-bottom:.5rem">¡Hola! 👋</div><div style="font-size:16px;color:var(--muted);margin-bottom:1.5rem;text-align:center">¿Quién está tomando pedidos?</div><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">`;
   waiters.forEach(w=>{h+=`<button onclick="selectWaiter('${w._key}','${w.name.replace(/'/g,"\'")}' )" style="padding:18px 14px;border-radius:12px;border:0.5px solid var(--border);background:var(--card);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:8px"><div style="width:44px;height:44px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700">${w.name[0].toUpperCase()}</div>${w.name}</button>`;});
-  h+=`</div></div><div style="margin-top:2rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">by <span style="font-style:italic">SolDougan</span></div></div></div>`;
+  h+=`</div></div><div style="margin-top:2rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div></div></div>`;
   mc.innerHTML=h;
 }
 window.selectWaiter=(id,name)=>{C.waiterId=id;C.waiterName=name;C.waiterStep='mesas';render();};
@@ -2886,13 +2898,13 @@ function renderMesaScreen(mc){
   if(tables.length===0){mc.innerHTML=`<div class="content"><div style="text-align:center;padding:4rem 1rem"><div style="font-size:40px;margin-bottom:1rem">🪑</div><div style="font-family:'Playfair Display',serif;font-size:22px">No hay mesas configuradas</div></div></div>`;return;}
   let h=`<div class="content"><div class="mesa-screen"><div style="width:100%;max-width:480px"><div class="mesa-title" style="margin-bottom:1.5rem">¿En qué mesa<br>estás sentado?</div><div class="mesa-grid">`;
   tables.forEach(t=>{const occ=tableOccupied(t._key);h+=`<button class="mesa-btn" onclick="selectMesa('${t._key}')" style="${occ?'border-color:#f59e0b;':''}"><div>${t.label}</div>${t.capacity?`<div class="mesa-btn-label">${t.capacity} personas</div>`:''}</button>`;});
-  h+=`</div></div><div style="margin-top:2rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">by <span style="font-style:italic">SolDougan</span></div></div></div>`;mc.innerHTML=h;
+  h+=`</div></div><div style="margin-top:2rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div></div></div>`;mc.innerHTML=h;
 }
 window.selectMesa=id=>{C.customerTableId=id;C.customerStep='modeChoice';render();};
 
 function renderModeChoice(mc){
   const table=DB.tables[C.customerTableId];
-  mc.innerHTML=`<div class="content"><div class="mode-screen"><div style="font-family:'Playfair Display',serif;font-size:26px;text-align:center">¿Cómo van a pedir?</div><div style="font-size:14px;color:var(--muted)">${table?table.label:''}</div><div class="mode-cards"><div class="mode-card" onclick="chooseMode('general')"><div class="mode-card-icon">👥</div><div class="mode-card-title">Pedido general</div><div class="mode-card-desc">Un solo pedido compartido para toda la mesa</div></div><div class="mode-card" onclick="chooseMode('individual')"><div class="mode-card-icon">👤</div><div class="mode-card-title">Pedido individual</div><div class="mode-card-desc">Cada persona hace su propio pedido con su nombre</div></div></div><button class="btn btn-ghost btn-sm" onclick="backToMesas()">← Cambiar mesa</button><div style="margin-top:2rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">by <span style="font-style:italic">SolDougan</span></div></div></div>`;
+  mc.innerHTML=`<div class="content"><div class="mode-screen"><div style="font-family:'Playfair Display',serif;font-size:26px;text-align:center">¿Cómo van a pedir?</div><div style="font-size:14px;color:var(--muted)">${table?table.label:''}</div><div class="mode-cards"><div class="mode-card" onclick="chooseMode('general')"><div class="mode-card-icon">👥</div><div class="mode-card-title">Pedido general</div><div class="mode-card-desc">Un solo pedido compartido para toda la mesa</div></div><div class="mode-card" onclick="chooseMode('individual')"><div class="mode-card-icon">👤</div><div class="mode-card-title">Pedido individual</div><div class="mode-card-desc">Cada persona hace su propio pedido con su nombre</div></div></div><button class="btn btn-ghost btn-sm" onclick="backToMesas()">← Cambiar mesa</button><div style="margin-top:2rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div></div></div>`;
 }
 window.chooseMode=mode=>{C.orderMode=mode;initCustomerCat();if(mode==='individual')C.customerStep='nameInput';else{C.customerName='';C.customerStep='menu';}render();};
 
@@ -2911,6 +2923,79 @@ function cartTotal(){
     if(!d)return s;
     return s+(d.isCafeteria?Number(d.price)*v.qty:dishFinalPrice(d,v.qty)*v.qty);
   },0);
+}
+
+function renderMenuOnly(mc){
+  const cats=getCats();
+  const allDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
+  const allCafItems=Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
+  const hasCaf=allCafItems.length>0;
+  const section=C.customerMenuSection||'platos';
+
+  // Auto-seleccionar primera categoría
+  if(section==='platos'&&!C.customerCat){
+    const first=cats.find(c=>!c.isPromo&&allDishes.some(d=>d.cat===c._key));
+    if(first)C.customerCat=first._key;
+  }
+
+  let h='<div class="content"><div style="max-width:600px;margin:0 auto">';
+
+  // Header
+  h+=`<div style="padding:1rem 0 .5rem;text-align:center"><div style="font-family:'Playfair Display',serif;font-size:22px;color:var(--text)">TTR Bar Club</div><div style="font-size:13px;color:var(--muted);margin-top:2px">Carta</div></div>`;
+
+  // Tabs Restaurant / Cafetería
+  if(hasCaf){
+    h+=`<div style="display:flex;background:#f3f4f6;border-radius:10px;padding:3px;gap:2px;margin:10px 0;width:fit-content">`;
+    h+=`<button onclick="setMenuSection('platos')" style="padding:6px 16px;border-radius:8px;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:${section==='platos'?'#fff':'transparent'};color:${section==='platos'?'var(--text)':'var(--muted)'}">🍽 Restaurant</button>`;
+    h+=`<button onclick="setMenuSection('cafeteria')" style="padding:6px 16px;border-radius:8px;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:${section==='cafeteria'?'#fff':'transparent'};color:${section==='cafeteria'?'var(--text)':'var(--muted)'}">☕ Cafetería</button>`;
+    h+=`</div>`;
+  }
+
+  if(section==='cafeteria'){
+    const cafCats=getCafCats().filter(c=>allCafItems.some(d=>d.cat===c._key));
+    if(!C.cafCat&&cafCats.length)C.cafCat=cafCats[0]._key;
+    h+=`<div class="cat-tabs">`;
+    cafCats.forEach(c=>{h+=`<button class="cat-tab${C.cafCat===c._key?' active':''}" onclick="setCafCat('${c._key}')">${c.icon} ${c.label}</button>`;});
+    h+=`</div><div class="menu-grid">`;
+    const filtered=C.cafCat?allCafItems.filter(d=>d.cat===C.cafCat):allCafItems;
+    filtered.forEach(d=>{
+      h+=`<div class="menu-card">`;
+      h+=`<div class="menu-card-name">${d.emoji||'☕'} ${d.name}</div>`;
+      if(d.desc)h+=`<div class="menu-card-desc">${d.desc}</div>`;
+      h+=`<div class="menu-card-footer"><span class="menu-card-price">$${Number(d.price).toLocaleString()}</span></div>`;
+      h+=`</div>`;
+    });
+    h+=`</div>`;
+  } else {
+    const allCatIds=cats.map(c=>c._key).filter(id=>allDishes.some(d=>d.cat===id));
+    h+=`<div class="cat-tabs">`;
+    allCatIds.forEach(cid=>{
+      const cat=cats.find(c=>c._key===cid);
+      const isP=cat&&cat.isPromo;
+      h+=`<button class="cat-tab${C.customerCat===cid?' active':''}${isP?' promo-tab':''}" onclick="setCat('${cid}')">${cat?cat.icon+' '+cat.label:cid}</button>`;
+    });
+    h+=`</div><div class="menu-grid">`;
+    const filtered=C.customerCat?allDishes.filter(d=>d.cat===C.customerCat):allDishes;
+    filtered.forEach(d=>{
+      const dishCat=cats.find(c=>c._key===d.cat);
+      const isP=dishCat&&dishCat.isPromo&&(d.promoDiscount>0||d.is2x1);
+      const fp=dishFinalPrice(d,1);
+      h+=`<div class="menu-card${isP?' promo-card':''}">`;
+      if(isP)h+=`<div style="margin-bottom:6px"><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:#fff7ed;color:#c2410c;border:0.5px solid #fed7aa">🔥 PROMO DEL DÍA</span></div>`;
+      h+=`<div class="menu-card-name">${d.name}</div>`;
+      if(d.desc)h+=`<div class="menu-card-desc">${d.desc}</div>`;
+      if(d.is2x1)h+=`<div style="font-size:11px;color:#92400e;background:#fff7ed;border-radius:5px;padding:2px 8px;display:inline-block;margin-bottom:6px;border:0.5px solid #fed7aa">🎁 Llevá 2, pagá 1</div>`;
+      if(d.customizable&&(d.ingredients||[]).length>0)h+=`<div style="font-size:11px;color:#5b21b6;background:#ede9fe;border-radius:5px;padding:2px 7px;display:inline-block;margin-bottom:6px">🧩 Personalizable</div>`;
+      h+=`<div class="menu-card-footer">`;
+      h+=`<div>${isP&&!d.is2x1?`<span class="menu-card-price-original">$${d.price.toLocaleString()}</span> `:''}<span class="menu-card-price">$${fp.toLocaleString()}</span></div>`;
+      h+=`</div></div>`;
+    });
+    h+=`</div>`;
+  }
+
+  h+=`<div style="text-align:center;padding:2rem 0 1rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div>`;
+  h+=`</div></div>`;
+  mc.innerHTML=h;
 }
 
 function renderMenuWithCart(mc){
