@@ -659,7 +659,15 @@ function renderWaiterMode(){
 }
 function renderWaiterSelectScreen(mc){
   const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-  if(waiters.length===0){mc.innerHTML=`<div class="content"><div class="mode-screen"><div style="font-size:48px">👩‍🍳</div><div style="font-size:18px;font-weight:500">No hay mozas/mozos cargados</div><div style="font-size:14px;color:var(--muted)">El admin debe agregar el personal primero</div></div></div>`;return;}
+  // Si firstLoad aún true, los datos pueden no haber llegado — mostrar spinner
+  if(waiters.length===0){
+    if(firstLoad){
+      mc.innerHTML=`<div class="content"><div class="mode-screen"><div class="spinner"></div><div style="font-size:14px;color:var(--muted);margin-top:12px">Cargando...</div></div></div>`;
+    } else {
+      mc.innerHTML=`<div class="content"><div class="mode-screen"><div style="font-size:48px">👩‍🍳</div><div style="font-size:18px;font-weight:500;margin-top:12px">No hay mozas/mozos cargados</div><div style="font-size:14px;color:var(--muted);margin-top:4px">El admin debe agregar el personal primero</div></div></div>`;
+    }
+    return;
+  }
   let h=`<div class="content"><div class="mesa-screen"><div style="width:100%;max-width:480px"><div class="mesa-title" style="margin-bottom:.5rem">¡Hola! 👋</div><div style="font-size:16px;color:var(--muted);margin-bottom:1.5rem;text-align:center">¿Quién está tomando pedidos?</div><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">`;
   waiters.forEach(w=>{h+=`<button onclick="selectWaiter('${w._key}','${w.name.replace(/'/g,"\'")}' )" style="padding:18px 14px;border-radius:12px;border:0.5px solid var(--border);background:var(--card);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:8px"><div style="width:44px;height:44px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700">${w.name[0].toUpperCase()}</div>${w.name}</button>`;});
   h+=`</div></div></div></div>`;
@@ -706,7 +714,7 @@ function renderWaiterMesasScreen(mc){
       // ── Mesa title row ──
       h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">`;
       h+=`<div style="display:flex;align-items:center;gap:10px">`;
-      h+=`<div style="width:36px;height:36px;border-radius:10px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;flex-shrink:0">${tLabel}</div>`;
+      h+=`<div style="display:inline-flex;align-items:center;padding:4px 10px;border-radius:8px;background:var(--brand);color:#fff;font-size:13px;font-weight:700;flex-shrink:0;white-space:nowrap">${tLabel}</div>`;
       h+=`<div style="display:flex;gap:5px;flex-wrap:wrap">`;
       if(pendingCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#fef3c7;color:#92400e">⏳ ${pendingCt} pend.</span>`;
       if(delivCt>0) h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">✓ ${delivCt} entregado${delivCt!==1?'s':''}</span>`;
