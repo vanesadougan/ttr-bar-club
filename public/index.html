@@ -271,17 +271,18 @@ function getCats(){
 const catOpen={};
 
 // Local reactive state (synced from Firebase)
-let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}, cancellations:{}, cafeteriaItems:{}, cafeteriaCategories:{}, ingredients:{} };
+let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}, cancellations:{}, cafeteriaItems:{}, cafeteriaCategories:{}, ingredients:{}, waiters:{} };
 
 // Customer flow state (local only)
 let C = {
-  mode:'admin', adminTab:'dishes',
+  mode:'admin', adminTab:'dishes', waiterStep:'select', waiterId:null, waiterName:'', waiterTableId:null, waiterOrderMode:null, waiterPersonName:'', waiterCart:{}, waiterCustDishId:null, waiterCafCustId:null, waiterMenuSection:'platos', waiterCat:'todos', waiterCafCat:'todos',
   customerStep:'mesa', customerTableId:null,
   orderMode:null, customerName:'', customerNameInput:'',
   customerCat:'todos', customerMenuSection:'platos', cart:{}, custDishId:null,
   historyFilter:'hoy', survey:{items:[],ratings:{}},
   adminEditOrderKey:null,
   manualOrder:null, // {tableId, orderMode, personName, items:[]}
+  _adjMode:{}, // stock adjustment mode per key: 'add' | 'set'
   newIng:{name:'',unit:'u',stock:'',alertAt:''}, editingIng:null,
   manualOrderSearch:'',
   editingDish:null, editingTable:null,
@@ -344,6 +345,7 @@ onValue(ref(db,'ratings'), snap=>{ DB.ratings = snap.val()||{}; if(!firstLoad) r
 onValue(ref(db,'cancellations'), snap=>{ DB.cancellations = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'cafeteriaItems'), snap=>{ DB.cafeteriaItems = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'cafeteriaCategories'), snap=>{ DB.cafeteriaCategories = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'waiters'), snap=>{ DB.waiters = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'ingredients'), snap=>{
   DB.ingredients = snap.val()||{};
   if(!firstLoad) checkIngredientStock();
@@ -445,8 +447,16 @@ function dismissNotif(el){
 let isCustomerRoute = false;
 let pendingTableId = null; // store URL param until tables are loaded
 
+let isWaiterRoute = false;
 function initRoute(){
   const path = window.location.pathname;
+  if(path==='/mozas'||path==='/mozas/'){
+    isWaiterRoute = true;
+    C.mode='waiter';
+    document.getElementById('modetabs').style.display='none';
+    render();
+    return;
+  }
   const m = path.match(/\/mesa\/(.+)/);
   if(m){
     isCustomerRoute = true;
@@ -487,7 +497,9 @@ function render(){
   const tabCust=document.getElementById('tab-customer');
   if(tabAdmin) tabAdmin.classList.toggle('active',C.mode==='admin');
   if(tabCust)  tabCust.classList.toggle('active',C.mode==='customer');
-  C.mode==='admin'?renderAdmin():renderCustomer();
+  if(C.mode==='admin')renderAdmin();
+  else if(C.mode==='waiter')renderWaiterMode();
+  else renderCustomer();
 }
 
 function setMode(m){
@@ -550,10 +562,11 @@ function renderAdmin(){
   const pc=pendingCount();
 
   // ── Nivel 1: pestañas principales ──
-  const mainTabs=['tables','menu','stock','orders','history','ratings'];
+  const mainTabs=['tables','menu','stock','orders','history','ratings','mozas'];
   const mainLabels={
     tables:'Mesas',
     menu:'Menú',
+    mozas:'Mozas',
     stock:'📦 Stock',
     orders:`Pedidos${pc>0?` <span class="badge">${pc}</span>`:''}`,
     history:'Cobrados',
@@ -561,7 +574,7 @@ function renderAdmin(){
   };
   // Determinar tab activo de nivel 1
   const dishTabs=['dishes','cafeteria'];
-  const activeMain=dishTabs.includes(C.adminTab)?'menu':
+  const activeMain=dishTabs.includes(C.adminTab)?'menu':C.adminTab==='mozas'?'mozas':
     C.adminTab==='stock_tab'?'stock':C.adminTab;
 
   let h=`<div class="content">`;
@@ -591,6 +604,7 @@ function renderAdmin(){
   else if(activeMain==='orders') h+=renderOrdersTab();
   else if(activeMain==='history') h+=renderHistoryTab();
   else if(activeMain==='ratings') h+=renderRatingsTab();
+  else if(activeMain==='mozas') h+=renderWaitersAdminTab();
 
   h+=`</div>`;
   mc.innerHTML=h;
@@ -602,10 +616,121 @@ function renderAdmin(){
 window.adminMainTab=t=>{
   if(t==='menu'){C.adminTab=C.adminTab==='cafeteria'?'cafeteria':'dishes';}
   else if(t==='stock'){C.adminTab='stock_tab';}
+  else if(t==='mozas'){C.adminTab='mozas';}
   else{C.adminTab=t;}
   render();
 };
 window.adminTab=t=>{C.adminTab=t;render();};
+
+// ── ADMIN: GESTIÓN DE MOZAS ───────────────────────
+function renderWaitersAdminTab(){
+  const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const fw=C.editingWaiter||C.newWaiter||{name:''};
+  let formH='<div class="card"><div class="card-title">'+(C.editingWaiter?'✏️ Editar moza/mozo':'+ Agregar moza/mozo')+'</div>';
+  formH+='<div class="form-group"><label>Nombre</label><input placeholder="Ej: María, Juan..." value="'+(fw.name||'')+'" oninput="uWaiter(\'name\',this.value)"></div>';
+  formH+='<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="'+(C.editingWaiter?'saveEditWaiter()':'addWaiter()') +'">'+(C.editingWaiter?'Guardar':'Agregar')+'</button>'+(C.editingWaiter?'<button class="btn btn-ghost" onclick="cancelEditWaiter()">Cancelar</button>':'')+'</div></div>';
+  let listH='<div class="card"><div class="card-title">Mozas/Mozos ('+waiters.length+')</div><div style="display:flex;flex-direction:column;gap:8px">';
+  if(waiters.length===0){listH+='<div class="empty-state">No hay mozas/mozos cargados</div>';}
+  waiters.forEach(w=>{
+    listH+=`<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)"><div style="width:36px;height:36px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${(w.name||'?')[0].toUpperCase()}</div><div style="flex:1;font-size:14px;font-weight:500">${w.name}</div><div class="row-btns"><button class="btn btn-ghost btn-sm" onclick="editWaiter('${w._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteWaiter('${w._key}')">✕</button></div></div>`;
+  });
+  listH+='</div></div>';
+  return`<div class="admin-grid">${formH}${listH}</div>`;
+}
+window.uWaiter=(field,val)=>{const o=C.editingWaiter||(C.newWaiter=C.newWaiter||{name:''});o[field]=val;};
+window.addWaiter=()=>{const d=C.newWaiter||{};if(!d.name||!d.name.trim()){alert('Ingresá el nombre');return;}push(ref(db,'waiters'),{name:d.name.trim()});C.newWaiter={name:''};render();};
+window.editWaiter=key=>{C.editingWaiter={...DB.waiters[key],_key:key};render();};
+window.saveEditWaiter=()=>{const {_key,...data}=C.editingWaiter;set(ref(db,`waiters/${_key}`),data);C.editingWaiter=null;render();};
+window.cancelEditWaiter=()=>{C.editingWaiter=null;render();};
+window.deleteWaiter=key=>{if(confirm('¿Eliminar esta moza/mozo?'))remove(ref(db,`waiters/${key}`));};
+
+// ── MODO MOZO/A ───────────────────────────────────
+function renderWaiterMode(){
+  showLogoutBtn(false);
+  document.getElementById('modetabs').style.display='none';
+  const mc=document.getElementById('main-content');
+  const step=C.waiterStep||'select';
+  if(step==='select')renderWaiterSelectScreen(mc);
+  else if(step==='mesa')renderWaiterMesaScreen(mc);
+  else if(step==='modeChoice')renderWaiterModeChoice(mc);
+  else if(step==='nameInput')renderWaiterNameInput(mc);
+  else renderWaiterMenu(mc);
+}
+function renderWaiterSelectScreen(mc){
+  const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  if(waiters.length===0){mc.innerHTML=`<div class="content"><div class="mode-screen"><div style="font-size:48px">👩‍🍳</div><div style="font-size:18px;font-weight:500">No hay mozas/mozos cargados</div><div style="font-size:14px;color:var(--muted)">El admin debe agregar el personal primero</div></div></div>`;return;}
+  let h=`<div class="content"><div class="mesa-screen"><div style="width:100%;max-width:480px"><div class="mesa-title" style="margin-bottom:.5rem">¡Hola! 👋</div><div style="font-size:16px;color:var(--muted);margin-bottom:1.5rem;text-align:center">¿Quién está tomando pedidos?</div><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">`;
+  waiters.forEach(w=>{h+=`<button onclick="selectWaiter('${w._key}','${w.name.replace(/'/g,"\'")}' )" style="padding:18px 14px;border-radius:12px;border:0.5px solid var(--border);background:var(--card);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:8px"><div style="width:44px;height:44px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700">${w.name[0].toUpperCase()}</div>${w.name}</button>`;});
+  h+=`</div></div></div></div>`;
+  mc.innerHTML=h;
+}
+window.selectWaiter=(id,name)=>{C.waiterId=id;C.waiterName=name;C.waiterStep='mesa';render();};
+function renderWaiterMesaScreen(mc){
+  const tables=Object.entries(DB.tables).map(([k,v])=>({...v,_key:k}));
+  let h=`<div class="content"><div class="mesa-screen"><div style="width:100%;max-width:480px"><div style="display:flex;align-items:center;gap:10px;margin-bottom:1.5rem"><div style="width:40px;height:40px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700">${C.waiterName[0].toUpperCase()}</div><div><div style="font-size:16px;font-weight:600">${C.waiterName}</div><div style="font-size:12px;color:var(--muted)">Seleccioná una mesa</div></div></div><div class="mesa-grid">`;
+  tables.forEach(t=>{const occ=tableOccupied(t._key);h+=`<button class="mesa-btn" onclick="waiterSelectMesa('${t._key}')" style="${occ?'border-color:#f59e0b;':''}"><div>${t.label}</div>${t.capacity?`<div class="mesa-btn-label">${t.capacity} personas</div>`:''}</button>`;});
+  h+=`</div></div></div></div>`;
+  mc.innerHTML=h;
+}
+window.waiterSelectMesa=id=>{C.waiterTableId=id;C.waiterCart={};C.waiterStep='modeChoice';render();};
+function renderWaiterModeChoice(mc){
+  const table=DB.tables[C.waiterTableId];
+  mc.innerHTML=`<div class="content"><div class="mode-screen"><div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem"><div style="width:32px;height:32px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">${C.waiterName[0].toUpperCase()}</div><span style="font-size:14px;color:var(--muted)">${C.waiterName} · ${table?table.label:''}</span></div><div class="mesa-title" style="font-size:22px;margin-bottom:1.5rem">¿Cómo tomamos el pedido?</div><div class="mode-cards"><button class="mode-card" onclick="waiterChooseMode('general')"><div class="mode-card-icon">👥</div><div style="font-weight:600;margin-bottom:4px">General</div><div style="font-size:12px;color:var(--muted)">Un pedido para toda la mesa</div></button><button class="mode-card" onclick="waiterChooseMode('individual')"><div class="mode-card-icon">👤</div><div style="font-weight:600;margin-bottom:4px">Individual</div><div style="font-size:12px;color:var(--muted)">Pedido por persona</div></button></div><button class="back-btn" onclick="C.waiterStep='mesa';render()" style="margin-top:1rem">← Cambiar mesa</button></div></div>`;
+}
+window.waiterChooseMode=mode=>{C.waiterOrderMode=mode;if(mode==='individual')C.waiterStep='nameInput';else{C.waiterPersonName='';C.waiterStep='menu';}render();};
+function renderWaiterNameInput(mc){
+  mc.innerHTML=`<div class="content"><div class="mode-screen"><div class="mesa-title" style="font-size:22px;margin-bottom:.5rem">Nombre del comensal</div><div style="font-size:14px;color:var(--muted);margin-bottom:1.5rem">¿Para quién es este pedido?</div><input id="waiter-name-inp" style="width:100%;max-width:320px;padding:12px 16px;border:0.5px solid var(--border);border-radius:10px;font-size:16px;font-family:inherit;text-align:center;background:var(--card);color:var(--text)" placeholder="Nombre del comensal" value="${C.waiterPersonName||''}"><div style="display:flex;gap:10px;margin-top:1rem"><button class="btn btn-primary" onclick="waiterConfirmName()">Continuar →</button><button class="back-btn" onclick="C.waiterStep='modeChoice';render()">← Volver</button></div></div></div>`;
+  setTimeout(()=>{const el=document.getElementById('waiter-name-inp');if(el)el.focus();},50);
+}
+window.waiterConfirmName=()=>{const inp=document.getElementById('waiter-name-inp');const name=(inp?inp.value:'').trim();if(!name){alert('Ingresá el nombre');return;}C.waiterPersonName=name;C.waiterStep='menu';render();};
+function waiterCartCount(){return Object.values(C.waiterCart).reduce((s,v)=>s+v.qty,0);}
+function waiterCartTotal(){return Object.entries(C.waiterCart).reduce((s,[id,v])=>{const d=DB.dishes[id]||DB.cafeteriaItems[id];if(!d)return s;return s+(DB.cafeteriaItems[id]?Number(d.price):dishFinalPrice(d,v.qty))*v.qty;},0);}
+function renderWaiterMenu(mc){
+  const table=DB.tables[C.waiterTableId];
+  const section=C.waiterMenuSection||'platos';
+  const ct=waiterCartCount();
+  const hasCaf=Object.keys(DB.cafeteriaCategories||{}).length>0||Object.values(DB.cafeteriaItems||{}).filter(d=>!d.unavailable).length>0;
+  let menuH=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:.75rem;flex-wrap:wrap"><button class="back-btn" onclick="C.waiterStep='modeChoice';render()">← Mesa</button><div style="font-size:13px;color:var(--muted)"><strong style="color:var(--text)">${table?table.label:''}</strong><span class="${C.waiterOrderMode==='individual'?'order-type-chip ot-individual':'order-type-chip ot-general'}" style="margin-left:6px">${C.waiterOrderMode==='individual'?'👤 '+C.waiterPersonName:'👥 General'}</span><span style="margin-left:6px;font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px">👩 ${C.waiterName}</span></div></div>`;
+  if(hasCaf){menuH+=`<div style="display:flex;background:#f3f4f6;border-radius:10px;padding:3px;gap:2px;margin-bottom:.75rem;width:fit-content"><button onclick="C.waiterMenuSection='platos';render()" style="padding:6px 16px;border-radius:8px;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:${section==='platos'?'#fff':'transparent'};color:${section==='platos'?'var(--text)':'var(--muted)'}">🍽 Restaurant</button><button onclick="C.waiterMenuSection='cafeteria';render()" style="padding:6px 16px;border-radius:8px;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:${section==='cafeteria'?'#fff':'transparent'};color:${section==='cafeteria'?'var(--text)':'var(--muted)'}">☕ Cafetería</button></div>`;}
+  if(section==='cafeteria'){
+    const allItems=Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
+    const cats=getCafCats().filter(c=>allItems.some(d=>d.cat===c._key));
+    menuH+=`<div class="cat-tabs">`;cats.forEach(c=>{menuH+=`<button class="cat-tab${C.waiterCafCat===c._key?' active':''}" onclick="C.waiterCafCat='${c._key}';render()">${c.icon} ${c.label}</button>`;});menuH+=`</div><div class="menu-grid">`;
+    const filtered=C.waiterCafCat&&C.waiterCafCat!=='todos'?allItems.filter(d=>d.cat===C.waiterCafCat):allItems;
+    filtered.forEach(d=>{const q=(C.waiterCart[d._key]||{}).qty||0;menuH+=`<div class="menu-card"><div class="menu-card-name">${d.emoji||'☕'} ${d.name}</div><div class="menu-card-desc">${d.desc||''}</div><div class="menu-card-footer"><span class="menu-card-price">$${Number(d.price).toLocaleString()}</span>${q===0?`<button class="add-btn" onclick="waiterQuickAdd('${d._key}','caf')">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="waiterRemove('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="waiterQuickAdd('${d._key}','caf')">+</button></div>`}</div></div>`;});
+    menuH+=`</div>`;
+  } else {
+    const allDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
+    const cats=getCats();const catIds=cats.map(c=>c._key).filter(id=>allDishes.some(d=>d.cat===id));
+    menuH+=`<div class="cat-tabs">`;catIds.forEach(cid=>{const cat=cats.find(c=>c._key===cid);menuH+=`<button class="cat-tab${C.waiterCat===cid?' active':''}${cat&&cat.isPromo?' promo-tab':''}" onclick="C.waiterCat='${cid}';render()">${cat?cat.icon+' '+cat.label:cid}</button>`;});menuH+=`</div><div class="menu-grid">`;
+    const filtered=C.waiterCat&&C.waiterCat!=='todos'?allDishes.filter(d=>d.cat===C.waiterCat):allDishes;
+    filtered.forEach(d=>{const q=(C.waiterCart[d._key]||{}).qty||0;const dishCat=cats.find(c=>c._key===d.cat);const isP=dishCat&&dishCat.isPromo&&(d.promoDiscount>0||d.is2x1);const fp=dishFinalPrice(d,q||1);menuH+=`<div class="menu-card${isP?' promo-card':''}"><div class="menu-card-name">${d.name}</div><div class="menu-card-desc">${d.desc||''}</div><div class="menu-card-footer"><span class="menu-card-price">$${fp.toLocaleString()}</span>${q===0?`<button class="add-btn" onclick="waiterQuickAdd('${d._key}','dish')">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="waiterRemove('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="waiterQuickAdd('${d._key}','dish')">+</button></div>`}</div></div>`;});
+    menuH+=`</div>`;
+  }
+  const cartEntries=Object.entries(C.waiterCart).filter(([,v])=>v.qty>0);
+  const total=waiterCartTotal();
+  let cartH=`<div class="cart-header"><span>${C.waiterOrderMode==='individual'?C.waiterPersonName:'Mesa'}</span>${ct>0?`<span class="cart-tag">${ct} ítem${ct>1?'s':''}</span>`:''}</div><div class="cart-body">`;
+  if(cartEntries.length===0)cartH+=`<div class="cart-empty">Todavía no agregaste ningún plato.</div>`;
+  else cartEntries.forEach(([id,v])=>{
+    const d=DB.dishes[id]||DB.cafeteriaItems[id];if(!d)return;
+    const isCaf=!!DB.cafeteriaItems[id];const fp=isCaf?Number(d.price):dishFinalPrice(d,v.qty);
+    const icon=isCaf?(d.emoji||'☕'):(getCats().find(c=>c._key===d.cat)||{}).icon||'🍽';
+    cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0;color:var(--muted)">${icon}</div><div class="cart-item-info"><div class="cart-item-name">${d.name}</div></div><div class="cart-qty"><button class="cqbtn" onclick="waiterRemove('${id}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="waiterQuickAdd('${id}','${isCaf?'caf':'dish'}')">+</button></div><div class="cart-item-price">$${(fp*v.qty).toLocaleString()}</div></div>`;
+  });
+  cartH+=`</div><div class="cart-footer">`;
+  if(cartEntries.length>0){cartH+=`<div class="cart-total-row big"><span>Total</span><span>$${total.toLocaleString()}</span></div><button class="btn btn-primary btn-block" style="margin-top:10px" onclick="waiterPlaceOrder()">Confirmar pedido</button><button class="btn btn-ghost btn-block" style="margin-top:6px;color:var(--danger);border-color:var(--danger)" onclick="C.waiterCart={};render()">Limpiar carrito</button>`;}
+  cartH+=`<button class="btn btn-outline btn-block" style="margin-top:8px" onclick="C.waiterStep='mesa';C.waiterTableId=null;C.waiterCart={};render()">← Nueva mesa</button></div>`;
+  mc.innerHTML=`<div class="content"><div class="menu-layout"><div class="menu-col">${menuH}</div><div class="cart-col"><div class="cart-widget">${cartH}</div></div></div></div>`;
+}
+window.waiterQuickAdd=(id,src)=>{if(!C.waiterCart[id])C.waiterCart[id]={qty:0};C.waiterCart[id].qty++;render();};
+window.waiterRemove=id=>{if(C.waiterCart[id]){if(C.waiterCart[id].qty>1)C.waiterCart[id].qty--;else delete C.waiterCart[id];}render();};
+window.waiterPlaceOrder=async()=>{
+  if(waiterCartCount()===0)return;
+  const items=Object.entries(C.waiterCart).map(([id,v])=>{const dP=DB.dishes[id];const dC=DB.cafeteriaItems[id];const d=dP||dC;if(!d)return null;const isCaf=!!dC;return{name:d.name,qty:v.qty,price:Number(d.price),finalPrice:isCaf?Number(d.price):dishFinalPrice(d,v.qty),excluded:[],selectedType:null,isCafeteria:isCaf,emoji:d.emoji||null};}).filter(Boolean);
+  await push(ref(db,'orders'),{tableId:C.waiterTableId,items,status:'pending',time:nowStr(),billRequested:false,orderMode:C.waiterOrderMode,personName:C.waiterOrderMode==='individual'?C.waiterPersonName:null,createdAt:Date.now(),takenBy:C.waiterName});
+  C.waiterCart={};C.waiterStep='mesa';C.waiterTableId=null;render();
+};
+
 window.toggleCatOpen=id=>{catOpen[id]=!catOpen[id];render();};
 
 // ── DISHES TAB ────────────────────────────────────
@@ -1083,10 +1208,14 @@ function renderStockTab(){
           </div>
           ${relatedDishes.length>0?`<div style="font-size:11px;color:var(--muted)">Usado en: ${relatedDishes.join(', ')}</div>`:''}
         </div>
-        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0">
+        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;min-width:200px">
           <div style="display:flex;gap:4px">
-            <input id="restock-${ing._key}" type="number" min="1" step="0.1" placeholder="+N" style="width:60px;padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px">
-            <button onclick="restockIng('${ing._key}')" style="padding:5px 10px;border-radius:6px;border:0.5px solid #10b981;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar</button>
+            <button onclick="setAdjustMode('${ing._key}','add')" style="padding:4px 10px;border-radius:6px 0 0 6px;border:0.5px solid var(--border);background:${(C._adjMode||{})['${ing._key}']!=='set'?'var(--brand)':'var(--bg)'};color:${(C._adjMode||{})['${ing._key}']!=='set'?'#fff':'var(--muted)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">±</button>
+            <button onclick="setAdjustMode('${ing._key}','set')" style="padding:4px 10px;border-radius:0 6px 6px 0;border:0.5px solid var(--border);border-left:none;background:${(C._adjMode||{})['${ing._key}']==='set'?'var(--brand)':'var(--bg)'};color:${(C._adjMode||{})['${ing._key}']==='set'?'#fff':'var(--muted)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">=</button>
+          </div>
+          <div style="display:flex;gap:4px">
+            <input id="restock-${ing._key}" type="number" step="0.1" placeholder="${(C._adjMode||{})['${ing._key}']==='set'?'Nuevo valor':'+/- cantidad'}" style="width:90px;padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px">
+            <button onclick="applyStockAdj('${ing._key}','ing')" style="padding:5px 10px;border-radius:6px;border:0.5px solid #10b981;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">✓</button>
           </div>
           <div style="display:flex;gap:4px;justify-content:flex-end">
             <button class="btn btn-ghost btn-sm" onclick="editIng('${ing._key}')">✏️</button>
@@ -1123,9 +1252,15 @@ function renderStockTab(){
               <span style="font-size:13px;color:var(--muted)">unidades${d.alertAt!=null?` · alerta ≤ ${d.alertAt}`:''}</span>
             </div>
           </div>
-          <div style="display:flex;gap:4px;align-items:center">
-            <input id="restock-dish-${d._key}" type="number" min="1" step="1" placeholder="+N" style="width:60px;padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px">
-            <button onclick="restockDish('${d._key}','${d._src}')" style="padding:5px 10px;border-radius:6px;border:0.5px solid #10b981;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar</button>
+          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;min-width:200px">
+            <div style="display:flex;gap:4px">
+              <button onclick="setAdjustMode('dish-${d._key}','add')" style="padding:4px 10px;border-radius:6px 0 0 6px;border:0.5px solid var(--border);background:${(C._adjMode||{})['dish-${d._key}']!=='set'?'var(--brand)':'var(--bg)'};color:${(C._adjMode||{})['dish-${d._key}']!=='set'?'#fff':'var(--muted)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">±</button>
+              <button onclick="setAdjustMode('dish-${d._key}','set')" style="padding:4px 10px;border-radius:0 6px 6px 0;border:0.5px solid var(--border);border-left:none;background:${(C._adjMode||{})['dish-${d._key}']==='set'?'var(--brand)':'var(--bg)'};color:${(C._adjMode||{})['dish-${d._key}']==='set'?'#fff':'var(--muted)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">=</button>
+            </div>
+            <div style="display:flex;gap:4px">
+              <input id="restock-dish-${d._key}" type="number" step="1" placeholder="${(C._adjMode||{})['dish-${d._key}']==='set'?'Nuevo valor':'+/- cantidad'}" style="width:90px;padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px">
+              <button onclick="applyStockAdj('${d._key}','${d._src}')" style="padding:5px 10px;border-radius:6px;border:0.5px solid #10b981;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">✓</button>
+            </div>
           </div>
         </div>
       </div>`;
@@ -1167,27 +1302,38 @@ window.deleteIng=key=>{
   });
   remove(ref(db,`ingredients/${key}`));
 };
-window.restockIng=async key=>{
-  const inp=document.getElementById(`restock-${key}`);
-  const qty=Number(inp?inp.value:0);
-  if(!qty||qty<=0){alert('Ingresá una cantidad');return;}
-  const ing=DB.ingredients[key];
-  if(!ing)return;
-  const newStock=(ing.stock||0)+qty;
-  await update(ref(db,`ingredients/${key}`),{stock:newStock});
-  if(inp)inp.value='';
+window.setAdjustMode=(key,mode)=>{
+  if(!C._adjMode)C._adjMode={};
+  C._adjMode[key]=mode;
+  // Update button styles without full re-render
+  const inp=document.getElementById('restock-'+key)||document.getElementById('restock-dish-'+key.replace('dish-',''));
+  if(inp)inp.placeholder=mode==='set'?'Nuevo valor':'+/- cantidad';
+  render();
 };
-window.restockDish=async(key,src)=>{
-  const inp=document.getElementById(`restock-dish-${key}`);
-  const qty=Number(inp?inp.value:0);
-  if(!qty||qty<=0){alert('Ingresá una cantidad');return;}
-  const dbPath=src==='cafeteria'?'cafeteriaItems':'dishes';
-  const d=src==='cafeteria'?DB.cafeteriaItems[key]:DB.dishes[key];
-  if(!d)return;
-  const newStock=(d.stock||0)+qty;
-  await update(ref(db,`${dbPath}/${key}`),{stock:newStock});
+window.applyStockAdj=async(key,src)=>{
+  // src: 'ing' | 'dishes' | 'cafeteria'
+  const adjKey=src==='ing'?key:'dish-'+key;
+  const mode=(C._adjMode||{})[adjKey]||'add';
+  const inputId=src==='ing'?`restock-${key}`:`restock-dish-${key}`;
+  const inp=document.getElementById(inputId);
+  const val=Number(inp?inp.value:'');
   if(inp)inp.value='';
+  if(isNaN(val)||val===0&&mode==='add'){alert('Ingresá un valor');return;}
+  if(src==='ing'){
+    const ing=DB.ingredients[key];if(!ing)return;
+    const newStock=mode==='set'?Math.max(0,val):Math.max(0,(ing.stock||0)+val);
+    await update(ref(db,`ingredients/${key}`),{stock:newStock});
+  } else {
+    const dbPath=src==='cafeteria'?'cafeteriaItems':'dishes';
+    const d=src==='cafeteria'?DB.cafeteriaItems[key]:DB.dishes[key];
+    if(!d)return;
+    const newStock=mode==='set'?Math.max(0,val):Math.max(0,(d.stock||0)+val);
+    await update(ref(db,`${dbPath}/${key}`),{stock:newStock});
+  }
 };
+// Keep restockIng for backwards compat (called from nowhere now but just in case)
+window.restockIng=key=>applyStockAdj(key,'ing');
+window.restockDish=(key,src)=>applyStockAdj(key,src);
 
 // Recipe helpers for dish/caf forms
 window.addToRecipe=(ingId,type)=>{
