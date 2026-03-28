@@ -2929,6 +2929,15 @@ function renderMenuOnly(mc){
   const cats=getCats();
   const allDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
   const allCafItems=Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
+
+  // Mostrar spinner mientras Firebase no cargó
+  if(firstLoad||allDishes.length===0&&Object.keys(DB.dishes).length===0){
+    mc.innerHTML=`<div class="content"><div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;gap:16px">
+      <div class="spinner"></div>
+      <div style="font-size:14px;color:var(--muted)">Cargando carta...</div>
+    </div></div>`;
+    return;
+  }
   const hasCaf=allCafItems.length>0;
   const section=C.customerMenuSection||'platos';
 
