@@ -1325,16 +1325,14 @@ function renderDishesTab(){
   formH+='<div class="form-group" style="margin-bottom:0"><label>Stock <span style="font-size:10px;color:var(--muted)">(opcional)</span></label><input id="dish-stock-inp" type="number" min="0" placeholder="∞" value="'+(_hasStock?f.stock:'')+'" oninput="uFStock(this.value)"></div>';
   formH+='</div>';
 
-  // Alerta stock (solo si tiene stock)
-  if(_hasStock){
-    const stockCol=_s2===0?'#b91c1c':_s2<=5?'#92400e':'#065f46';
-    const stockBg=_s2===0?'#fee2e2':_s2<=5?'#fef3c7':'#d1fae5';
-    const stockLabel=_s2===0?'Sin stock':_s2<=5?'⚠️ Bajo':'✓ OK';
-    formH+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">';
-    formH+='<span style="font-size:12px;padding:3px 10px;border-radius:6px;font-weight:600;background:'+stockBg+';color:'+stockCol+'">'+stockLabel+' ('+_s2+')</span>';
-    formH+='<div style="flex:1"><label style="font-size:11px;color:var(--muted)">Alerta ≤ <span style="color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uF(\'dish\',\'alertAt\',this.value)" style="padding:4px 8px;height:30px;font-size:12px"></div>';
-    formH+='</div>';
-  }
+  // Badge + campo alerta — siempre en el DOM, visibilidad controlada por JS
+  const stockCol=_s2===0?'#b91c1c':_s2<=5?'#92400e':'#065f46';
+  const stockBg=_s2===0?'#fee2e2':_s2<=5?'#fef3c7':'#d1fae5';
+  const stockLabel=_s2===0?'Sin stock':_s2<=5?'⚠️ Bajo':'✓ OK';
+  formH+='<div id="dish-alertat-row" style="display:'+(_hasStock?'flex':'none')+';align-items:center;gap:8px;margin-bottom:10px">';
+  formH+='<span id="dish-stock-badge" style="font-size:12px;padding:3px 10px;border-radius:6px;font-weight:600;background:'+stockBg+';color:'+stockCol+'">'+stockLabel+' ('+_s2+')</span>';
+  formH+='<div style="flex:1"><label style="font-size:11px;color:var(--muted)">Alerta ≤ <span style="color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uF(\'dish\',\'alertAt\',this.value)" style="padding:4px 8px;height:30px;font-size:12px"></div>';
+  formH+='</div>';
 
   // ── Sección PROMO (solo si cat es promo)
   if(isPromo){
@@ -1719,12 +1717,14 @@ function renderKioskoTab(){
   formH+=`<div class="form-group" style="margin-bottom:8px"><label>Nombre</label><input placeholder="Nombre del producto" value="${f.name||''}" oninput="uKiosk('name',this.value)"></div>`;
   formH+=`<div class="form-group" style="margin-bottom:8px"><label>Descripción <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><textarea style="min-height:44px" oninput="uKiosk('desc',this.value)">${f.desc||''}</textarea></div>`;
   const _sc=Number(f.stock);const _hs=f.stock!=null&&f.stock!=='';
-  const _sb=_hs?`<span style="font-size:12px;padding:3px 8px;border-radius:6px;font-weight:600;background:${_sc===0?'#fee2e2':_sc<=5?'#fef3c7':'#d1fae5'};color:${_sc===0?'#b91c1c':_sc<=5?'#92400e':'#065f46'}">${_sc===0?'Sin stock':_sc<=5?'⚠️ Bajo':'✓ OK'}</span>`:'';
-  formH+=`<div class="two-col" style="margin-bottom:12px">`;
+  const _scCol=_sc===0?'#b91c1c':_sc<=5?'#92400e':'#065f46';
+  const _scBg=_sc===0?'#fee2e2':_sc<=5?'#fef3c7':'#d1fae5';
+  const _sb=_hs?`<span id="kiosk-stock-badge" style="font-size:12px;padding:3px 8px;border-radius:6px;font-weight:600;background:${_scBg};color:${_scCol}">${_sc===0?'Sin stock':_sc<=5?'⚠️ Bajo':'✓ OK'}</span>`:`<span id="kiosk-stock-badge" style="display:none"></span>`;
+  formH+=`<div class="two-col" style="margin-bottom:8px">`;
   formH+=`<div class="form-group" style="margin-bottom:0"><label>Precio ($)</label><input type="number" placeholder="0" value="${f.price||''}" oninput="uKiosk('price',this.value)"></div>`;
   formH+=`<div class="form-group" style="margin-bottom:0"><label>Stock</label><div style="display:flex;align-items:center;gap:6px"><input id="kiosk-stock-inp" type="number" min="0" placeholder="0" value="${_hs?f.stock:''}" oninput="uKioskStock(this.value)" style="flex:1">${_sb}</div></div>`;
-  if(_hs){formH+=`<div class="form-group" style="margin-bottom:12px"><label>Alerta cuando quede ≤ <span style="font-size:11px;color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="${f.alertAt!=null&&f.alertAt!==''?f.alertAt:''}" oninput="uKiosk('alertAt',this.value)"></div>`;}
   formH+=`</div>`;
+  formH+=`<div id="kiosk-alertat-row" style="display:${_hs?'block':'none'};margin-bottom:12px"><div class="form-group"><label>Alerta cuando quede ≤ <span style="font-size:11px;color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="${f.alertAt!=null&&f.alertAt!==''?f.alertAt:''}" oninput="uKiosk('alertAt',this.value)"></div></div>`;
   formH+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="${C.editingKioskItem?'saveKioskItem()':'addKioskItem()'}">`;
   formH+=`${C.editingKioskItem?'Guardar cambios':'Agregar item'}</button>`;
   formH+=`${C.editingKioskItem?`<button class="btn btn-ghost" onclick="cancelKioskItem()">Cancelar</button>`:''}</div></div>`;
@@ -1751,31 +1751,41 @@ window.uFStock=val=>{
   const o=C.editingDish||C.newDish;
   o.stock=val===''||val==null?null:val;
   const num=val===''||val==null?null:Number(val);
-  const prev=C._prevStock;
-  const bucket=n=>n===null?'null':n===0?'zero':n<=5?'low':'ok';
-  C._prevStock=num;
-  if(bucket(prev)!==bucket(num)){
-    render();
-    requestAnimationFrame(()=>{
-      const i=document.getElementById('dish-stock-inp');
-      if(i){i.focus();i.value=val;i.setSelectionRange(val.length,val.length);}
-    });
+  // Actualizar solo el badge sin re-renderizar
+  const badge=document.getElementById('dish-stock-badge');
+  if(badge){
+    if(val===''||val==null){badge.style.display='none';}
+    else{
+      badge.style.display='';
+      const col=num===0?'#b91c1c':num<=5?'#92400e':'#065f46';
+      const bg=num===0?'#fee2e2':num<=5?'#fef3c7':'#d1fae5';
+      const lbl=num===0?'Sin stock':num<=5?'⚠️ Bajo':'✓ OK';
+      badge.style.background=bg;badge.style.color=col;
+      badge.textContent=`${lbl} (${num})`;
+    }
   }
+  // Mostrar/ocultar campo alerta
+  const alertRow=document.getElementById('dish-alertat-row');
+  if(alertRow)alertRow.style.display=(val!==''&&val!=null)?'':'none';
 };
 window.uKioskStock=val=>{
   const o=C.editingKioskItem||C.newKioskItem;
   o.stock=val===''||val==null?null:val;
   const num=val===''||val==null?null:Number(val);
-  const prev=C._prevKioskStock;
-  const bucket=n=>n===null?'null':n===0?'zero':n<=5?'low':'ok';
-  C._prevKioskStock=num;
-  if(bucket(prev)!==bucket(num)){
-    render();
-    requestAnimationFrame(()=>{
-      const i=document.getElementById('kiosk-stock-inp');
-      if(i){i.focus();i.value=val;i.setSelectionRange(val.length,val.length);}
-    });
+  const badge=document.getElementById('kiosk-stock-badge');
+  if(badge){
+    if(val===''||val==null){badge.style.display='none';}
+    else{
+      badge.style.display='';
+      const col=num===0?'#b91c1c':num<=5?'#92400e':'#065f46';
+      const bg=num===0?'#fee2e2':num<=5?'#fef3c7':'#d1fae5';
+      const lbl=num===0?'Sin stock':num<=5?'⚠️ Bajo':'✓ OK';
+      badge.style.background=bg;badge.style.color=col;
+      badge.textContent=`${lbl}`;
+    }
   }
+  const alertRow=document.getElementById('kiosk-alertat-row');
+  if(alertRow)alertRow.style.display=(val!==''&&val!=null)?'':'none';
 };
 window.uKiosk=(field,val)=>{const o=C.editingKioskItem||C.newKioskItem;o[field]=val;};
 window.addKioskItem=()=>{
