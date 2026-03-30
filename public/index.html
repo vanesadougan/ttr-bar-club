@@ -326,33 +326,40 @@ function updateClock(){} // clock removed from topbar
 // ─── FIREBASE LISTENERS ───────────────────────────
 let firstLoad = true;
 let tablesLoaded = false;
-onValue(ref(db,'dishes'),  snap=>{ DB.dishes  = snap.val()||{}; if(!firstLoad) render(); });
-onValue(ref(db,'categories'), snap=>{ DB.categories = snap.val()||{}; if(!firstLoad) render(); });
+let _loadedCount = 0;
+const _ESSENTIAL = 10; // dishes, categories, alerts, tables, ratings, cancellations, cafeteriaItems, cafeteriaCategories, waiters, kioskItems
+function _markLoaded(){
+  _loadedCount++;
+  if(_loadedCount >= _ESSENTIAL && firstLoad){ firstLoad=false; render(); }
+}
+
+onValue(ref(db,'dishes'),  snap=>{ DB.dishes  = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
+onValue(ref(db,'categories'), snap=>{ DB.categories = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
 onValue(ref(db,'alerts'), snap=>{
   const prevAlertKeys=new Set(Object.keys(DB.alerts||{}));
   DB.alerts = snap.val()||{};
+  _markLoaded();
   if(!firstLoad && C.mode==='admin'){
     const newAlerts=Object.entries(DB.alerts).filter(([k,a])=>!prevAlertKeys.has(k)&&a.status==='pending');
-    newAlerts.forEach(([,a])=>{
-      showNotif('alert','¡Llaman al mozo!',a.tableLabel||'Mesa');
-    });
+    newAlerts.forEach(([,a])=>{ showNotif('alert','¡Llaman al mozo!',a.tableLabel||'Mesa'); });
     if(C.adminTab==='orders') render();
   }
 });
 onValue(ref(db,'tables'), snap=>{
   DB.tables = snap.val()||{};
   tablesLoaded = true;
-  resolveTableRoute(); // resolve URL route once tables are available
+  resolveTableRoute();
+  _markLoaded();
   if(!firstLoad) render();
 });
-onValue(ref(db,'ratings'), snap=>{ DB.ratings = snap.val()||{}; if(!firstLoad) render(); });
-onValue(ref(db,'cancellations'), snap=>{ DB.cancellations = snap.val()||{}; if(!firstLoad) render(); });
-onValue(ref(db,'cafeteriaItems'), snap=>{ DB.cafeteriaItems = snap.val()||{}; if(!firstLoad) render(); });
-onValue(ref(db,'cafeteriaCategories'), snap=>{ DB.cafeteriaCategories = snap.val()||{}; if(!firstLoad) render(); });
-onValue(ref(db,'waiters'), snap=>{ DB.waiters = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'ratings'), snap=>{ DB.ratings = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
+onValue(ref(db,'cancellations'), snap=>{ DB.cancellations = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
+onValue(ref(db,'cafeteriaItems'), snap=>{ DB.cafeteriaItems = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
+onValue(ref(db,'cafeteriaCategories'), snap=>{ DB.cafeteriaCategories = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
+onValue(ref(db,'waiters'), snap=>{ DB.waiters = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
 onValue(ref(db,'caja'), snap=>{ DB.caja = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'deudores'), snap=>{ DB.deudores = snap.val()||{}; if(!firstLoad) render(); });
-onValue(ref(db,'kioskItems'), snap=>{ DB.kioskItems = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'kioskItems'), snap=>{ DB.kioskItems = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
 onValue(ref(db,'ingredients'), snap=>{
   DB.ingredients = snap.val()||{};
   if(!firstLoad) checkIngredientStock();
