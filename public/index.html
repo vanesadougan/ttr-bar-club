@@ -1546,22 +1546,20 @@ function renderCafeteriaTab(){
 
   let formH='<div class="card">';
   formH+='<div class="card-title">'+(C.editingCafItem?'✏️ Editar item':'+ Agregar item')+'</div>';
-  formH+='<div class="two-col">';
+  // Categoría
   formH+='<div class="form-group" style="margin-bottom:8px"><label>Categoría</label><select onchange="uCafF(\'cat\',this.value)">';
   formH+=cats.length===0?'<option value="">Sin categorías</option>':cats.map(c=>'<option value="'+c._key+'"'+(f.cat===c._key?' selected':'')+'>'+c.icon+' '+c.label+'</option>').join('');
   formH+='</select></div>';
-  formH+='<div class="form-group" style="margin-bottom:8px"><label>Precio ($)</label><input type="number" placeholder="0" value="'+f.price+'" oninput="uCafF(\'price\',this.value)"></div>';
-  formH+='</div>';
-  formH+='<div class="two-col">';
+  // Nombre
   formH+='<div class="form-group" style="margin-bottom:8px"><label>Nombre</label><input placeholder="Nombre del item" value="'+f.name+'" oninput="uCafF(\'name\',this.value)"></div>';
-  formH+='<div class="form-group" style="margin-bottom:8px"><label>Emoji</label><input value="'+(f.emoji||'☕')+'" oninput="uCafF(\'emoji\',this.value)" style="font-size:18px;width:100%"></div>';
-  formH+='</div>';
+  // Descripción
   formH+='<div class="form-group" style="margin-bottom:8px"><label>Descripción <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><textarea style="min-height:44px" oninput="uCafF(\'desc\',this.value)">'+f.desc+'</textarea></div>';
+  // Precio / Stock
   const _sc=Number(f.stock);const _hs=f.stock!=null&&f.stock!=='';
   const _sb=_hs?('<span style="font-size:12px;padding:3px 8px;border-radius:6px;font-weight:600;background:'+(_sc===0?'#fee2e2':_sc<=5?'#fef3c7':'#d1fae5')+';color:'+(_sc===0?'#b91c1c':_sc<=5?'#92400e':'#065f46')+'">'+(_sc===0?'Sin stock':_sc<=5?'⚠️ Bajo':'✓ OK')+'</span>'):'';
   formH+='<div class="two-col" style="margin-bottom:8px">';
+  formH+='<div class="form-group" style="margin-bottom:0"><label>Precio ($)</label><input type="number" placeholder="0" value="'+f.price+'" oninput="uCafF(\'price\',this.value)"></div>';
   formH+='<div class="form-group" style="margin-bottom:0"><label>Stock <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><div style="display:flex;align-items:center;gap:6px"><input type="number" min="0" placeholder="Sin límite" value="'+(_hs?f.stock:'')+'" oninput="uCafF(\'stock\',this.value)" style="flex:1">'+_sb+'</div></div>';
-  formH+='<div class="form-group" style="margin-bottom:0"><label>Alerta ≤</label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uCafF(\'alertAt\',this.value)"></div>';
   formH+='</div>';
   formH+='<div class="ing-section" style="margin-bottom:8px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(f.customizable?'8':'0')+'px"><label class="toggle-switch"><input type="checkbox" '+(f.customizable?'checked':'')+' onchange="toggleCafCustomizable(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Personalizar ingredientes</span></div>';
   if(f.customizable){
