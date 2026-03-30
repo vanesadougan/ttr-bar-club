@@ -1835,127 +1835,146 @@ window.deleteKioskItem=key=>{if(confirm('¿Eliminar este item?'))remove(ref(db,`
 function renderStockTab(){
   const ings=Object.entries(DB.ingredients||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   const fi=C.editingIng||C.newIng||{name:'',unit:'u',stock:'',alertAt:''};
-  const UNITS=['u','l'];
+  const UNITS=['u','kg','g','l','ml'];
 
-  // Form
-  let formH=`<div class="card">
-    <div class="card-title">${C.editingIng?'Editar ingrediente':'Nuevo ingrediente'}</div>
-    <div class="two-col">
-      <div class="form-group"><label>Nombre</label><input placeholder="Ej: Carne, Pan, Leche..." value="${fi.name||''}" oninput="uIng('name',this.value)"></div>
-      <div class="form-group"><label>Unidad</label><select onchange="uIng('unit',this.value)">
-        ${UNITS.map(u=>`<option value="${u}"${fi.unit===u?' selected':''}>${u}</option>`).join('')}
-      </select></div>
-    </div>
-    <div class="two-col">
-      <div class="form-group"><label>Stock inicial</label><input type="number" min="0" step="0.1" placeholder="0" value="${fi.stock!=null&&fi.stock!==''?fi.stock:''}" oninput="uIng('stock',this.value)"></div>
-      <div class="form-group"><label>Alerta cuando quede ≤</label><input type="number" min="0" step="0.1" placeholder="Ej: 5" value="${fi.alertAt!=null&&fi.alertAt!==''?fi.alertAt:''}" oninput="uIng('alertAt',this.value)"></div>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-primary" onclick="${C.editingIng?'saveEditIng()':'addIng()'}">
-        ${C.editingIng?'Guardar cambios':'Agregar ingrediente'}</button>
-      ${C.editingIng?`<button class="btn btn-ghost" onclick="cancelEditIng()">Cancelar</button>`:''}
-    </div>
-  </div>`;
-
-  // List
-  let listH=`<div style="display:flex;flex-direction:column;gap:10px">`;
-  if(ings.length===0){
-    listH+=`<div class="card" style="text-align:center;color:var(--muted);padding:2rem">
-      <div style="font-size:32px;margin-bottom:8px">📦</div>
-      <div style="font-size:14px">No hay ingredientes todavía</div>
-      <div style="font-size:12px;margin-top:4px">Agregá ingredientes para controlar el stock de tus platos</div>
-    </div>`;
-  }
-  ings.forEach(ing=>{
-    const pct=ing.alertAt&&ing.alertAt>0?Math.min(100,Math.round((ing.stock||0)/(ing.alertAt*4)*100)):Math.min(100,(ing.stock||0));
-    const low=ing.alertAt!=null&&(ing.stock||0)<=ing.alertAt;
-    const empty=(ing.stock||0)===0;
-    const barColor=empty?'#ef4444':low?'#f59e0b':'#10b981';
-    const barBg=empty?'#fee2e2':low?'#fef3c7':'#d1fae5';
-    // Platos que usan este ingrediente
-    const relatedDishes=[
-      ...Object.entries(DB.dishes).filter(([,d])=>(d.recipe||[]).some(r=>r.ingredientId===ing._key)).map(([,d])=>d.name),
-      ...Object.entries(DB.cafeteriaItems||{}).filter(([,d])=>(d.recipe||[]).some(r=>r.ingredientId===ing._key)).map(([,d])=>d.name)
-    ];
-    listH+=`<div class="card" style="${low?'border-color:'+barColor+';':''}" >
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
-        <div style="flex:1">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-            <span style="font-size:15px;font-weight:600">${ing.name}</span>
-            ${empty?`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#fee2e2;color:#b91c1c">Sin stock</span>`:
-              low?`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#fef3c7;color:#92400e">⚠️ Stock bajo</span>`:''}
-          </div>
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-            <span style="font-size:22px;font-weight:700;color:${barColor}">${ing.stock||0}</span>
-            <span style="font-size:13px;color:var(--muted)">${ing.unit}${ing.alertAt!=null?` · alerta ≤ ${ing.alertAt} ${ing.unit}`:''}</span>
-          </div>
-          <div style="height:6px;background:#f3f4f6;border-radius:3px;margin-bottom:8px;overflow:hidden">
-            <div style="height:100%;width:${Math.min(100,ing.alertAt&&ing.alertAt>0?Math.round((ing.stock||0)/Math.max(ing.alertAt*4,1)*100):Math.min(100,(ing.stock||0)))}%;background:${barColor};border-radius:3px;transition:width 0.3s"></div>
-          </div>
-          ${relatedDishes.length>0?`<div style="font-size:11px;color:var(--muted)">Usado en: ${relatedDishes.join(', ')}</div>`:''}
-        </div>
-        <div style="display:flex;flex-direction:column;gap:6px;flex-shrink:0;min-width:200px">
-          <div style="display:flex;gap:4px">
-            <button onclick="setAdjustMode('${ing._key}','add')" style="padding:4px 10px;border-radius:6px 0 0 6px;border:0.5px solid var(--border);background:${(C._adjMode||{})['${ing._key}']!=='set'?'var(--brand)':'var(--bg)'};color:${(C._adjMode||{})['${ing._key}']!=='set'?'#fff':'var(--muted)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">±</button>
-            <button onclick="setAdjustMode('${ing._key}','set')" style="padding:4px 10px;border-radius:0 6px 6px 0;border:0.5px solid var(--border);border-left:none;background:${(C._adjMode||{})['${ing._key}']==='set'?'var(--brand)':'var(--bg)'};color:${(C._adjMode||{})['${ing._key}']==='set'?'#fff':'var(--muted)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">=</button>
-          </div>
-          <div style="display:flex;gap:4px">
-            <input id="restock-${ing._key}" type="number" step="0.1" placeholder="${(C._adjMode||{})['${ing._key}']==='set'?'Nuevo valor':'+/- cantidad'}" style="width:90px;padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px">
-            <button onclick="applyStockAdj('${ing._key}','ing')" style="padding:5px 10px;border-radius:6px;border:0.5px solid #10b981;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">✓</button>
-          </div>
-          <div style="display:flex;gap:4px;justify-content:flex-end">
-            <button class="btn btn-ghost btn-sm" onclick="editIng('${ing._key}')">✏️</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteIng('${ing._key}')">✕</button>
-          </div>
-        </div>
-      </div>
-    </div>`;
-  });
-  listH+=`</div>`;
-
-  // Platos/items con stock directo (sin receta)
   const directStockDishes=[
     ...Object.entries(DB.dishes).filter(([,d])=>d.stock!=null&&(!d.recipe||d.recipe.length===0)).map(([k,d])=>({...d,_key:k,_src:'dishes'})),
     ...Object.entries(DB.cafeteriaItems||{}).filter(([,d])=>d.stock!=null&&(!d.recipe||d.recipe.length===0)).map(([k,d])=>({...d,_key:k,_src:'cafeteria'})),
     ...Object.entries(DB.kioskItems||{}).filter(([,d])=>d.stock!=null).map(([k,d])=>({...d,_key:k,_src:'kiosko'}))
   ];
-  if(directStockDishes.length>0){
-    listH+=`<div style="margin-top:1.5rem"><div style="font-size:14px;font-weight:600;margin-bottom:10px;color:var(--text)">📦 Stock directo por plato/item</div><div style="display:flex;flex-direction:column;gap:8px">`;
-    directStockDishes.forEach(d=>{
-      const low=d.alertAt!=null&&(d.stock||0)<=d.alertAt;
-      const empty=(d.stock||0)===0;
-      const col=empty?'#ef4444':low?'#f59e0b':'#10b981';
-      listH+=`<div class="card" style="${low?'border-color:'+col+';':''}">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-          <div style="flex:1">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-              <span style="font-size:14px;font-weight:600">${d.name}</span>
-              <span style="font-size:11px;color:var(--muted)">${d._src==='cafeteria'?'☕ Cafetería':'🍽 Restaurant'}</span>
-              ${empty?`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#fee2e2;color:#b91c1c">Sin stock</span>`:
-                low?`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;background:#fef3c7;color:#92400e">⚠️ Stock bajo</span>`:''}
-            </div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <span style="font-size:20px;font-weight:700;color:${col}">${d.stock||0}</span>
-              <span style="font-size:13px;color:var(--muted)">unidades${d.alertAt!=null?` · alerta ≤ ${d.alertAt}`:''}</span>
-            </div>
-          </div>
-          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;min-width:200px">
-            <div style="display:flex;gap:4px">
-              <button onclick="setAdjustMode('dish-${d._key}','add')" style="padding:4px 10px;border-radius:6px 0 0 6px;border:0.5px solid var(--border);background:${(C._adjMode||{})['dish-${d._key}']!=='set'?'var(--brand)':'var(--bg)'};color:${(C._adjMode||{})['dish-${d._key}']!=='set'?'#fff':'var(--muted)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">±</button>
-              <button onclick="setAdjustMode('dish-${d._key}','set')" style="padding:4px 10px;border-radius:0 6px 6px 0;border:0.5px solid var(--border);border-left:none;background:${(C._adjMode||{})['dish-${d._key}']==='set'?'var(--brand)':'var(--bg)'};color:${(C._adjMode||{})['dish-${d._key}']==='set'?'#fff':'var(--muted)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">=</button>
-            </div>
-            <div style="display:flex;gap:4px">
-              <input id="restock-dish-${d._key}" type="number" step="1" placeholder="${(C._adjMode||{})['dish-${d._key}']==='set'?'Nuevo valor':'+/- cantidad'}" style="width:90px;padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px">
-              <button onclick="applyStockAdj('${d._key}','${d._src}')" style="padding:5px 10px;border-radius:6px;border:0.5px solid #10b981;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">✓</button>
-            </div>
-          </div>
-        </div>
-      </div>`;
+
+  // ── Métricas ──
+  const allItems=[
+    ...ings.map(i=>({stock:i.stock||0,alertAt:i.alertAt})),
+    ...directStockDishes.map(d=>({stock:d.stock||0,alertAt:d.alertAt}))
+  ];
+  const cntOk=allItems.filter(i=>i.stock>0&&(i.alertAt==null||i.stock>i.alertAt)).length;
+  const cntLow=allItems.filter(i=>i.stock>0&&i.alertAt!=null&&i.stock<=i.alertAt).length;
+  const cntEmpty=allItems.filter(i=>i.stock===0).length;
+
+  // ── Helper: fila de item ──
+  const itemRow=(id,name,stock,unit,alertAt,src,badge)=>{
+    const adjKey=src?`dish-${id}`:id;
+    const adjMode=(C._adjMode||{})[adjKey]||'add';
+    const empty=stock===0;
+    const low=alertAt!=null&&stock<=alertAt&&!empty;
+    const col=empty?'#ef4444':low?'#f59e0b':'#10b981';
+    const bg=empty?'#fee2e2':low?'#fef3c7':'#f0fdf4';
+    const pct=alertAt&&alertAt>0?Math.min(100,Math.round(stock/Math.max(alertAt*4,1)*100)):Math.min(100,stock);
+    return `<div style="display:grid;grid-template-columns:1fr 80px 120px 180px;align-items:center;gap:12px;padding:10px 14px;border-bottom:0.5px solid var(--border);${empty?'background:#fff8f8':low?'background:#fffbeb':''}">
+      <div>
+        <div style="font-size:13px;font-weight:600">${name}${badge||''}</div>
+        ${alertAt!=null?`<div style="height:5px;background:#f3f4f6;border-radius:3px;margin-top:5px;overflow:hidden"><div style="height:100%;width:${pct}%;background:${col};border-radius:3px;transition:width 0.3s"></div></div>`:''}
+      </div>
+      <div style="text-align:right">
+        <span style="font-size:18px;font-weight:700;color:${col}">${stock}</span>
+        <span style="font-size:11px;color:var(--muted);display:block">${unit||'u'}</span>
+      </div>
+      <div style="display:flex;gap:3px;align-items:center">
+        <button onclick="stockDelta('${id}','${src||'ing'}',-1)" style="width:28px;height:28px;border-radius:6px;border:0.5px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;font-family:inherit;line-height:1">−</button>
+        <input id="restock-${src?'dish-':''}${id}" type="number" step="${src?'1':'0.1'}" placeholder="0" style="width:50px;padding:4px 6px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;text-align:center">
+        <button onclick="stockDelta('${id}','${src||'ing'}',+1)" style="width:28px;height:28px;border-radius:6px;border:0.5px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;font-family:inherit;line-height:1">+</button>
+      </div>
+      <div style="display:flex;gap:4px;align-items:center">
+        <button onclick="applyStockAdj('${id}','${src||'ing'}')" style="flex:1;padding:6px 8px;border-radius:6px;border:0.5px solid #10b981;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">✓ Aplicar</button>
+        ${!src?`<button class="btn btn-ghost btn-sm" onclick="editIng('${id}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteIng('${id}')">✕</button>`:''}
+      </div>
+    </div>`;
+  };
+
+  let h=`<div style="max-width:900px">`;
+
+  // Métricas
+  h+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.5rem">`;
+  h+=`<div class="card" style="text-align:center;padding:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">✅ OK</div><div style="font-size:28px;font-weight:700;color:#065f46">${cntOk}</div></div>`;
+  h+=`<div class="card" style="text-align:center;padding:14px;${cntLow>0?'border-color:#fcd34d;background:#fffbeb':''}"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">⚠️ Stock bajo</div><div style="font-size:28px;font-weight:700;color:${cntLow>0?'#92400e':'var(--muted)'}">${cntLow}</div></div>`;
+  h+=`<div class="card" style="text-align:center;padding:14px;${cntEmpty>0?'border-color:#fca5a5;background:#fff8f8':''}"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">🔴 Sin stock</div><div style="font-size:28px;font-weight:700;color:${cntEmpty>0?'#b91c1c':'var(--muted)'}">${cntEmpty}</div></div>`;
+  h+=`</div>`;
+
+  // Alertas destacadas
+  const alertItems=[
+    ...ings.filter(i=>(i.stock||0)===0||(i.alertAt!=null&&(i.stock||0)<=i.alertAt)),
+    ...directStockDishes.filter(d=>(d.stock||0)===0||(d.alertAt!=null&&(d.stock||0)<=d.alertAt))
+  ];
+  if(alertItems.length>0){
+    h+=`<div class="card" style="padding:0;overflow:hidden;margin-bottom:1.5rem;border-color:#fca5a5">`;
+    h+=`<div style="padding:10px 14px;background:#fff8f8;border-bottom:0.5px solid #fca5a5;font-size:13px;font-weight:600;color:#b91c1c">🚨 Requieren atención (${alertItems.length})</div>`;
+    h+=`<div style="display:grid;grid-template-columns:80px 1fr;gap:0;padding:8px 14px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;border-bottom:0.5px solid var(--border)"><span>Stock</span><span>Item</span></div>`;
+    alertItems.forEach(item=>{
+      const empty=(item.stock||0)===0;
+      const src=item._src||null;
+      h+=`<div style="display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:0.5px solid var(--border)">`;
+      h+=`<span style="font-size:18px;font-weight:700;color:${empty?'#b91c1c':'#92400e'};min-width:40px">${item.stock||0}</span>`;
+      h+=`<span style="flex:1;font-size:13px;font-weight:500">${item.name}</span>`;
+      const srcLabel=src==='cafeteria'?'☕':src==='kiosko'?'🏪':'🧪';
+      h+=`<span style="font-size:11px;color:var(--muted)">${srcLabel}</span>`;
+      h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:${empty?'#fee2e2':'#fef3c7'};color:${empty?'#b91c1c':'#92400e'}">${empty?'Sin stock':'Stock bajo'}</span>`;
+      h+=`</div>`;
     });
-    listH+=`</div></div>`;
+    h+=`</div>`;
   }
 
-  return `<div class="admin-grid">${formH}${listH}</div>`;
+  // Sección Ingredientes
+  h+=`<div style="display:grid;grid-template-columns:320px 1fr;gap:1.25rem;align-items:start;margin-bottom:1.5rem">`;
+  // Form ingrediente
+  h+=`<div class="card">
+    <div class="card-title">${C.editingIng?'Editar ingrediente':'+ Ingrediente'}</div>
+    <div class="form-group" style="margin-bottom:8px"><label>Nombre</label><input placeholder="Ej: Carne, Pan, Leche..." value="${fi.name||''}" oninput="uIng('name',this.value)"></div>
+    <div class="two-col" style="margin-bottom:8px">
+      <div class="form-group" style="margin-bottom:0"><label>Stock</label><input type="number" min="0" step="0.1" placeholder="0" value="${fi.stock!=null&&fi.stock!==''?fi.stock:''}" oninput="uIng('stock',this.value)"></div>
+      <div class="form-group" style="margin-bottom:0"><label>Unidad</label><select onchange="uIng('unit',this.value)">${UNITS.map(u=>`<option value="${u}"${fi.unit===u?' selected':''}>${u}</option>`).join('')}</select></div>
+    </div>
+    <div class="form-group" style="margin-bottom:12px"><label>Alerta cuando quede ≤</label><input type="number" min="0" step="0.1" placeholder="Ej: 5" value="${fi.alertAt!=null&&fi.alertAt!==''?fi.alertAt:''}" oninput="uIng('alertAt',this.value)"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="${C.editingIng?'saveEditIng()':'addIng()'}">
+        ${C.editingIng?'Guardar':'Agregar'}</button>
+      ${C.editingIng?`<button class="btn btn-ghost" onclick="cancelEditIng()">Cancelar</button>`:''}
+    </div>
+  </div>`;
+
+  // Lista ingredientes
+  h+=`<div>`;
+  if(ings.length===0){
+    h+=`<div class="card" style="text-align:center;color:var(--muted);padding:2rem"><div style="font-size:32px;margin-bottom:8px">🧪</div><div>No hay ingredientes todavía</div></div>`;
+  } else {
+    h+=`<div class="card" style="padding:0;overflow:hidden">`;
+    h+=`<div style="display:grid;grid-template-columns:1fr 80px 120px 180px;gap:12px;padding:8px 14px;background:#f8f7f4;border-bottom:1.5px solid var(--border);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">
+      <span>Ingrediente</span><span style="text-align:right">Stock</span><span style="text-align:center">Ajustar</span><span></span>
+    </div>`;
+    ings.forEach(ing=>{
+      const relatedDishes=[
+        ...Object.entries(DB.dishes).filter(([,d])=>(d.recipe||[]).some(r=>r.ingredientId===ing._key)).map(([,d])=>d.name),
+        ...Object.entries(DB.cafeteriaItems||{}).filter(([,d])=>(d.recipe||[]).some(r=>r.ingredientId===ing._key)).map(([,d])=>d.name)
+      ];
+      const badge=relatedDishes.length>0?`<span style="font-size:10px;color:var(--muted);font-weight:400;display:block;margin-top:1px">Usado en: ${relatedDishes.join(', ')}</span>`:'';
+      h+=itemRow(ing._key,ing.name,ing.stock||0,ing.unit,ing.alertAt,null,badge);
+    });
+    h+=`</div>`;
+  }
+  h+=`</div></div>`;
+
+  // Sección Stock directo
+  if(directStockDishes.length>0){
+    const bySection={dishes:[],cafeteria:[],kiosko:[]};
+    directStockDishes.forEach(d=>bySection[d._src].push(d));
+    const sectionLabel={dishes:'🍽 Restaurant',cafeteria:'☕ Cafetería',kiosko:'🏪 Kiosko'};
+    h+=`<div class="card" style="padding:0;overflow:hidden">`;
+    h+=`<div style="padding:10px 14px;background:#f8f7f4;border-bottom:1.5px solid var(--border);font-size:14px;font-weight:600">📦 Stock directo</div>`;
+    h+=`<div style="display:grid;grid-template-columns:1fr 80px 120px 180px;gap:12px;padding:8px 14px;background:#f8f7f4;border-bottom:0.5px solid var(--border);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">
+      <span>Plato / Item</span><span style="text-align:right">Stock</span><span style="text-align:center">Ajustar</span><span></span>
+    </div>`;
+    ['dishes','cafeteria','kiosko'].forEach(sec=>{
+      if(bySection[sec].length===0)return;
+      h+=`<div style="padding:6px 14px;background:#fafaf9;border-bottom:0.5px solid var(--border);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${sectionLabel[sec]}</div>`;
+      bySection[sec].forEach(d=>{
+        h+=itemRow(d._key,d.name,d.stock||0,'u',d.alertAt,d._src,'');
+      });
+    });
+    h+=`</div>`;
+  }
+
+  h+=`</div>`;
+  return h;
 }
 
 // ── INGREDIENT ACTIONS ────────────────────────────
@@ -1988,6 +2007,13 @@ window.deleteIng=key=>{
     update(ref(db,`cafeteriaItems/${dk}`),{recipe:r});
   });
   remove(ref(db,`ingredients/${key}`));
+};
+window.stockDelta=(key,src,delta)=>{
+  const inputId=src==='ing'?`restock-${key}`:`restock-dish-${key}`;
+  const inp=document.getElementById(inputId);
+  if(!inp)return;
+  const cur=Number(inp.value)||0;
+  inp.value=Math.max(0,cur+delta);
 };
 window.setAdjustMode=(key,mode)=>{
   if(!C._adjMode)C._adjMode={};
