@@ -2551,8 +2551,9 @@ function renderHistoryTab(){
     } else {
       // Card de pedido normal cobrado
       const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
+      const kioskChip=o.isKiosko?`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">🏪 Kiosko</span>`:'';
       const waiterChip=o.takenBy?`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px;font-weight:500">👩 ${o.takenBy}</span>`:'';
-      h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}${waiterChip}</div><div class="order-time">${dateStr}</div></div>`;
+      h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${o.isKiosko?kioskChip:tableLabel(o.tableId)+chip}${waiterChip}</div><div class="order-time">${dateStr}</div></div>`;
       h+=`<div class="order-items-text">`;
       (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}<br>`;});
       h+=`</div>`;
@@ -2836,6 +2837,9 @@ window.submitKioskoOrder=async(modo)=>{
     const concepto=`Kiosko${ko.personName?' · '+ko.personName:''} (${pmL[pm]||pm})`;
     const hoy=new Date().toISOString().slice(0,10);
     await push(ref(db,'caja'),{tipo:'venta',concepto,monto:total,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm});
+    // Crear pedido en historial
+    const itemsOrder=ko.items.map(i=>({name:i.name,qty:i.qty,price:i.price,finalPrice:i.price,isKiosko:true}));
+    await push(ref(db,'orders'),{tableId:'kiosko',items:itemsOrder,status:'cobrado',time:nowStr(),createdAt:Date.now(),orderMode:'individual',personName:ko.personName||null,paymentMethod:pm,isKiosko:true});
     C.kioskoOrder=null;C.kioskoSearch='';
     showNotif('order','Venta Kiosko cobrada',`$${total.toLocaleString()} · ${pmL[pm]}`);
 
