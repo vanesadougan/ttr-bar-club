@@ -1782,16 +1782,7 @@ window.uKioskStock=val=>{
     });
   }
 };
-  const o=C.editingKioskItem||C.newKioskItem;
-  o[field]=val;
-  if(field==='stock'){
-    const num=val===''||val==null?null:Number(val);
-    const prev=C._prevKioskStock;
-    const bucket=n=>n===null?'null':n===0?'zero':n<=5?'low':'ok';
-    if(bucket(prev)!==bucket(num)){render();}
-    C._prevKioskStock=num;
-  }
-};
+window.uKiosk=(field,val)=>{const o=C.editingKioskItem||C.newKioskItem;o[field]=val;};
 window.addKioskItem=()=>{
   const f=C.newKioskItem;
   const stockInp=document.getElementById('kiosk-stock-inp');
