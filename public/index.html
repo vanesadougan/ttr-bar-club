@@ -26,7 +26,7 @@
     .topbar{background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 1.5rem;height:56px;position:sticky;top:0;z-index:200}
     .logo{display:flex;align-items:center;cursor:pointer}
     .logo img{height:40px;width:40px;border-radius:50%;object-fit:cover;border:1.5px solid rgba(255,255,255,0.2)}
-    .modetabs{display:flex;gap:4px;background:rgba(255,255,255,0.1);border-radius:8px;padding:3px}
+    .modetabs{display:none!important;gap:4px;background:rgba(255,255,255,0.1);border-radius:8px;padding:3px}
     .modetab{padding:5px 14px;border-radius:6px;font-size:13px;cursor:pointer;border:none;background:transparent;color:rgba(255,255,255,0.7);font-family:inherit}
     .modetab.active{background:#fff;color:var(--brand);font-weight:500}
     .badge{background:var(--accent);color:#fff;border-radius:12px;font-size:11px;padding:1px 6px;margin-left:4px;font-weight:600}
@@ -216,7 +216,7 @@
         <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
         <span id="topbar-cart-count" style="position:absolute;top:-6px;right:-6px;background:#e94560;color:#fff;border-radius:10px;font-size:10px;font-weight:600;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;padding:0 3px;line-height:1">0</span>
       </div>
-      <button id="logout-btn" onclick="doLogout()" style="display:none;padding:4px 10px;border-radius:6px;border:0.5px solid rgba(255,255,255,0.3);background:transparent;color:rgba(255,255,255,0.7);font-size:12px;cursor:pointer;font-family:inherit">Salir</button>
+      <button id="logout-btn" onclick="doLogout()" style="display:none;padding:6px 14px;border-radius:8px;border:0.5px solid rgba(255,255,255,0.4);background:rgba(255,255,255,0.1);color:#fff;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">Cerrar sesión</button>
     </div>
   </div>
   <div id="notif-container"></div>
@@ -1772,10 +1772,10 @@ window.uCafStock=val=>{
   const alertRow=document.getElementById('caf-alertat-row');
   if(alertRow)alertRow.style.display=(val!==''&&val!=null)?'block':'none';
 };
+window.uFStock=val=>{
   const o=C.editingDish||C.newDish;
   o.stock=val===''||val==null?null:val;
   const num=val===''||val==null?null:Number(val);
-  // Actualizar solo el badge sin re-renderizar
   const badge=document.getElementById('dish-stock-badge');
   if(badge){
     if(val===''||val==null){badge.style.display='none';}
@@ -1788,7 +1788,6 @@ window.uCafStock=val=>{
       badge.textContent=`${lbl} (${num})`;
     }
   }
-  // Mostrar/ocultar campo alerta
   const alertRow=document.getElementById('dish-alertat-row');
   if(alertRow)alertRow.style.display=(val!==''&&val!=null)?'':'none';
 };
