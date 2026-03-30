@@ -611,7 +611,7 @@ function renderAdmin(){
 
   // ── Nivel 2: sub-nav de Menú ──
   if(activeMain==='menu'){
-    const menuSub=C.adminTab==='cafeteria'?'cafeteria':'dishes';
+    const menuSub=C.adminTab==='cafeteria'?'cafeteria':C.adminTab==='kiosko'?'kiosko':'dishes';
     h+=`<div style="display:flex;gap:4px;padding:8px 0 0;margin-bottom:1rem;border-bottom:0.5px solid var(--border)">`;
     h+=`<button onclick="adminTab('dishes')" style="padding:6px 14px;border-radius:0;border:none;border-bottom:2px solid ${menuSub==='dishes'?'var(--brand)':'transparent'};cursor:pointer;font-family:inherit;font-size:13px;font-weight:${menuSub==='dishes'?'600':'400'};background:transparent;color:${menuSub==='dishes'?'var(--brand)':'var(--muted)'};margin-bottom:-1px">🍽 Platos</button>`;
     h+=`<button onclick="adminTab('cafeteria')" style="padding:6px 14px;border-radius:0;border:none;border-bottom:2px solid ${menuSub==='cafeteria'?'var(--brand)':'transparent'};cursor:pointer;font-family:inherit;font-size:13px;font-weight:${menuSub==='cafeteria'?'600':'400'};background:transparent;color:${menuSub==='cafeteria'?'var(--brand)':'var(--muted)'};margin-bottom:-1px">☕ Cafetería</button>`;
@@ -1747,7 +1747,12 @@ function renderKioskoTab(){
   listH+=`</div>`;
   return `<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
 }
-window.uKiosk=(field,val)=>{const o=C.editingKioskItem||C.newKioskItem;o[field]=val;};
+window.uKiosk=(field,val)=>{
+  const o=C.editingKioskItem||C.newKioskItem;
+  o[field]=val;
+  // Re-render cuando cambia stock para mostrar/ocultar campo alerta
+  if(field==='stock')render();
+};
 window.addKioskItem=()=>{
   const f=C.newKioskItem;if(!f.name||!f.price){alert('Ingresá nombre y precio');return;}
   if(f.stock!==''&&f.stock!=null&&(f.alertAt===''||f.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
