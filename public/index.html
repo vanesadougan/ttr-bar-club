@@ -1329,7 +1329,7 @@ function renderDishesTab(){
     const stockLabel=_s2===0?'Sin stock':_s2<=5?'⚠️ Bajo':'✓ OK';
     formH+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">';
     formH+='<span style="font-size:12px;padding:3px 10px;border-radius:6px;font-weight:600;background:'+stockBg+';color:'+stockCol+'">'+stockLabel+' ('+_s2+')</span>';
-    formH+='<div style="flex:1"><label style="font-size:11px;color:var(--muted)">Alerta ≤</label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uF(\'dish\',\'alertAt\',this.value)" style="padding:4px 8px;height:30px;font-size:12px"></div>';
+    formH+='<div style="flex:1"><label style="font-size:11px;color:var(--muted)">Alerta ≤ <span style="color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uF(\'dish\',\'alertAt\',this.value)" style="padding:4px 8px;height:30px;font-size:12px"></div>';
     formH+='</div>';
   }
 
@@ -1563,6 +1563,7 @@ function renderCafeteriaTab(){
   formH+='<div class="form-group" style="margin-bottom:0"><label>Precio ($)</label><input type="number" placeholder="0" value="'+f.price+'" oninput="uCafF(\'price\',this.value)"></div>';
   formH+='<div class="form-group" style="margin-bottom:0"><label>Stock <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><div style="display:flex;align-items:center;gap:6px"><input type="number" min="0" placeholder="Sin límite" value="'+(_hs?f.stock:'')+'" oninput="uCafF(\'stock\',this.value)" style="flex:1">'+_sb+'</div></div>';
   formH+='</div>';
+  if(_hs){formH+='<div class="form-group" style="margin-bottom:8px"><label>Alerta cuando quede ≤ <span style="font-size:11px;color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uCafF(\'alertAt\',this.value)"></div>';}
   formH+='<div class="ing-section" style="margin-bottom:8px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(f.customizable?'8':'0')+'px"><label class="toggle-switch"><input type="checkbox" '+(f.customizable?'checked':'')+' onchange="toggleCafCustomizable(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Personalizar ingredientes</span></div>';
   if(f.customizable){
     formH+='<div class="ing-list">'+ings.map((ing,i)=>'<div class="ing-chip">'+ing+'<button class="ing-chip-remove" onclick="removeCafIngredient('+i+')">×</button></div>').join('')+(ings.length===0?'<span style="font-size:12px;color:var(--muted)">Sin ingredientes aún</span>':'')+'</div>';
@@ -1673,13 +1674,19 @@ window.uCafF=(field,val)=>{
 window.uCafCat=(field,val)=>{const o=C.editingCafCat||C.newCafCat;o[field]=val;};
 window.addCafItem=()=>{
   const d=C.newCafItem;if(!d.name||!d.price){alert('Completá nombre y precio');return;}
+  if(d.stock!==''&&d.stock!=null&&(d.alertAt===''||d.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
   const cats=getCafCats();if(!cats.find(c=>c._key===d.cat)&&cats.length>0)d.cat=cats[0]._key;
-  push(ref(db,'cafeteriaItems'),{...d,ingredients:d.ingredients||[],unavailable:false});
+  push(ref(db,'cafeteriaItems'),{...d,ingredients:d.ingredients||[],unavailable:false,alertAt:d.alertAt!=null&&d.alertAt!==''?Number(d.alertAt):null});
   C.newCafItem={name:'',desc:'',price:'',cat:cats.length>0?cats[0]._key:'',emoji:'☕',customizable:false,ingredients:[]};
   C.newCafIngInput='';render();
 };
 window.editCafItem=key=>{C.editingCafItem={...DB.cafeteriaItems[key],_key:key,ingredients:[...(DB.cafeteriaItems[key].ingredients||[])]};render();};
-window.saveEditCafItem=()=>{const {_key,...data}=C.editingCafItem;set(ref(db,`cafeteriaItems/${_key}`),data);C.editingCafItem=null;render();};
+window.saveEditCafItem=()=>{
+  const {_key,...data}=C.editingCafItem;
+  if(data.stock!=null&&(data.alertAt===''||data.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
+  set(ref(db,`cafeteriaItems/${_key}`),{...data,alertAt:data.alertAt!=null&&data.alertAt!==''?Number(data.alertAt):null});
+  C.editingCafItem=null;render();
+};
 window.cancelEditCafItem=()=>{C.editingCafItem=null;render();};
 window.deleteCafItem=key=>{if(confirm('¿Eliminar este item?'))remove(ref(db,`cafeteriaItems/${key}`));};
 window.toggleCafAvailability=(key,currentlyUnavail)=>{update(ref(db,`cafeteriaItems/${key}`),{unavailable:!currentlyUnavail});};
@@ -1713,6 +1720,7 @@ function renderKioskoTab(){
   formH+=`<div class="two-col" style="margin-bottom:12px">`;
   formH+=`<div class="form-group" style="margin-bottom:0"><label>Precio ($)</label><input type="number" placeholder="0" value="${f.price||''}" oninput="uKiosk('price',this.value)"></div>`;
   formH+=`<div class="form-group" style="margin-bottom:0"><label>Stock</label><div style="display:flex;align-items:center;gap:6px"><input type="number" min="0" placeholder="0" value="${_hs?f.stock:''}" oninput="uKiosk('stock',this.value)" style="flex:1">${_sb}</div></div>`;
+  if(_hs){formH+=`<div class="form-group" style="margin-bottom:12px"><label>Alerta cuando quede ≤ <span style="font-size:11px;color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="${f.alertAt!=null&&f.alertAt!==''?f.alertAt:''}" oninput="uKiosk('alertAt',this.value)"></div>`;}
   formH+=`</div>`;
   formH+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="${C.editingKioskItem?'saveKioskItem()':'addKioskItem()'}">`;
   formH+=`${C.editingKioskItem?'Guardar cambios':'Agregar item'}</button>`;
@@ -1739,13 +1747,15 @@ function renderKioskoTab(){
 window.uKiosk=(field,val)=>{const o=C.editingKioskItem||C.newKioskItem;o[field]=val;};
 window.addKioskItem=()=>{
   const f=C.newKioskItem;if(!f.name||!f.price){alert('Ingresá nombre y precio');return;}
-  push(ref(db,'kioskItems'),{name:f.name.trim(),desc:f.desc||'',price:Number(f.price),stock:f.stock!==''&&f.stock!=null?Number(f.stock):null});
+  if(f.stock!==''&&f.stock!=null&&(f.alertAt===''||f.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
+  push(ref(db,'kioskItems'),{name:f.name.trim(),desc:f.desc||'',price:Number(f.price),stock:f.stock!==''&&f.stock!=null?Number(f.stock):null,alertAt:f.alertAt!==''&&f.alertAt!=null?Number(f.alertAt):null});
   C.newKioskItem={name:'',desc:'',price:'',stock:''};render();
 };
 window.editKioskItem=key=>{C.editingKioskItem={...DB.kioskItems[key],_key:key};render();};
 window.saveKioskItem=()=>{
   const {_key,...data}=C.editingKioskItem;
-  set(ref(db,`kioskItems/${_key}`),{name:data.name,desc:data.desc||'',price:Number(data.price),stock:data.stock!==''&&data.stock!=null?Number(data.stock):null});
+  if(data.stock!==''&&data.stock!=null&&(data.alertAt===''||data.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
+  set(ref(db,`kioskItems/${_key}`),{name:data.name,desc:data.desc||'',price:Number(data.price),stock:data.stock!==''&&data.stock!=null?Number(data.stock):null,alertAt:data.alertAt!==''&&data.alertAt!=null?Number(data.alertAt):null});
   C.editingKioskItem=null;render();
 };
 window.cancelKioskItem=()=>{C.editingKioskItem=null;render();};
@@ -2440,14 +2450,18 @@ function renderHistoryTab(){
 // ─── ADMIN ACTIONS ────────────────────────────────
 window.uF=(type,field,val)=>{
   const o=type==='dish'?(C.editingDish||C.newDish):(C.editingTable||C.newTable);
-  if(field==='stock'||field==='alertAt'){
+  if(field==='stock'){
     o[field]=val===''||val==null?null:Math.max(0,Number(val));
     // Solo re-render si el badge de estado cambia (0, <=5, >5)
-    const prev=field==='stock'?C._prevStock:C._prevAlertAt;
-    const cur=o[field];
+    const prev=C._prevStock;const cur=o[field];
     const bucket=n=>n===null?'null':n===0?'zero':n<=5?'low':'ok';
     if(bucket(prev)!==bucket(cur)){render();}
-    if(field==='stock')C._prevStock=cur; else C._prevAlertAt=cur;
+    C._prevStock=cur;
+    return;
+  }
+  if(field==='alertAt'){
+    // Guardar como string para no interrumpir el tipeo
+    o[field]=val===''||val==null?null:val;
     return;
   }
   o[field]=(field==='price'||field==='capacity'||field==='promoDiscount')?Number(val):val;
