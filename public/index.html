@@ -1920,7 +1920,7 @@ function renderStockTab(){
   h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">`;
   h+=`<div style="font-size:15px;font-weight:600">🧪 Ingredientes</div>`;
   if(!showForm){
-    h+=`<button onclick="C.showIngForm=true;render()" style="padding:7px 16px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar ingrediente</button>`;
+    h+=`<button onclick="toggleIngForm()" style="padding:7px 16px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar ingrediente</button>`;
   }
   h+=`</div>`;
 
@@ -1929,7 +1929,7 @@ function renderStockTab(){
     h+=`<div class="card" style="border-color:var(--accent);margin-bottom:1rem">`;
     h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">`;
     h+=`<div style="font-size:14px;font-weight:600">${C.editingIng?'Editar ingrediente':'Nuevo ingrediente'}</div>`;
-    if(!C.editingIng)h+=`<button onclick="C.showIngForm=false;render()" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>`;
+    if(!C.editingIng)h+=`<button onclick="toggleIngForm()" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>`;
     h+=`</div>`;
     h+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px">`;
     h+=`<div class="form-group" style="margin-bottom:0"><label>Nombre</label><input placeholder="Ej: Carne, Pan..." value="${fi.name||''}" oninput="uIng('name',this.value)"></div>`;
@@ -1992,6 +1992,7 @@ window.uIng=(field,val)=>{
   const o=C.editingIng||(C.newIng=C.newIng||{name:'',unit:'u',stock:'',alertAt:''});
   o[field]=(field==='stock'||field==='alertAt')?Number(val):val;
 };
+window.toggleIngForm=()=>{C.showIngForm=!C.showIngForm;if(!C.showIngForm)C.editingIng=null;render();};
 window.addIng=()=>{
   const d=C.newIng||{};
   if(!d.name){alert('Ingresá el nombre del ingrediente');return;}
@@ -2023,25 +2024,24 @@ window.stockDelta=(key,src,delta)=>{
   const inp=document.getElementById(inputId);
   if(!inp)return;
   const cur=Number(inp.value)||0;
-  inp.value=Math.max(0,cur+delta);
+  inp.value=cur+delta;
 };
 window.setAdjustMode=(key,mode)=>{
   if(!C._adjMode)C._adjMode={};
   C._adjMode[key]=mode;
-  // Update button styles without full re-render
   const inp=document.getElementById('restock-'+key)||document.getElementById('restock-dish-'+key.replace('dish-',''));
   if(inp)inp.placeholder=mode==='set'?'Nuevo valor':'+/- cantidad';
   render();
 };
 window.applyStockAdj=async(key,src)=>{
-  // src: 'ing' | 'dishes' | 'cafeteria' | 'kiosko'
   const adjKey=src==='ing'?key:'dish-'+key;
   const mode=(C._adjMode||{})[adjKey]||'add';
   const inputId=src==='ing'?`restock-${key}`:`restock-dish-${key}`;
   const inp=document.getElementById(inputId);
-  const val=Number(inp?inp.value:'');
+  const raw=inp?inp.value.trim():'';
+  if(raw===''||isNaN(Number(raw))){alert('Ingresá un valor');return;}
+  const val=Number(raw);
   if(inp)inp.value='';
-  if(isNaN(val)||val===0&&mode==='add'){alert('Ingresá un valor');return;}
   if(src==='ing'){
     const ing=DB.ingredients[key];if(!ing)return;
     const newStock=mode==='set'?Math.max(0,val):Math.max(0,(ing.stock||0)+val);
