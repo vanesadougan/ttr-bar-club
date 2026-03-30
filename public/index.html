@@ -587,7 +587,7 @@ function renderAdmin(){
     menu:'🍽 Menú',
     orders:`📋 Pedidos${pc>0?` <span class="badge">${pc}</span>`:''}`,
     history:'📜 Historial',
-    deudores:'💳 Deudores',
+    deudores:`💳 Deudores${Object.values(DB.orders).filter(o=>o.status==='deudor').length>0?` <span class="badge">${Object.values(DB.orders).filter(o=>o.status==='deudor').length}</span>`:''}`,
     caja:'💰 Caja',
     stock:'📦 Stock',
     ratings:'⭐ Calificaciones'
@@ -2127,7 +2127,7 @@ function renderOrdersTab(){
     const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
     const waiterChip=o.takenBy?`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px;font-weight:500">👩 ${o.takenBy}</span>`:'';
     const isEditing=C.adminEditOrderKey===o._key;
-    h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}${waiterChip}</div><div class="order-time">${o.time}</div></div>`;
+    h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}${waiterChip}</div><div class="order-time">${o.createdAt?new Date(o.createdAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+new Date(o.createdAt).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}):o.time||''}</div></div>`;
     if(isEditing){
       const editItems=window._adminEditItems||o.items||[];
       const editTotal=editItems.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
