@@ -1625,6 +1625,14 @@ function renderCafCategoriesTab(){
       <div class="form-group"><label>Emoji</label><input value="${fc.icon}" oninput="uCafCat('icon',this.value)" style="font-size:18px"></div>
       <div class="form-group"><label>Nombre</label><input placeholder="Ej: Cafés, Infusiones..." value="${fc.label}" oninput="uCafCat('label',this.value)"></div>
     </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <label class="toggle-switch"><input type="checkbox" ${fc.isPromo?'checked':''} onchange="uCafCat('isPromo',this.checked);render()"><span class="toggle-slider"></span></label>
+      <span style="font-size:13px">Es categoría de <strong>Promo del día</strong> (muestra descuentos)</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <label class="toggle-switch"><input type="checkbox" ${fc.noRating?'checked':''} onchange="uCafCat('noRating',this.checked);render()"><span class="toggle-slider"></span></label>
+      <span style="font-size:13px">No calificar platos de esta categoría</span>
+    </div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-primary" onclick="${C.editingCafCat?'saveEditCafCat()':'addCafCat()'}">
         ${C.editingCafCat?'Guardar':'Agregar categoría'}</button>
@@ -1681,8 +1689,8 @@ window.removeCafIngredient=idx=>{const f=C.editingCafItem||C.newCafItem;f.ingred
 window.addCafCat=()=>{
   const c=C.newCafCat;if(!c.label){alert('Ingresá un nombre');return;}
   const cats=getCafCats();const order=cats.length>0?Math.max(...cats.map(x=>x.order||0))+1:0;
-  push(ref(db,'cafeteriaCategories'),{label:c.label.trim(),icon:c.icon||'☕',order});
-  C.newCafCat={label:'',icon:'☕'};render();
+  push(ref(db,'cafeteriaCategories'),{label:c.label.trim(),icon:c.icon||'☕',isPromo:c.isPromo||false,noRating:c.noRating||false,order});
+  C.newCafCat={label:'',icon:'☕',isPromo:false,noRating:false};render();
 };
 window.editCafCat=key=>{C.editingCafCat={...DB.cafeteriaCategories[key],_key:key};render();};
 window.saveEditCafCat=()=>{const {_key,...data}=C.editingCafCat;set(ref(db,`cafeteriaCategories/${_key}`),data);C.editingCafCat=null;render();};
