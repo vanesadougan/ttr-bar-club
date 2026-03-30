@@ -1755,13 +1755,10 @@ window.uFStock=val=>{
   const bucket=n=>n===null?'null':n===0?'zero':n<=5?'low':'ok';
   C._prevStock=num;
   if(bucket(prev)!==bucket(num)){
-    // Guardar posición del cursor antes de re-render
-    const inp=document.getElementById('dish-stock-inp');
-    const pos=inp?inp.selectionStart:null;
     render();
     requestAnimationFrame(()=>{
       const i=document.getElementById('dish-stock-inp');
-      if(i){i.focus();if(pos!=null)try{i.setSelectionRange(pos,pos);}catch(e){}}
+      if(i){i.focus();i.value=val;i.setSelectionRange(val.length,val.length);}
     });
   }
 };
@@ -1773,12 +1770,10 @@ window.uKioskStock=val=>{
   const bucket=n=>n===null?'null':n===0?'zero':n<=5?'low':'ok';
   C._prevKioskStock=num;
   if(bucket(prev)!==bucket(num)){
-    const inp=document.getElementById('kiosk-stock-inp');
-    const pos=inp?inp.selectionStart:null;
     render();
     requestAnimationFrame(()=>{
       const i=document.getElementById('kiosk-stock-inp');
-      if(i){i.focus();if(pos!=null)try{i.setSelectionRange(pos,pos);}catch(e){}}
+      if(i){i.focus();i.value=val;i.setSelectionRange(val.length,val.length);}
     });
   }
 };
