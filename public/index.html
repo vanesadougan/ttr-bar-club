@@ -2159,9 +2159,14 @@ function renderOrdersTab(){
           <span>Total</span><span style="color:#059669">$${koTotal.toLocaleString()}</span>
         </div>
       </div>`:'<div style="font-size:13px;color:var(--muted);margin-bottom:12px;text-align:center;padding:12px 0">Buscá y agregá productos ↑</div>'}
-      <button onclick="submitKioskoOrder()" style="width:100%;padding:12px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${(ko.items||[]).length===0?'0.45':'1'}">
-        Confirmar venta →
-      </button>
+      <div style="display:flex;gap:8px">
+        <button onclick="submitKioskoOrder('cobrado')" style="flex:1;padding:12px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${(ko.items||[]).length===0?'0.45':'1'}">
+          💵 Cobrado
+        </button>
+        <button onclick="submitKioskoOrder('deudor')" style="flex:1;padding:12px;border-radius:8px;border:0.5px solid #dc2626;background:#fef2f2;color:#dc2626;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${(ko.items||[]).length===0?'0.45':'1'}">
+          💳 Deudor
+        </button>
+      </div>
     </div>`;
   }
 
@@ -2734,31 +2739,61 @@ window.kioskoAddItem=key=>{
   const res=document.getElementById('kiosko-search-results');if(res)res.style.display='none';
   render();
 };
-window.submitKioskoOrder=async()=>{
+window.submitKioskoOrder=async(modo)=>{
   const ko=C.kioskoOrder;if(!ko)return;
   if(!ko.items.length){alert('Agregá al menos un producto');return;}
-  if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
   const nombreInp=document.getElementById('kiosko-nombre');
-  if(nombreInp)ko.personName=nombreInp.value;
-  const pm=await showPaymentChoiceModal(null);
-  if(!pm)return;
+  if(nombreInp)ko.personName=nombreInp.value.trim();
   const total=ko.items.reduce((s,i)=>s+i.price*i.qty,0);
-  // Descontar stock de kiosko
-  for(const item of ko.items){
-    const d=DB.kioskItems[item.kioskKey];
-    if(d&&d.stock!=null){
-      const newStock=Math.max(0,(d.stock||0)-item.qty);
-      await update(ref(db,`kioskItems/${item.kioskKey}`),{stock:newStock});
-      if(newStock===0)showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
-    }
-  }
-  // Registrar en caja
   const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
-  const concepto=`Kiosko${ko.personName?' · '+ko.personName:''} (${pmL[pm]||pm})`;
-  const hoy=new Date().toISOString().slice(0,10);
-  await push(ref(db,'caja'),{tipo:'venta',concepto,monto:total,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm});
-  C.kioskoOrder=null;C.kioskoSearch='';
-  showNotif('order','Venta Kiosko registrada',`$${total.toLocaleString()} · ${pmL[pm]}`);
+
+  if(modo==='cobrado'){
+    if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
+    const pm=await showPaymentChoiceModal(null);
+    if(!pm)return;
+    // Descontar stock
+    for(const item of ko.items){
+      const d=DB.kioskItems[item.kioskKey];
+      if(d&&d.stock!=null){
+        const newStock=Math.max(0,(d.stock||0)-item.qty);
+        await update(ref(db,`kioskItems/${item.kioskKey}`),{stock:newStock});
+        if(newStock===0)showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
+      }
+    }
+    // Registrar en caja
+    const concepto=`Kiosko${ko.personName?' · '+ko.personName:''} (${pmL[pm]||pm})`;
+    const hoy=new Date().toISOString().slice(0,10);
+    await push(ref(db,'caja'),{tipo:'venta',concepto,monto:total,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm});
+    C.kioskoOrder=null;C.kioskoSearch='';
+    showNotif('order','Venta Kiosko cobrada',`$${total.toLocaleString()} · ${pmL[pm]}`);
+
+  } else if(modo==='deudor'){
+    if(!ko.personName){alert('Ingresá el nombre del deudor (obligatorio)');if(nombreInp)nombreInp.focus();return;}
+    // Descontar stock
+    for(const item of ko.items){
+      const d=DB.kioskItems[item.kioskKey];
+      if(d&&d.stock!=null){
+        const newStock=Math.max(0,(d.stock||0)-item.qty);
+        await update(ref(db,`kioskItems/${item.kioskKey}`),{stock:newStock});
+        if(newStock===0)showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
+      }
+    }
+    // Crear pedido en orders con status deudor
+    const items=ko.items.map(i=>({name:i.name,qty:i.qty,price:i.price,finalPrice:i.price,isKiosko:true}));
+    const nombre=ko.personName.split(' ')[0]||ko.personName;
+    const apellido=ko.personName.split(' ').slice(1).join(' ')||'';
+    await push(ref(db,'orders'),{
+      tableId:'kiosko',items,status:'deudor',
+      time:nowStr(),createdAt:Date.now(),
+      orderMode:'individual',personName:ko.personName,
+      deudorNombre:nombre,deudorApellido:apellido,
+      deudorRegistradoAt:Date.now(),
+      isKiosko:true
+    });
+    C.kioskoOrder=null;C.kioskoSearch='';
+    showNotif('order','Deuda Kiosko registrada',ko.personName);
+    C.adminTab='deudores';
+  }
   render();
 };
 
