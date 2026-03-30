@@ -362,8 +362,8 @@ onValue(ref(db,'orders'), snap=>{
   const prevBilled=new Set(Object.entries(DB.orders).filter(([,o])=>o.status==='billed').map(([k])=>k));
   DB.orders = snap.val()||{};
   if(!firstLoad && C.mode==='admin'){
-    // detect new orders
-    const newOrders=Object.entries(DB.orders).filter(([k,o])=>!prevKeys.has(k));
+    // detect new orders (excluir kiosko y deudores)
+    const newOrders=Object.entries(DB.orders).filter(([k,o])=>!prevKeys.has(k)&&!o.isKiosko&&o.status!=='deudor');
     newOrders.forEach(([,o])=>{
       const label=DB.tables[o.tableId]?DB.tables[o.tableId].label:`Mesa`;
       showNotif('order','Nuevo pedido',`${label}${o.personName?' · '+o.personName:''}`);
