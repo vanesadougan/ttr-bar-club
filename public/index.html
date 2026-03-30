@@ -2994,6 +2994,11 @@ function renderMenuOnly(mc){
       h+=`<div class="menu-card-name">${d.name}</div>`;
       if(d.desc)h+=`<div class="menu-card-desc">${d.desc}</div>`;
       if(d.is2x1)h+=`<div style="font-size:11px;color:#92400e;background:#fff7ed;border-radius:5px;padding:2px 8px;display:inline-block;margin-bottom:6px;border:0.5px solid #fed7aa">🎁 Llevá 2, pagá 1</div>`;
+      if(d.hasTypes&&(d.types||[]).length>0){
+        h+=`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">`;
+        (d.types||[]).forEach(t=>{h+=`<span style="font-size:11px;padding:2px 8px;border-radius:12px;background:#f3f4f6;color:#374151;border:0.5px solid #e5e7eb">${t}</span>`;});
+        h+=`</div>`;
+      }
       if(d.customizable&&(d.ingredients||[]).length>0)h+=`<div style="font-size:11px;color:#5b21b6;background:#ede9fe;border-radius:5px;padding:2px 7px;display:inline-block;margin-bottom:6px">🧩 Personalizable</div>`;
       h+=`<div class="menu-card-footer">`;
       h+=`<div>${isP&&!d.is2x1?`<span class="menu-card-price-original">$${d.price.toLocaleString()}</span> `:''}<span class="menu-card-price">$${fp.toLocaleString()}</span></div>`;
