@@ -283,6 +283,8 @@ let C = {
   historyFilter:'hoy', survey:{items:[],ratings:{}},
   adminEditOrderKey:null,
   manualOrder:null, // {tableId, orderMode, personName, items:[]}
+  kioskoOrder:null, // {personName, items:[]}
+  kioskoSearch:'',
   _adjMode:{}, // stock adjustment mode per key: 'add' | 'set'
   newIng:{name:'',unit:'u',stock:'',alertAt:''}, editingIng:null,
   manualOrderSearch:'',
@@ -635,6 +637,7 @@ function renderAdmin(){
   const inp=document.getElementById('ing-input');
   if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addIngredient();}});
   if(C.manualOrder)updateManualSearch();
+  if(C.kioskoOrder)updateKioskoSearch();
   if(C.adminEditOrderKey)updateEditOrderSearch();
 }
 window.adminMainTab=t=>{
@@ -2119,6 +2122,44 @@ function renderOrdersTab(){
     </div>`;
   }
 
+  let kioskoH='';
+  if(C.kioskoOrder){
+    const ko=C.kioskoOrder;
+    const koTotal=(ko.items||[]).reduce((s,i)=>s+i.price*i.qty,0);
+    kioskoH=`<div class="card" style="border:1.5px solid #059669;margin-bottom:1.25rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <div style="font-size:15px;font-weight:600;color:#059669">🏪 Venta Kiosko</div>
+        <button onclick="cancelKioskoOrder()" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
+      </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label>Nombre del cliente <span style="font-size:11px;color:var(--muted)">(opcional)</span></label>
+        <input id="kiosko-nombre" placeholder="Nombre..." value="${ko.personName||''}" oninput="if(C.kioskoOrder)C.kioskoOrder.personName=this.value" autocomplete="off">
+      </div>
+      <div style="margin-bottom:10px">
+        <div class="form-group" style="margin-bottom:6px"><label>Buscar producto</label>
+          <input id="kiosko-search" placeholder="Escribí para buscar..." value="${C.kioskoSearch||''}" oninput="updateKioskoSearch()" autocomplete="off">
+        </div>
+        <div id="kiosko-search-results" style="border:0.5px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;background:var(--card);margin-top:4px"></div>
+      </div>
+      ${(ko.items||[]).length>0?`<div style="margin-bottom:12px">
+        <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Items</div>
+        ${(ko.items||[]).map((item,idx)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #f3f4f6">
+          <div style="flex:1;font-size:13px;font-weight:500">${item.name}<div style="font-size:11px;color:var(--muted)">$${Number(item.price).toLocaleString()} c/u</div></div>
+          <button onclick="kioskoQty(${idx},-1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;font-family:inherit">−</button>
+          <span style="font-size:14px;font-weight:600;min-width:20px;text-align:center">${item.qty}</span>
+          <button onclick="kioskoQty(${idx},+1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;font-family:inherit">+</button>
+          <button onclick="kioskoRemoveItem(${idx})" style="width:28px;height:28px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:14px;cursor:pointer;font-family:inherit">✕</button>
+        </div>`).join('')}
+        <div style="display:flex;justify-content:space-between;padding:10px 0 4px;font-weight:600;font-size:15px">
+          <span>Total</span><span style="color:#059669">$${koTotal.toLocaleString()}</span>
+        </div>
+      </div>`:'<div style="font-size:13px;color:var(--muted);margin-bottom:12px;text-align:center;padding:12px 0">Buscá y agregá productos ↑</div>'}
+      <button onclick="submitKioskoOrder()" style="width:100%;padding:12px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${(ko.items||[]).length===0?'0.45':'1'}">
+        Confirmar venta →
+      </button>
+    </div>`;
+  }
+
   let h=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
     <div class="metrics" style="margin-bottom:0;flex:1">
       <div class="metric"><div class="metric-val">${pendingCount}</div><div class="metric-lbl">Pendientes</div></div>
@@ -2126,9 +2167,13 @@ function renderOrdersTab(){
       <div class="metric" style="${billedCount>0?'background:#ede9fe;border-color:#c4b5fd':''}"><div class="metric-val" style="${billedCount>0?'color:#5b21b6':''}">${billedCount}</div><div class="metric-lbl">Piden cuenta</div></div>
       <div class="metric" style="${pendingAlerts.length>0?'background:#fef3c7;border-color:#fcd34d':''}"><div class="metric-val" style="${pendingAlerts.length>0?'color:#92400e':''}">${pendingAlerts.length}</div><div class="metric-lbl">🛎 Llamadas</div></div>
     </div>
-    <button onclick="startManualOrder()" style="padding:9px 16px;border-radius:8px;border:0.5px solid var(--brand);background:${C.manualOrder?'var(--brand)':'transparent'};color:${C.manualOrder?'#fff':'var(--brand)'};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">+ Pedido manual</button>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <button onclick="startManualOrder()" style="padding:9px 16px;border-radius:8px;border:0.5px solid var(--brand);background:${C.manualOrder?'var(--brand)':'transparent'};color:${C.manualOrder?'#fff':'var(--brand)'};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">+ Pedido manual</button>
+      <button onclick="startKioskoOrder()" style="padding:9px 16px;border-radius:8px;border:0.5px solid #059669;background:${C.kioskoOrder?'#059669':'transparent'};color:${C.kioskoOrder?'#fff':'#059669'};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">🏪 + Kiosko</button>
+    </div>
   </div>
   ${manualH}
+  ${kioskoH}
   ${pendingAlerts.length>0?`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:1rem">
     ${pendingAlerts.map(([k,a])=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fef3c7;border:0.5px solid #fcd34d;border-radius:10px">
       <div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">🛎</span><div><div style="font-weight:500;font-size:14px">${a.tableLabel} llama al mozo</div><div style="font-size:12px;color:#92400e">${a.time}</div></div></div>
@@ -2641,6 +2686,75 @@ window.submitManualOrder=async()=>{
   const items=mo.items.map(i=>({name:i.name,qty:i.qty,price:i.price,finalPrice:i.price,excluded:[],selectedType:null,isCafeteria:i.isCafeteria||false,emoji:i.emoji||null,manualEntry:true}));
   await push(ref(db,'orders'),{tableId:mo.tableId,items,status:'pending',time:nowStr(),billRequested:false,orderMode:mo.orderMode,personName:mo.orderMode==='individual'&&mo.personName?mo.personName:null,createdAt:Date.now(),manualEntry:true});
   C.manualOrder=null;C.manualOrderSearch='';render();
+};
+
+// ── KIOSKO ORDER ──────────────────────────────────
+window.startKioskoOrder=()=>{
+  if(C.kioskoOrder){C.kioskoOrder=null;C.kioskoSearch='';render();return;}
+  C.kioskoOrder={personName:'',items:[]};C.kioskoSearch='';
+  if(C.manualOrder){C.manualOrder=null;C.manualOrderSearch='';}
+  render();
+};
+window.cancelKioskoOrder=()=>{C.kioskoOrder=null;C.kioskoSearch='';render();};
+window.kioskoQty=(idx,delta)=>{
+  if(!C.kioskoOrder)return;
+  C.kioskoOrder.items[idx].qty=Math.max(1,C.kioskoOrder.items[idx].qty+delta);render();
+};
+window.kioskoRemoveItem=idx=>{if(!C.kioskoOrder)return;C.kioskoOrder.items.splice(idx,1);render();};
+window.updateKioskoSearch=()=>{
+  const q=(document.getElementById('kiosko-search')?.value||'').toLowerCase().trim();
+  C.kioskoSearch=q;
+  const res=document.getElementById('kiosko-search-results');if(!res)return;
+  if(!q){res.style.display='none';return;}
+  const items=Object.entries(DB.kioskItems||{})
+    .map(([k,v])=>({...v,_key:k}))
+    .filter(d=>d.name.toLowerCase().includes(q)&&(d.stock==null||d.stock>0));
+  if(items.length===0){res.innerHTML='<div style="padding:10px;font-size:13px;color:var(--muted)">Sin resultados</div>';res.style.display='block';return;}
+  res.style.display='block';
+  res.innerHTML=items.map(d=>{
+    const sc=d.stock!=null?`<span style="font-size:11px;color:var(--muted)"> · 📦 ${d.stock}</span>`:'';
+    return `<div onclick="kioskoAddItem('${d._key}')" style="padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:13px" onmouseover="this.style.background='#f8f7f4'" onmouseout="this.style.background=''">
+      <span>🏪 ${d.name}${sc}</span>
+      <span style="font-weight:600;color:var(--accent)">$${Number(d.price).toLocaleString()}</span>
+    </div>`;
+  }).join('');
+};
+window.kioskoAddItem=key=>{
+  const d=DB.kioskItems[key];if(!d||!C.kioskoOrder)return;
+  const existing=C.kioskoOrder.items.find(i=>i.kioskKey===key);
+  if(existing){existing.qty++;}
+  else{C.kioskoOrder.items.push({kioskKey:key,name:d.name,price:Number(d.price),qty:1});}
+  C.kioskoSearch='';
+  const inp=document.getElementById('kiosko-search');if(inp)inp.value='';
+  const res=document.getElementById('kiosko-search-results');if(res)res.style.display='none';
+  render();
+};
+window.submitKioskoOrder=async()=>{
+  const ko=C.kioskoOrder;if(!ko)return;
+  if(!ko.items.length){alert('Agregá al menos un producto');return;}
+  if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
+  const nombreInp=document.getElementById('kiosko-nombre');
+  if(nombreInp)ko.personName=nombreInp.value;
+  const pm=await showPaymentChoiceModal(null);
+  if(!pm)return;
+  const total=ko.items.reduce((s,i)=>s+i.price*i.qty,0);
+  // Descontar stock de kiosko
+  for(const item of ko.items){
+    const d=DB.kioskItems[item.kioskKey];
+    if(d&&d.stock!=null){
+      const newStock=Math.max(0,(d.stock||0)-item.qty);
+      await update(ref(db,`kioskItems/${item.kioskKey}`),{stock:newStock});
+      if(newStock===0)showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
+    }
+  }
+  // Registrar en caja
+  const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+  const concepto=`Kiosko${ko.personName?' · '+ko.personName:''} (${pmL[pm]||pm})`;
+  const hoy=new Date().toISOString().slice(0,10);
+  await push(ref(db,'caja'),{tipo:'venta',concepto,monto:total,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm});
+  C.kioskoOrder=null;C.kioskoSearch='';
+  showNotif('order','Venta Kiosko registrada',`$${total.toLocaleString()} · ${pmL[pm]}`);
+  render();
 };
 
 window.markDelivered=async key=>{
