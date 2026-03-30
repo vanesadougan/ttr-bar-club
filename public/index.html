@@ -1559,12 +1559,14 @@ function renderCafeteriaTab(){
   formH+='<div class="form-group" style="margin-bottom:8px"><label>Descripción <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><textarea style="min-height:44px" oninput="uCafF(\'desc\',this.value)">'+f.desc+'</textarea></div>';
   // Precio / Stock
   const _sc=Number(f.stock);const _hs=f.stock!=null&&f.stock!=='';
-  const _sb=_hs?('<span style="font-size:12px;padding:3px 8px;border-radius:6px;font-weight:600;background:'+(_sc===0?'#fee2e2':_sc<=5?'#fef3c7':'#d1fae5')+';color:'+(_sc===0?'#b91c1c':_sc<=5?'#92400e':'#065f46')+'">'+(_sc===0?'Sin stock':_sc<=5?'⚠️ Bajo':'✓ OK')+'</span>'):'';
+  const _scCol=_sc===0?'#b91c1c':_sc<=5?'#92400e':'#065f46';
+  const _scBg=_sc===0?'#fee2e2':_sc<=5?'#fef3c7':'#d1fae5';
+  const _sb=`<span id="caf-stock-badge" style="font-size:12px;padding:3px 8px;border-radius:6px;font-weight:600;background:${_hs?_scBg:'transparent'};color:${_hs?_scCol:'transparent'};display:${_hs?'':'none'}">${_hs?(_sc===0?'Sin stock':_sc<=5?'⚠️ Bajo':'✓ OK'):''}</span>`;
   formH+='<div class="two-col" style="margin-bottom:8px">';
   formH+='<div class="form-group" style="margin-bottom:0"><label>Precio ($)</label><input type="number" placeholder="0" value="'+f.price+'" oninput="uCafF(\'price\',this.value)"></div>';
-  formH+='<div class="form-group" style="margin-bottom:0"><label>Stock <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><div style="display:flex;align-items:center;gap:6px"><input type="number" min="0" placeholder="Sin límite" value="'+(_hs?f.stock:'')+'" oninput="uCafF(\'stock\',this.value)" style="flex:1">'+_sb+'</div></div>';
+  formH+='<div class="form-group" style="margin-bottom:0"><label>Stock <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><div style="display:flex;align-items:center;gap:6px"><input id="caf-stock-inp" type="number" min="0" placeholder="Sin límite" value="'+(_hs?f.stock:'')+'" oninput="uCafStock(this.value)" style="flex:1">'+_sb+'</div></div>';
   formH+='</div>';
-  if(_hs){formH+='<div class="form-group" style="margin-bottom:8px"><label>Alerta cuando quede ≤ <span style="font-size:11px;color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uCafF(\'alertAt\',this.value)"></div>';}
+  formH+='<div id="caf-alertat-row" style="display:'+(_hs?'block':'none')+';margin-bottom:8px"><div class="form-group"><label>Alerta cuando quede ≤ <span style="font-size:11px;color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uCafF(\'alertAt\',this.value)"></div></div>';
   formH+='<div class="ing-section" style="margin-bottom:8px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:'+(f.customizable?'8':'0')+'px"><label class="toggle-switch"><input type="checkbox" '+(f.customizable?'checked':'')+' onchange="toggleCafCustomizable(this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500">Personalizar ingredientes</span></div>';
   if(f.customizable){
     formH+='<div class="ing-list">'+ings.map((ing,i)=>'<div class="ing-chip">'+ing+'<button class="ing-chip-remove" onclick="removeCafIngredient('+i+')">×</button></div>').join('')+(ings.length===0?'<span style="font-size:12px;color:var(--muted)">Sin ingredientes aún</span>':'')+'</div>';
@@ -1674,18 +1676,23 @@ window.uCafF=(field,val)=>{
   }o[field]=(field==='price')?Number(val):val;if(field==='cat'){render();return;}};
 window.uCafCat=(field,val)=>{const o=C.editingCafCat||C.newCafCat;o[field]=val;};
 window.addCafItem=()=>{
-  const d=C.newCafItem;if(!d.name||!d.price){alert('Completá nombre y precio');return;}
-  if(d.stock!==''&&d.stock!=null&&(d.alertAt===''||d.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
+  const d=C.newCafItem;
+  const stockInp=document.getElementById('caf-stock-inp');
+  if(stockInp&&stockInp.value!=='')d.stock=stockInp.value;
+  if(!d.name||!d.price){alert('Completá nombre y precio');return;}
+  if(d.stock!=null&&d.stock!==''&&(d.alertAt===''||d.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
   const cats=getCafCats();if(!cats.find(c=>c._key===d.cat)&&cats.length>0)d.cat=cats[0]._key;
-  push(ref(db,'cafeteriaItems'),{...d,ingredients:d.ingredients||[],unavailable:false,alertAt:d.alertAt!=null&&d.alertAt!==''?Number(d.alertAt):null});
+  push(ref(db,'cafeteriaItems'),{...d,ingredients:d.ingredients||[],unavailable:false,stock:d.stock!=null&&d.stock!==''?Number(d.stock):null,alertAt:d.alertAt!=null&&d.alertAt!==''?Number(d.alertAt):null});
   C.newCafItem={name:'',desc:'',price:'',cat:cats.length>0?cats[0]._key:'',emoji:'☕',customizable:false,ingredients:[]};
   C.newCafIngInput='';render();
 };
 window.editCafItem=key=>{C.editingCafItem={...DB.cafeteriaItems[key],_key:key,ingredients:[...(DB.cafeteriaItems[key].ingredients||[])]};render();};
 window.saveEditCafItem=()=>{
+  const stockInp=document.getElementById('caf-stock-inp');
+  if(stockInp&&stockInp.value!=='')C.editingCafItem.stock=stockInp.value;
   const {_key,...data}=C.editingCafItem;
-  if(data.stock!=null&&(data.alertAt===''||data.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
-  set(ref(db,`cafeteriaItems/${_key}`),{...data,alertAt:data.alertAt!=null&&data.alertAt!==''?Number(data.alertAt):null});
+  if(data.stock!=null&&data.stock!==''&&(data.alertAt===''||data.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
+  set(ref(db,`cafeteriaItems/${_key}`),{...data,stock:data.stock!=null&&data.stock!==''?Number(data.stock):null,alertAt:data.alertAt!=null&&data.alertAt!==''?Number(data.alertAt):null});
   C.editingCafItem=null;render();
 };
 window.cancelEditCafItem=()=>{C.editingCafItem=null;render();};
@@ -1747,7 +1754,24 @@ function renderKioskoTab(){
   listH+=`</div>`;
   return `<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
 }
-window.uFStock=val=>{
+window.uCafStock=val=>{
+  const o=C.editingCafItem||C.newCafItem;
+  o.stock=val===''||val==null?null:val;
+  const num=val===''||val==null?null:Number(val);
+  const badge=document.getElementById('caf-stock-badge');
+  if(badge){
+    if(val===''||val==null){badge.style.display='none';}
+    else{
+      badge.style.display='';
+      const col=num===0?'#b91c1c':num<=5?'#92400e':'#065f46';
+      const bg=num===0?'#fee2e2':num<=5?'#fef3c7':'#d1fae5';
+      badge.style.background=bg;badge.style.color=col;
+      badge.textContent=num===0?'Sin stock':num<=5?'⚠️ Bajo':'✓ OK';
+    }
+  }
+  const alertRow=document.getElementById('caf-alertat-row');
+  if(alertRow)alertRow.style.display=(val!==''&&val!=null)?'block':'none';
+};
   const o=C.editingDish||C.newDish;
   o.stock=val===''||val==null?null:val;
   const num=val===''||val==null?null:Number(val);
