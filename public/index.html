@@ -1750,8 +1750,13 @@ function renderKioskoTab(){
 window.uKiosk=(field,val)=>{
   const o=C.editingKioskItem||C.newKioskItem;
   o[field]=val;
-  // Re-render cuando cambia stock para mostrar/ocultar campo alerta
-  if(field==='stock')render();
+  if(field==='stock'){
+    const num=val===''||val==null?null:Number(val);
+    const prev=C._prevKioskStock;
+    const bucket=n=>n===null?'null':n===0?'zero':n<=5?'low':'ok';
+    if(bucket(prev)!==bucket(num)){render();}
+    C._prevKioskStock=num;
+  }
 };
 window.addKioskItem=()=>{
   const f=C.newKioskItem;if(!f.name||!f.price){alert('Ingresá nombre y precio');return;}
@@ -2505,16 +2510,17 @@ function renderHistoryTab(){
 window.uF=(type,field,val)=>{
   const o=type==='dish'?(C.editingDish||C.newDish):(C.editingTable||C.newTable);
   if(field==='stock'){
-    o[field]=val===''||val==null?null:Math.max(0,Number(val));
-    // Solo re-render si el badge de estado cambia (0, <=5, >5)
-    const prev=C._prevStock;const cur=o[field];
+    // Guardar como string para no interrumpir el tipeo
+    o[field]=val===''||val==null?null:val;
+    // Re-render solo si el badge cambia de bucket (0, <=5, >5)
+    const num=val===''||val==null?null:Number(val);
+    const prev=C._prevStock;
     const bucket=n=>n===null?'null':n===0?'zero':n<=5?'low':'ok';
-    if(bucket(prev)!==bucket(cur)){render();}
-    C._prevStock=cur;
+    if(bucket(prev)!==bucket(num)){render();}
+    C._prevStock=num;
     return;
   }
   if(field==='alertAt'){
-    // Guardar como string para no interrumpir el tipeo
     o[field]=val===''||val==null?null:val;
     return;
   }
