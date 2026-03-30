@@ -297,6 +297,7 @@ let C = {
   // Cafetería state
   cafCat:'todos',
   editingCafItem:null, editingCafCat:null, editingKioskItem:null, newKioskItem:{name:'',desc:'',price:'',stock:''},
+  showIngForm:false,
   newCafItem:{name:'',desc:'',price:'',cat:'',emoji:'☕',customizable:false,ingredients:[],promoDiscount:0,is2x1:false},
   newCafCat:{label:'',icon:'☕',isPromo:false,noRating:false},
   newCafIngInput:'', newCafTypeInput:'',
@@ -1914,30 +1915,40 @@ function renderStockTab(){
     h+=`</div>`;
   }
 
-  // Sección Ingredientes
-  h+=`<div style="display:grid;grid-template-columns:320px 1fr;gap:1.25rem;align-items:start;margin-bottom:1.5rem">`;
-  // Form ingrediente
-  h+=`<div class="card">
-    <div class="card-title">${C.editingIng?'Editar ingrediente':'+ Ingrediente'}</div>
-    <div class="form-group" style="margin-bottom:8px"><label>Nombre</label><input placeholder="Ej: Carne, Pan, Leche..." value="${fi.name||''}" oninput="uIng('name',this.value)"></div>
-    <div class="two-col" style="margin-bottom:8px">
-      <div class="form-group" style="margin-bottom:0"><label>Stock</label><input type="number" min="0" step="0.1" placeholder="0" value="${fi.stock!=null&&fi.stock!==''?fi.stock:''}" oninput="uIng('stock',this.value)"></div>
-      <div class="form-group" style="margin-bottom:0"><label>Unidad</label><select onchange="uIng('unit',this.value)">${UNITS.map(u=>`<option value="${u}"${fi.unit===u?' selected':''}>${u}</option>`).join('')}</select></div>
-    </div>
-    <div class="form-group" style="margin-bottom:12px"><label>Alerta cuando quede ≤</label><input type="number" min="0" step="0.1" placeholder="Ej: 5" value="${fi.alertAt!=null&&fi.alertAt!==''?fi.alertAt:''}" oninput="uIng('alertAt',this.value)"></div>
-    <div style="display:flex;gap:8px">
-      <button class="btn btn-primary" onclick="${C.editingIng?'saveEditIng()':'addIng()'}">
-        ${C.editingIng?'Guardar':'Agregar'}</button>
-      ${C.editingIng?`<button class="btn btn-ghost" onclick="cancelEditIng()">Cancelar</button>`:''}
-    </div>
-  </div>`;
+  // ── Sección Ingredientes ──
+  const showForm=C.showIngForm||!!C.editingIng;
+  h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">`;
+  h+=`<div style="font-size:15px;font-weight:600">🧪 Ingredientes</div>`;
+  if(!showForm){
+    h+=`<button onclick="C.showIngForm=true;render()" style="padding:7px 16px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar ingrediente</button>`;
+  }
+  h+=`</div>`;
+
+  // Formulario inline (colapsable)
+  if(showForm){
+    h+=`<div class="card" style="border-color:var(--accent);margin-bottom:1rem">`;
+    h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">`;
+    h+=`<div style="font-size:14px;font-weight:600">${C.editingIng?'Editar ingrediente':'Nuevo ingrediente'}</div>`;
+    if(!C.editingIng)h+=`<button onclick="C.showIngForm=false;render()" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>`;
+    h+=`</div>`;
+    h+=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;margin-bottom:12px">`;
+    h+=`<div class="form-group" style="margin-bottom:0"><label>Nombre</label><input placeholder="Ej: Carne, Pan..." value="${fi.name||''}" oninput="uIng('name',this.value)"></div>`;
+    h+=`<div class="form-group" style="margin-bottom:0"><label>Stock</label><input type="number" min="0" step="0.1" placeholder="0" value="${fi.stock!=null&&fi.stock!==''?fi.stock:''}" oninput="uIng('stock',this.value)"></div>`;
+    h+=`<div class="form-group" style="margin-bottom:0"><label>Unidad</label><select onchange="uIng('unit',this.value)">${UNITS.map(u=>`<option value="${u}"${fi.unit===u?' selected':''}>${u}</option>`).join('')}</select></div>`;
+    h+=`<div class="form-group" style="margin-bottom:0"><label>Alerta ≤</label><input type="number" min="0" step="0.1" placeholder="Ej: 5" value="${fi.alertAt!=null&&fi.alertAt!==''?fi.alertAt:''}" oninput="uIng('alertAt',this.value)"></div>`;
+    h+=`</div>`;
+    h+=`<div style="display:flex;gap:8px">`;
+    h+=`<button class="btn btn-primary" onclick="${C.editingIng?'saveEditIng()':'addIng()'}">`;
+    h+=`${C.editingIng?'Guardar cambios':'Agregar ingrediente'}</button>`;
+    h+=`${C.editingIng?`<button class="btn btn-ghost" onclick="cancelEditIng()">Cancelar</button>`:''}`;
+    h+=`</div></div>`;
+  }
 
   // Lista ingredientes
-  h+=`<div>`;
   if(ings.length===0){
     h+=`<div class="card" style="text-align:center;color:var(--muted);padding:2rem"><div style="font-size:32px;margin-bottom:8px">🧪</div><div>No hay ingredientes todavía</div></div>`;
   } else {
-    h+=`<div class="card" style="padding:0;overflow:hidden">`;
+    h+=`<div class="card" style="padding:0;overflow:hidden;margin-bottom:1.5rem">`;
     h+=`<div style="display:grid;grid-template-columns:1fr 80px 120px 180px;gap:12px;padding:8px 14px;background:#f8f7f4;border-bottom:1.5px solid var(--border);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">
       <span>Ingrediente</span><span style="text-align:right">Stock</span><span style="text-align:center">Ajustar</span><span></span>
     </div>`;
@@ -1951,15 +1962,14 @@ function renderStockTab(){
     });
     h+=`</div>`;
   }
-  h+=`</div></div>`;
 
   // Sección Stock directo
   if(directStockDishes.length>0){
     const bySection={dishes:[],cafeteria:[],kiosko:[]};
     directStockDishes.forEach(d=>bySection[d._src].push(d));
     const sectionLabel={dishes:'🍽 Restaurant',cafeteria:'☕ Cafetería',kiosko:'🏪 Kiosko'};
+    h+=`<div style="font-size:15px;font-weight:600;margin-bottom:.75rem">📦 Stock directo</div>`;
     h+=`<div class="card" style="padding:0;overflow:hidden">`;
-    h+=`<div style="padding:10px 14px;background:#f8f7f4;border-bottom:1.5px solid var(--border);font-size:14px;font-weight:600">📦 Stock directo</div>`;
     h+=`<div style="display:grid;grid-template-columns:1fr 80px 120px 180px;gap:12px;padding:8px 14px;background:#f8f7f4;border-bottom:0.5px solid var(--border);font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">
       <span>Plato / Item</span><span style="text-align:right">Stock</span><span style="text-align:center">Ajustar</span><span></span>
     </div>`;
@@ -1986,15 +1996,15 @@ window.addIng=()=>{
   const d=C.newIng||{};
   if(!d.name){alert('Ingresá el nombre del ingrediente');return;}
   push(ref(db,'ingredients'),{name:d.name.trim(),unit:d.unit||'u',stock:Number(d.stock||0),alertAt:d.alertAt!=null&&d.alertAt!==''?Number(d.alertAt):null});
-  C.newIng={name:'',unit:'u',stock:'',alertAt:''};render();
+  C.newIng={name:'',unit:'u',stock:'',alertAt:''};C.showIngForm=false;render();
 };
-window.editIng=key=>{C.editingIng={...DB.ingredients[key],_key:key};render();};
+window.editIng=key=>{C.editingIng={...DB.ingredients[key],_key:key};C.showIngForm=true;render();};
 window.saveEditIng=async()=>{
   const {_key,...data}=C.editingIng;
   await set(ref(db,`ingredients/${_key}`),{...data,stock:Number(data.stock||0)});
-  C.editingIng=null;render();
+  C.editingIng=null;C.showIngForm=false;render();
 };
-window.cancelEditIng=()=>{C.editingIng=null;render();};
+window.cancelEditIng=()=>{C.editingIng=null;C.showIngForm=false;render();};
 window.deleteIng=key=>{
   if(!confirm('¿Eliminar este ingrediente? Se quitará de todas las recetas.'))return;
   // Remove from all dish recipes
