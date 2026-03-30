@@ -1322,7 +1322,7 @@ function renderDishesTab(){
   formH+='<div class="two-col" style="margin-bottom:10px">';
   formH+='<div class="form-group" style="margin-bottom:0"><label>Precio ($)</label><input type="number" placeholder="0" value="'+f.price+'" oninput="uF(\'dish\',\'price\',this.value)"></div>';
   const _s2=Number(f.stock);const _hasStock=f.stock!=null&&f.stock!=='';
-  formH+='<div class="form-group" style="margin-bottom:0"><label>Stock <span style="font-size:10px;color:var(--muted)">(opcional)</span></label><input type="number" min="0" placeholder="∞" value="'+(_hasStock?f.stock:'')+'" oninput="uF(\'dish\',\'stock\',this.value)"></div>';
+  formH+='<div class="form-group" style="margin-bottom:0"><label>Stock <span style="font-size:10px;color:var(--muted)">(opcional)</span></label><input id="dish-stock-inp" type="number" min="0" placeholder="∞" value="'+(_hasStock?f.stock:'')+'" oninput="uFStock(this.value)"></div>';
   formH+='</div>';
 
   // Alerta stock (solo si tiene stock)
@@ -1722,7 +1722,7 @@ function renderKioskoTab(){
   const _sb=_hs?`<span style="font-size:12px;padding:3px 8px;border-radius:6px;font-weight:600;background:${_sc===0?'#fee2e2':_sc<=5?'#fef3c7':'#d1fae5'};color:${_sc===0?'#b91c1c':_sc<=5?'#92400e':'#065f46'}">${_sc===0?'Sin stock':_sc<=5?'⚠️ Bajo':'✓ OK'}</span>`:'';
   formH+=`<div class="two-col" style="margin-bottom:12px">`;
   formH+=`<div class="form-group" style="margin-bottom:0"><label>Precio ($)</label><input type="number" placeholder="0" value="${f.price||''}" oninput="uKiosk('price',this.value)"></div>`;
-  formH+=`<div class="form-group" style="margin-bottom:0"><label>Stock</label><div style="display:flex;align-items:center;gap:6px"><input type="number" min="0" placeholder="0" value="${_hs?f.stock:''}" oninput="uKiosk('stock',this.value)" style="flex:1">${_sb}</div></div>`;
+  formH+=`<div class="form-group" style="margin-bottom:0"><label>Stock</label><div style="display:flex;align-items:center;gap:6px"><input id="kiosk-stock-inp" type="number" min="0" placeholder="0" value="${_hs?f.stock:''}" oninput="uKioskStock(this.value)" style="flex:1">${_sb}</div></div>`;
   if(_hs){formH+=`<div class="form-group" style="margin-bottom:12px"><label>Alerta cuando quede ≤ <span style="font-size:11px;color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="${f.alertAt!=null&&f.alertAt!==''?f.alertAt:''}" oninput="uKiosk('alertAt',this.value)"></div>`;}
   formH+=`</div>`;
   formH+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="${C.editingKioskItem?'saveKioskItem()':'addKioskItem()'}">`;
@@ -1747,7 +1747,41 @@ function renderKioskoTab(){
   listH+=`</div>`;
   return `<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
 }
-window.uKiosk=(field,val)=>{
+window.uFStock=val=>{
+  const o=C.editingDish||C.newDish;
+  o.stock=val===''||val==null?null:val;
+  const num=val===''||val==null?null:Number(val);
+  const prev=C._prevStock;
+  const bucket=n=>n===null?'null':n===0?'zero':n<=5?'low':'ok';
+  C._prevStock=num;
+  if(bucket(prev)!==bucket(num)){
+    // Guardar posición del cursor antes de re-render
+    const inp=document.getElementById('dish-stock-inp');
+    const pos=inp?inp.selectionStart:null;
+    render();
+    requestAnimationFrame(()=>{
+      const i=document.getElementById('dish-stock-inp');
+      if(i){i.focus();if(pos!=null)try{i.setSelectionRange(pos,pos);}catch(e){}}
+    });
+  }
+};
+window.uKioskStock=val=>{
+  const o=C.editingKioskItem||C.newKioskItem;
+  o.stock=val===''||val==null?null:val;
+  const num=val===''||val==null?null:Number(val);
+  const prev=C._prevKioskStock;
+  const bucket=n=>n===null?'null':n===0?'zero':n<=5?'low':'ok';
+  C._prevKioskStock=num;
+  if(bucket(prev)!==bucket(num)){
+    const inp=document.getElementById('kiosk-stock-inp');
+    const pos=inp?inp.selectionStart:null;
+    render();
+    requestAnimationFrame(()=>{
+      const i=document.getElementById('kiosk-stock-inp');
+      if(i){i.focus();if(pos!=null)try{i.setSelectionRange(pos,pos);}catch(e){}}
+    });
+  }
+};
   const o=C.editingKioskItem||C.newKioskItem;
   o[field]=val;
   if(field==='stock'){
@@ -1759,17 +1793,22 @@ window.uKiosk=(field,val)=>{
   }
 };
 window.addKioskItem=()=>{
-  const f=C.newKioskItem;if(!f.name||!f.price){alert('Ingresá nombre y precio');return;}
+  const f=C.newKioskItem;
+  const stockInp=document.getElementById('kiosk-stock-inp');
+  if(stockInp&&stockInp.value!=='')f.stock=stockInp.value;
+  if(!f.name||!f.price){alert('Ingresá nombre y precio');return;}
   if(f.stock!==''&&f.stock!=null&&(f.alertAt===''||f.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
   push(ref(db,'kioskItems'),{name:f.name.trim(),desc:f.desc||'',price:Number(f.price),stock:f.stock!==''&&f.stock!=null?Number(f.stock):null,alertAt:f.alertAt!==''&&f.alertAt!=null?Number(f.alertAt):null});
-  C.newKioskItem={name:'',desc:'',price:'',stock:''};render();
+  C.newKioskItem={name:'',desc:'',price:'',stock:''};C._prevKioskStock=null;render();
 };
-window.editKioskItem=key=>{C.editingKioskItem={...DB.kioskItems[key],_key:key};render();};
+window.editKioskItem=key=>{C.editingKioskItem={...DB.kioskItems[key],_key:key};C._prevKioskStock=DB.kioskItems[key].stock;render();};
 window.saveKioskItem=()=>{
+  const stockInp=document.getElementById('kiosk-stock-inp');
+  if(stockInp&&stockInp.value!=='')C.editingKioskItem.stock=stockInp.value;
   const {_key,...data}=C.editingKioskItem;
   if(data.stock!==''&&data.stock!=null&&(data.alertAt===''||data.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
   set(ref(db,`kioskItems/${_key}`),{name:data.name,desc:data.desc||'',price:Number(data.price),stock:data.stock!==''&&data.stock!=null?Number(data.stock):null,alertAt:data.alertAt!==''&&data.alertAt!=null?Number(data.alertAt):null});
-  C.editingKioskItem=null;render();
+  C.editingKioskItem=null;C._prevKioskStock=null;render();
 };
 window.cancelKioskItem=()=>{C.editingKioskItem=null;render();};
 window.deleteKioskItem=key=>{if(confirm('¿Eliminar este item?'))remove(ref(db,`kioskItems/${key}`));};
@@ -2570,18 +2609,27 @@ window.addIngredient=()=>{const inp=document.getElementById('ing-input');const v
 window.removeIngredient=idx=>{const f=C.editingDish||C.newDish;f.ingredients.splice(idx,1);render();};
 window.addDish=()=>{
   const d=C.newDish;
+  // Leer stock del DOM por si no hubo render
+  const stockInp=document.getElementById('dish-stock-inp');
+  if(stockInp&&stockInp.value!=='')d.stock=stockInp.value;
   if(!d.name||!d.price){alert('Completá nombre y precio');return;}
+  if(d.stock!=null&&d.stock!==''&&(d.alertAt===''||d.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
   const cats=getCats();
-  // Si el cat no es un key válido de Firebase, usar el primero disponible
   const validCat=cats.find(c=>c._key===d.cat);
   if(!validCat&&cats.length>0)d.cat=cats[0]._key;
-  push(ref(db,'dishes'),{...d,ingredients:d.ingredients||[],types:d.types||[],hasTypes:d.hasTypes||false,is2x1:d.is2x1===true,promoDiscount:d.promoDiscount||0,unavailable:false,stock:d.stock!=null?Number(d.stock):null,alertAt:d.alertAt!=null?Number(d.alertAt):null,recipe:d.recipe||[]});
+  push(ref(db,'dishes'),{...d,ingredients:d.ingredients||[],types:d.types||[],hasTypes:d.hasTypes||false,is2x1:d.is2x1===true,promoDiscount:d.promoDiscount||0,unavailable:false,stock:d.stock!=null&&d.stock!==''?Number(d.stock):null,alertAt:d.alertAt!=null&&d.alertAt!==''?Number(d.alertAt):null,recipe:d.recipe||[]});
   C.newDish={name:'',desc:'',price:'',cat:cats.length>0?cats[0]._key:'',emoji:'🍽️',customizable:false,ingredients:[],types:[],hasTypes:false,promoDiscount:0,is2x1:false};
   C.newIngInput='';render();
 };
 window.editDish=key=>{C.editingDish={...DB.dishes[key],_key:key,ingredients:[...(DB.dishes[key].ingredients||[])]};render();};
-window.saveEditDish=()=>{const {_key,...data}=C.editingDish;set(ref(db,`dishes/${_key}`),{...data,is2x1:data.is2x1===true,promoDiscount:data.promoDiscount||0,stock:data.stock!=null?Number(data.stock):null,alertAt:data.alertAt!=null?Number(data.alertAt):null,recipe:data.recipe||[]});C.editingDish=null;render();};
-window.cancelEditDish=()=>{C.editingDish=null;render();};
+window.saveEditDish=()=>{
+  const stockInp=document.getElementById('dish-stock-inp');
+  if(stockInp&&stockInp.value!=='')C.editingDish.stock=stockInp.value;
+  const {_key,...data}=C.editingDish;
+  if(data.stock!=null&&data.stock!==''&&(data.alertAt===''||data.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
+  set(ref(db,`dishes/${_key}`),{...data,is2x1:data.is2x1===true,promoDiscount:data.promoDiscount||0,stock:data.stock!=null&&data.stock!==''?Number(data.stock):null,alertAt:data.alertAt!=null&&data.alertAt!==''?Number(data.alertAt):null,recipe:data.recipe||[]});
+  C.editingDish=null;render();
+};
 window.deleteDish=key=>{if(confirm('¿Eliminar este plato?'))remove(ref(db,`dishes/${key}`));};
 window.addTable=()=>{const t=C.newTable;if(!t.label){alert('Ingresá un nombre');return;}push(ref(db,'tables'),{...t});C.newTable={label:'',capacity:''};render();};
 window.editTable=key=>{C.editingTable={...DB.tables[key],_key:key};render();};
