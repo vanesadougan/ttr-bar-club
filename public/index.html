@@ -337,9 +337,10 @@ onValue(ref(db,'dishes'),  snap=>{ DB.dishes  = snap.val()||{}; _markLoaded(); i
 onValue(ref(db,'categories'), snap=>{ DB.categories = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
 onValue(ref(db,'alerts'), snap=>{
   const prevAlertKeys=new Set(Object.keys(DB.alerts||{}));
+  const wasEmpty=prevAlertKeys.size===0;
   DB.alerts = snap.val()||{};
   _markLoaded();
-  if(!firstLoad && C.mode==='admin'){
+  if(!firstLoad && C.mode==='admin' && !wasEmpty){
     const newAlerts=Object.entries(DB.alerts).filter(([k,a])=>!prevAlertKeys.has(k)&&a.status==='pending');
     newAlerts.forEach(([,a])=>{ showNotif('alert','¡Llaman al mozo!',a.tableLabel||'Mesa'); });
     if(C.adminTab==='orders') render();
@@ -366,10 +367,13 @@ onValue(ref(db,'ingredients'), snap=>{
   if(!firstLoad) render();
 });
 onValue(ref(db,'orders'), snap=>{
+  const isFirstCall=Object.keys(DB.orders).length===0&&!snap.val();
   const prevKeys=new Set(Object.keys(DB.orders));
   const prevBilled=new Set(Object.entries(DB.orders).filter(([,o])=>o.status==='billed').map(([k])=>k));
+  const wasEmpty=prevKeys.size===0;
   DB.orders = snap.val()||{};
-  if(!firstLoad && C.mode==='admin'){
+  // Solo notificar si: somos admin logueado, NO es la primera carga, y había pedidos previos cargados
+  if(!firstLoad && C.mode==='admin' && !wasEmpty){
     // detect new orders (excluir kiosko y deudores)
     const newOrders=Object.entries(DB.orders).filter(([k,o])=>!prevKeys.has(k)&&!o.isKiosko&&o.status!=='deudor');
     newOrders.forEach(([,o])=>{
@@ -385,10 +389,10 @@ onValue(ref(db,'orders'), snap=>{
       }
     });
   }
-  firstLoad = false;
-  archivarPedidosViejos(); // Archivar pedidos >60 días en segundo plano
-  limpiarAlertsViejas();   // Borrar alerts con más de 4 horas
-  if(C.mode==='admin' && C.adminTab==='orders' && Object.keys(DB.orders).length > Object.keys(prevKeys).length){
+  if(firstLoad) { /* ya lo maneja _markLoaded */ }
+  if(C.mode==='admin') archivarPedidosViejos();
+  if(C.mode==='admin') limpiarAlertsViejas();
+  if(C.mode==='admin' && C.adminTab==='orders' && !wasEmpty && Object.keys(DB.orders).length > prevKeys.size){
     render(); highlightNewOrder();
   } else {
     render();
