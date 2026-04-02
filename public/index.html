@@ -221,10 +221,20 @@
   </div>
   <div id="notif-container"></div>
   <div id="main-content"><div class="loading-screen"><div class="spinner"></div><div style="font-size:14px;color:var(--muted)">Conectando...</div></div></div>
+  <div id="error-overlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:#1a1a2e;color:#fff;padding:20px;z-index:9999;font-family:monospace;font-size:13px;overflow:auto"></div>
 </div>
 
 <!-- Firebase SDK -->
 <script type="module">
+window.onerror=function(msg,src,line,col,err){
+  const el=document.getElementById('error-overlay');
+  if(el){el.style.display='block';el.innerHTML='<b>ERROR JS:</b><br>'+msg+'<br>'+src+':'+line+':'+col+'<br>'+(err&&err.stack?err.stack:'');}
+  return false;
+};
+window.onunhandledrejection=function(e){
+  const el=document.getElementById('error-overlay');
+  if(el){el.style.display='block';el.innerHTML='<b>PROMISE ERROR:</b><br>'+(e.reason&&e.reason.stack?e.reason.stack:String(e.reason));}
+};
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getDatabase, ref, set, push, onValue, update, remove, serverTimestamp, deleteField }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
@@ -327,11 +337,11 @@ function updateClock(){} // clock removed from topbar
 let firstLoad = true;
 let tablesLoaded = false;
 let _loadedCount = 0;
-const _ESSENTIAL = 10; // dishes, categories, alerts, tables, ratings, cancellations, cafeteriaItems, cafeteriaCategories, waiters, kioskItems
+const _ESSENTIAL = 10;
 function _markLoaded(){
   _loadedCount++;
   if(_loadedCount >= _ESSENTIAL && firstLoad){
-    firstLoad=false;
+    firstLoad = false;
     render();
   }
 }
@@ -392,7 +402,7 @@ onValue(ref(db,'orders'), snap=>{
       }
     });
   }
-  if(firstLoad) { /* primera carga: _markLoaded ya llamó render() con los esenciales */ }
+  if(firstLoad) { firstLoad=false; render(); return; } // orders arrived: unlock firstLoad
   if(C.mode==='admin') archivarPedidosViejos();
   if(C.mode==='admin') limpiarAlertsViejas();
   if(isCocinaRoute){ render(); return; }
@@ -524,10 +534,9 @@ function resolveTableRoute(){
 
 // ─── AUTH STATE ───────────────────────────────────
 let currentUser = null;
-let _routeInited = false;
 onAuthStateChanged(auth, user => {
   currentUser = user;
-  if(_routeInited) render();
+  render();
 });
 
 // ─── RENDER ───────────────────────────────────────
@@ -4060,7 +4069,6 @@ async function archivarPedidosViejos(){
 }
 
 initRoute();
-_routeInited = true;
 </script>
 </body>
 </html>
