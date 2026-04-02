@@ -327,7 +327,7 @@ function updateClock(){} // clock removed from topbar
 let firstLoad = true;
 let tablesLoaded = false;
 let _loadedCount = 0;
-const _ESSENTIAL = 11; // dishes, categories, alerts, tables, ratings, cancellations, cafeteriaItems, cafeteriaCategories, waiters, kioskItems, orders
+const _ESSENTIAL = 10; // dishes, categories, alerts, tables, ratings, cancellations, cafeteriaItems, cafeteriaCategories, waiters, kioskItems
 function _markLoaded(){
   _loadedCount++;
   if(_loadedCount >= _ESSENTIAL && firstLoad){
@@ -392,7 +392,7 @@ onValue(ref(db,'orders'), snap=>{
       }
     });
   }
-  if(firstLoad) { _markLoaded(); return; } // primera carga: marcar como cargado y dejar que _markLoaded llame render()
+  if(firstLoad) { /* primera carga: _markLoaded ya llamó render() con los esenciales */ }
   if(C.mode==='admin') archivarPedidosViejos();
   if(C.mode==='admin') limpiarAlertsViejas();
   if(isCocinaRoute){ render(); return; }
@@ -524,9 +524,10 @@ function resolveTableRoute(){
 
 // ─── AUTH STATE ───────────────────────────────────
 let currentUser = null;
+let _routeInited = false;
 onAuthStateChanged(auth, user => {
   currentUser = user;
-  render();
+  if(_routeInited) render();
 });
 
 // ─── RENDER ───────────────────────────────────────
@@ -4059,6 +4060,7 @@ async function archivarPedidosViejos(){
 }
 
 initRoute();
+_routeInited = true;
 </script>
 </body>
 </html>
