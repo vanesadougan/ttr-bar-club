@@ -226,7 +226,7 @@
 <!-- Firebase SDK -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, push, onValue, update, remove, serverTimestamp }
+import { getDatabase, ref, set, push, onValue, update, remove, serverTimestamp, deleteField }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -1011,23 +1011,31 @@ function renderWaiterMesasScreen(mc){
         Object.entries(byPerson).forEach(([person,pOrders])=>{
           const pTotal=pOrders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
           const pMap={};
-          pOrders.forEach(o=>(o.items||[]).forEach(item=>{
-            const k=item.name+(item.selectedType?'|'+item.selectedType:'');
-            if(!pMap[k])pMap[k]={name:item.name,type:item.selectedType||null,qty:0,statuses:{},excl:item.excluded||[]};
-            pMap[k].qty+=item.qty;pMap[k].statuses[o.status]=(pMap[k].statuses[o.status]||0)+item.qty;
-          }));
+          pOrders.forEach(o=>{
+            const statusKey=o.status==='delivered'&&o.readyAt?'ready':o.status;
+            (o.items||[]).forEach(item=>{
+              const k=item.name+(item.selectedType?'|'+item.selectedType:'');
+              if(!pMap[k])pMap[k]={name:item.name,type:item.selectedType||null,qty:0,statuses:{},excl:item.excluded||[]};
+              pMap[k].qty+=item.qty;pMap[k].statuses[statusKey]=(pMap[k].statuses[statusKey]||0)+item.qty;
+            });
+          });
           h+=`<div style="margin-bottom:8px">`;
           h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;padding:4px 6px;background:#f0f4ff;border-radius:6px">`;
           h+=`<span style="font-size:12px;font-weight:600;color:#1e40af">👤 ${person}</span>`;
           h+=`<span style="font-size:12px;font-weight:600;color:#1e40af">$${pTotal.toLocaleString()}</span>`;
           h+=`</div>`;
           Object.values(pMap).forEach(item=>{
-            const pd=item.statuses['pending']||0,dd=item.statuses['delivered']||0;
+            const pd=item.statuses['pending']||0;
+            const pr=item.statuses['preparing']||0;
+            const dr=item.statuses['ready']||0;
+            const dd=item.statuses['delivered']||0;
             h+=`<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px">`;
             h+=`<span style="flex:1;font-size:13px">${item.qty}× ${item.name}${item.type?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${item.type}</span>`:''}</span>`;
             h+=`<div style="display:flex;gap:3px;align-items:center">`;
             if(item.excl&&item.excl.length>0)h+=`<button onclick="alert('Sin: ${item.excl.join(', ')}')" title="Sin: ${item.excl.join(', ')}" style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:#ede9fe;color:#5b21b6;border:none;cursor:pointer">P</button>`;
             if(pd>0)h+=`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e">⏳${pd}</span>`;
+            if(pr>0)h+=`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;background:#fff7ed;color:#c2410c">🔥${pr}</span>`;
+            if(dr>0)h+=`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;background:#d1fae5;color:#065f46">✅${dr}</span>`;
             if(dd>0)h+=`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;background:#d1fae5;color:#065f46">✓${dd}</span>`;
             h+=`</div></div>`;
           });
@@ -1035,18 +1043,26 @@ function renderWaiterMesasScreen(mc){
         });
       } else {
         const iMap={};
-        orders.forEach(o=>(o.items||[]).forEach(item=>{
-          const k=item.name+(item.selectedType?'|'+item.selectedType:'');
-          if(!iMap[k])iMap[k]={name:item.name,type:item.selectedType||null,qty:0,statuses:{},excl:item.excluded||[]};
-          iMap[k].qty+=item.qty;iMap[k].statuses[o.status]=(iMap[k].statuses[o.status]||0)+item.qty;
-        }));
+        orders.forEach(o=>{
+          const statusKey=o.status==='delivered'&&o.readyAt?'ready':o.status;
+          (o.items||[]).forEach(item=>{
+            const k=item.name+(item.selectedType?'|'+item.selectedType:'');
+            if(!iMap[k])iMap[k]={name:item.name,type:item.selectedType||null,qty:0,statuses:{},excl:item.excluded||[]};
+            iMap[k].qty+=item.qty;iMap[k].statuses[statusKey]=(iMap[k].statuses[statusKey]||0)+item.qty;
+          });
+        });
         Object.values(iMap).forEach(item=>{
-          const pd=item.statuses['pending']||0,dd=item.statuses['delivered']||0;
+          const pd=item.statuses['pending']||0;
+          const pr=item.statuses['preparing']||0;
+          const dr=item.statuses['ready']||0;
+          const dd=item.statuses['delivered']||0;
           h+=`<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px">`;
           h+=`<span style="flex:1;font-size:13px">${item.qty}× ${item.name}${item.type?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${item.type}</span>`:''}</span>`;
           h+=`<div style="display:flex;gap:3px;align-items:center">`;
           if(item.excl&&item.excl.length>0)h+=`<button onclick="alert('Sin: ${item.excl.join(', ')}')" title="Sin: ${item.excl.join(', ')}" style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:#ede9fe;color:#5b21b6;border:none;cursor:pointer">P</button>`;
           if(pd>0)h+=`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e">⏳${pd}</span>`;
+          if(pr>0)h+=`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;background:#fff7ed;color:#c2410c">🔥${pr}</span>`;
+          if(dr>0)h+=`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;background:#d1fae5;color:#065f46">✅${dr}</span>`;
           if(dd>0)h+=`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;background:#d1fae5;color:#065f46">✓${dd}</span>`;
           h+=`</div></div>`;
         });
@@ -1091,7 +1107,12 @@ function renderWaiterMesasScreen(mc){
         h+=`<button onclick="waiterMarkCobrado('${tableId}')" style="padding:6px 14px;border-radius:8px;border:0.5px solid #065f46;background:#d1fae5;color:#065f46;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
         h+=`</div>`;
       } else {
-        h+=`<button onclick="waiterOpenPayPicker('${tableId}')" style="margin-top:10px;width:100%;padding:8px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">💜 Pedir cuenta</button>`;
+        const hasPendingKitchen=orders.some(o=>o.status==='preparing'||(o.status==='delivered'&&o.readyAt));
+        if(hasPendingKitchen){
+          h+=`<div style="margin-top:10px;padding:10px 12px;background:#fff7ed;border:0.5px solid #f59e0b;border-radius:8px;font-size:13px;color:#92400e;text-align:center">⏳ Hay platos sin confirmar entrega</div>`;
+        } else {
+          h+=`<button onclick="waiterOpenPayPicker('${tableId}')" style="margin-top:10px;width:100%;padding:8px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">💜 Pedir cuenta</button>`;
+        }
       }
 
       h+=`</div>`;
@@ -1241,7 +1262,7 @@ window.waiterCancelPayPicker=()=>{C.waiterPayMesa=null;C.waiterPayMethod=null;re
 window.waiterSelectPayMethod=pm=>{C.waiterPayMethod=pm;render();};
 window.waiterConfirmEntrega=async keys=>{
   for(const k of keys){
-    await update(ref(db,`orders/${k}`),{readyAt:null});
+    await update(ref(db,`orders/${k}`),{readyAt:deleteField()});
   }
 };
 window.waiterRequestBill=async tableId=>{
@@ -2965,7 +2986,7 @@ window.submitKioskoOrder=async(modo)=>{
 };
 
 window.adminMarkPreparing=async key=>{ await update(ref(db,`orders/${key}`),{status:'preparing'}); };
-window.adminConfirmEntrega=async key=>{ await update(ref(db,`orders/${key}`),{readyAt:null}); };
+window.adminConfirmEntrega=async key=>{ await update(ref(db,`orders/${key}`),{readyAt:deleteField()}); };
 window.markDelivered=async key=>{
   await update(ref(db,`orders/${key}`),{status:'delivered'});
   const o=DB.orders[key];
@@ -3688,6 +3709,9 @@ function renderConfirmScreen(mc){
 window.backToMenu=()=>{C.cart={};C.custDishId=null;C.typePickerDishId=null;C.customerStep='menu';render();};
 
 window.goToBill=()=>{
+  // Bloquear si hay pedidos en cocina sin confirmar entrega
+  const tableOrders=Object.values(DB.orders).filter(o=>o.tableId===C.customerTableId&&(o.status==='preparing'||(o.status==='delivered'&&o.readyAt)));
+  if(tableOrders.length>0){alert('Hay platos que aún no fueron entregados. Esperá a que la moza confirme la entrega.');return;}
   C.survey={items:[],ratings:{},paymentMethod:null};
   C.billRequested=true;
   C.customerStep='payment';
