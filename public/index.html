@@ -1055,6 +1055,7 @@ function renderWaiterMesasScreen(mc){
       // ── Total + acciones de cobro ──
       const allBilled=orders.every(o=>o.status==='billed'||o.status==='cobrado');
       const hasBilled=orders.some(o=>o.status==='billed');
+      const hasReady=orders.some(o=>o.status==='delivered'&&o.readyAt);
       const isShowingPayPicker=C.waiterPayMesa===tableId;
       const pmLabels={efectivo:'💵 Efectivo',credito:'💳 Crédito',debito:'💳 Débito',transferencia:'📱 Transferencia',mercadopago:'📱 Mercado Pago'};
 
@@ -1062,6 +1063,12 @@ function renderWaiterMesasScreen(mc){
       h+=`<span style="font-size:13px;color:var(--muted)">Total</span>`;
       h+=`<span style="font-size:16px;font-weight:700;color:var(--accent)">$${totalMesa.toLocaleString()}</span>`;
       h+=`</div>`;
+
+      // Botón entregar si cocina marcó listo
+      if(hasReady && !hasBilled){
+        const readyOrderKeys=orders.filter(o=>o.status==='delivered'&&o.readyAt).map(o=>o._key);
+        h+=`<button onclick="waiterConfirmEntrega(${JSON.stringify(readyOrderKeys)})" style="margin-top:10px;width:100%;padding:10px;border-radius:8px;border:none;background:#10b981;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">🛎 Confirmar entrega</button>`;
+      }
 
       if(isShowingPayPicker){
         const selPm=C.waiterPayMethod||null;
@@ -1232,6 +1239,11 @@ window.waiterLimpiarCarrito=()=>{C.waiterCart={};render();};
 window.waiterOpenPayPicker=tableId=>{C.waiterPayMesa=tableId;C.waiterPayMethod=null;render();};
 window.waiterCancelPayPicker=()=>{C.waiterPayMesa=null;C.waiterPayMethod=null;render();};
 window.waiterSelectPayMethod=pm=>{C.waiterPayMethod=pm;render();};
+window.waiterConfirmEntrega=async keys=>{
+  for(const k of keys){
+    await update(ref(db,`orders/${k}`),{readyAt:null});
+  }
+};
 window.waiterRequestBill=async tableId=>{
   if(!C.waiterPayMethod){alert('Seleccioná el medio de pago');return;}
   const orders=Object.entries(DB.orders).filter(([,o])=>o.takenBy===C.waiterName&&o.tableId===tableId&&o.status!=='cobrado');
@@ -2418,10 +2430,19 @@ function renderOrdersTab(){
     h+=`<div class="order-footer" style="margin-top:8px"><span class="status ${_statusCss}">${_statusLabel}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>`;
     if(o.status==='pending'){
       h+=`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`;
+      h+=`<button class="btn btn-sm" onclick="adminMarkPreparing('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #f59e0b;color:#c2410c;background:#fff7ed;cursor:pointer;font-family:inherit">🔥 Preparando</button>`;
       h+=`<button class="btn btn-sm" onclick="adminEditOrder('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️ Editar</button>`;
       h+=`<button class="btn btn-sm" onclick="marcarDeudor('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor</button>`;
     }
-    if(o.status==='delivered'){
+    if(o.status==='preparing'){
+      h+=`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`;
+      h+=`<button class="btn btn-sm" onclick="adminEditOrder('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️ Editar</button>`;
+    }
+    if(o.status==='delivered'&&o.readyAt){
+      h+=`<button class="btn btn-sm" onclick="adminConfirmEntrega('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:none;background:#10b981;color:#fff;cursor:pointer;font-family:inherit">🛎 Confirmar entrega</button>`;
+      h+=`<button class="btn btn-sm" onclick="markCobrado('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
+    }
+    if(o.status==='delivered'&&!o.readyAt){
       h+=`<button class="btn btn-sm" onclick="markCobrado('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
       h+=` <button class="btn btn-sm" onclick="printOrderPDF('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #0369a1;color:#0369a1;background:#e0f2fe;cursor:pointer;font-family:inherit">📄 PDF</button>`;
       h+=` <button class="btn btn-sm" onclick="marcarDeudor('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor</button>`;
@@ -2943,6 +2964,8 @@ window.submitKioskoOrder=async(modo)=>{
   render();
 };
 
+window.adminMarkPreparing=async key=>{ await update(ref(db,`orders/${key}`),{status:'preparing'}); };
+window.adminConfirmEntrega=async key=>{ await update(ref(db,`orders/${key}`),{readyAt:null}); };
 window.markDelivered=async key=>{
   await update(ref(db,`orders/${key}`),{status:'delivered'});
   const o=DB.orders[key];
