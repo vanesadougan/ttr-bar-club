@@ -983,6 +983,7 @@ function renderWaiterMesasScreen(mc){
       const tLabel=table?table.label:tableId;
       const totalMesa=orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
       const pendingCt=orders.filter(o=>o.status==='pending').length;
+      const preparingCt=orders.filter(o=>o.status==='preparing').length;
       const delivCt=orders.filter(o=>o.status==='delivered').length;
       const isIndiv=orders.some(o=>o.orderMode==='individual');
 
@@ -994,7 +995,11 @@ function renderWaiterMesasScreen(mc){
       h+=`<div style="display:inline-flex;align-items:center;padding:4px 10px;border-radius:8px;background:var(--brand);color:#fff;font-size:13px;font-weight:700;flex-shrink:0;white-space:nowrap">${tLabel}</div>`;
       h+=`<div style="display:flex;gap:5px;flex-wrap:wrap">`;
       if(pendingCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#fef3c7;color:#92400e">⏳ ${pendingCt} pend.</span>`;
-      if(delivCt>0) h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">✓ ${delivCt} entregado${delivCt!==1?'s':''}</span>`;
+      if(preparingCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#fff7ed;color:#c2410c">🔥 ${preparingCt} en prep.</span>`;
+      const readyCt=orders.filter(o=>o.status==='delivered'&&o.readyAt).length;
+      const delivNormalCt=orders.filter(o=>o.status==='delivered'&&!o.readyAt).length;
+      if(readyCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">✅ ${readyCt} listo${readyCt!==1?'s':''}</span>`;
+      if(delivNormalCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">✓ ${delivNormalCt} entregado${delivNormalCt!==1?'s':''}</span>`;
       h+=`</div></div>`;
       h+=`<button class="btn btn-primary btn-sm" onclick="waiterAddToMesa('${tableId}')">+ Agregar</button>`;
       h+=`</div>`;
@@ -2408,7 +2413,9 @@ function renderOrdersTab(){
       (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''} <span style="color:var(--accent)">$${(i.finalPrice||i.price).toLocaleString()}</span><br>`;});
       h+=`</div>`;
     }
-    h+=`<div class="order-footer" style="margin-top:8px"><span class="status status-${o.status}">${{pending:'Pendiente',delivered:'Entregado',billed:'Pide cuenta',cobrado:'Cobrado'}[o.status]||o.status}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>`;
+    const _statusLabel=o.status==='delivered'&&o.readyAt?'✅ Listo para entregar':{pending:'Pendiente',preparing:'🔥 En preparación',delivered:'Entregado',billed:'Pide cuenta',cobrado:'Cobrado'}[o.status]||o.status;
+    const _statusCss=o.status==='delivered'&&o.readyAt?'status-delivered':'status-'+o.status;
+    h+=`<div class="order-footer" style="margin-top:8px"><span class="status ${_statusCss}">${_statusLabel}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>`;
     if(o.status==='pending'){
       h+=`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`;
       h+=`<button class="btn btn-sm" onclick="adminEditOrder('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️ Editar</button>`;
