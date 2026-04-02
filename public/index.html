@@ -332,9 +332,14 @@ function _markLoaded(){
   _loadedCount++;
   if(_loadedCount >= _ESSENTIAL && firstLoad){
     firstLoad=false;
-    // Re-render solo si ya pasó la bienvenida (para que la carta cargue al instante)
-    if(isMenuRoute && !menuShowWelcome) render();
-    else if(!isMenuRoute) render();
+    // Rutas que no necesitan auth: renderizar de inmediato
+    if(isMenuRoute || isCocinaRoute || isWaiterRoute || isCustomerRoute){
+      render();
+    } else if(currentUser !== undefined) {
+      // Admin: solo si ya sabemos el estado de auth
+      render();
+    }
+    // Si currentUser todavía es null (auth no resolvió), onAuthStateChanged llamará render()
   }
 }
 
@@ -525,7 +530,7 @@ function resolveTableRoute(){
 }
 
 // ─── AUTH STATE ───────────────────────────────────
-let currentUser = null;
+let currentUser = undefined; // undefined = auth aún no resolvió, null = sin usuario
 onAuthStateChanged(auth, user => {
   currentUser = user;
   render();
