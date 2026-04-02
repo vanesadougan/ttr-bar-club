@@ -93,7 +93,7 @@
     .order-items-text{font-size:13px;color:var(--muted);margin-bottom:6px;line-height:1.7}
     .order-footer{display:flex;align-items:center;justify-content:space-between}
     .status{font-size:12px;font-weight:500;padding:3px 9px;border-radius:6px}
-    .status-pending{background:#fef3c7;color:#92400e}.status-delivered{background:#d1fae5;color:#065f46}.status-billed{background:#ede9fe;color:#5b21b6}.status-cobrado{background:#d1fae5;color:#065f46}.status-deuda{background:#fee2e2;color:#b91c1c}
+    .status-pending{background:#fef3c7;color:#92400e}.status-preparing{background:#fff7ed;color:#c2410c}.status-delivered{background:#d1fae5;color:#065f46}.status-billed{background:#ede9fe;color:#5b21b6}.status-cobrado{background:#d1fae5;color:#065f46}.status-deuda{background:#fee2e2;color:#b91c1c}
     .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1rem}
     .metric{background:var(--bg);border-radius:10px;padding:12px;text-align:center;border:0.5px solid var(--border)}
     .metric-val{font-size:22px;font-weight:600;color:var(--accent)}.metric-lbl{font-size:11px;color:var(--muted);margin-top:2px}
@@ -318,7 +318,7 @@ function dishFinalPrice(d,qty){
 }
 function tableLabel(tid){const t=DB.tables[tid];return t?t.label:`Mesa ${tid}`;}
 function tableOccupied(tid){return Object.values(DB.orders).some(o=>o.tableId===tid&&o.status!=='cobrado'&&o.status!=='deudor');}
-function pendingCount(){return Object.values(DB.orders).filter(o=>o.status==='pending'||o.status==='billed').length;}
+function pendingCount(){return Object.values(DB.orders).filter(o=>o.status==='pending'||o.status==='preparing'||o.status==='billed').length;}
 function starsHtml(avg,size){let h='';for(let i=1;i<=5;i++)h+=`<span class="${i<=Math.round(avg)?'star-lit':'star-empty'}" style="font-size:${size||14}px">${i<=Math.round(avg)?'★':'☆'}</span>`;return h;}
 
 function updateClock(){} // clock removed from topbar
@@ -397,6 +397,7 @@ onValue(ref(db,'orders'), snap=>{
   if(firstLoad) { /* ya lo maneja _markLoaded */ }
   if(C.mode==='admin') archivarPedidosViejos();
   if(C.mode==='admin') limpiarAlertsViejas();
+  if(isCocinaRoute){ render(); return; }
   if(C.mode==='admin' && C.adminTab==='orders' && !wasEmpty && Object.keys(DB.orders).length > prevKeys.size){
     render(); highlightNewOrder();
   } else {
@@ -474,12 +475,20 @@ let pendingTableId = null; // store URL param until tables are loaded
 
 let isWaiterRoute = false;
 let isMenuRoute = false;
+let isCocinaRoute = false;
 let menuShowWelcome = true;
 function initRoute(){
   const path = window.location.pathname;
   if(path==='/mozas'||path==='/mozas/'){
     isWaiterRoute = true;
     C.mode='waiter';
+    document.getElementById('modetabs').style.display='none';
+    render();
+    return;
+  }
+  if(path==='/cocina'||path==='/cocina/'){
+    isCocinaRoute = true;
+    C.mode='cocina';
     document.getElementById('modetabs').style.display='none';
     render();
     return;
@@ -528,6 +537,7 @@ function render(){
   updateTopbarCart();
   // If customer route, skip auth entirely
   if(isMenuRoute){ if(menuShowWelcome){ renderMenuWelcome(document.getElementById('main-content')); } else { renderMenuOnly(document.getElementById('main-content')); } return; }
+  if(isCocinaRoute){ renderCocina(document.getElementById('main-content')); return; }
   if(isCustomerRoute){ renderCustomer(); return; }
   // Admin requires login
   if(C.mode==='admin' && !currentUser){ renderLogin(); return; }
@@ -3801,6 +3811,103 @@ function renderThanksScreen(mc){
   h+=`</div></div>`;
   mc.innerHTML=h;
 }
+// ── COCINA ────────────────────────────────────────────────────────────────────
+function renderCocina(mc){
+  if(firstLoad){
+    mc.innerHTML=`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px"><div class="spinner"></div><div style="font-size:14px;color:var(--muted)">Cargando pedidos...</div></div>`;
+    return;
+  }
+
+  // Solo pedidos pendientes o en preparación, solo platos de restaurant (no caf, no kiosko)
+  const orders = Object.entries(DB.orders||{})
+    .map(([k,v])=>({...v,_key:k}))
+    .filter(o=>
+      (o.status==='pending'||o.status==='preparing') &&
+      !o.isKiosko &&
+      o.tableId !== 'kiosko' &&
+      (o.items||[]).some(i=>!i.isCafeteria)
+    )
+    .sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+
+  // Items solo restaurant (excluir cafetería)
+  const restaurantItems = o => (o.items||[]).filter(i=>!i.isCafeteria);
+
+  const now = Date.now();
+  const elapsed = o => {
+    const ms = now - (o.createdAt||now);
+    const m = Math.floor(ms/60000);
+    return m < 1 ? 'ahora' : m === 1 ? 'hace 1 min' : `hace ${m} min`;
+  };
+
+  let h = `<div style="background:#111;min-height:100vh;color:#fff;font-family:inherit">`;
+  // Header
+  h += `<div style="background:#1a1a1a;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #333;position:sticky;top:0;z-index:100">
+    <div style="font-size:18px;font-weight:700">👨‍🍳 Cocina</div>
+    <div style="font-size:13px;color:#888">${orders.length} pedido${orders.length!==1?'s':''} pendiente${orders.length!==1?'s':''}</div>
+  </div>`;
+
+  if(orders.length === 0){
+    h += `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:70vh;gap:12px;color:#666">
+      <div style="font-size:48px">✅</div>
+      <div style="font-size:18px;font-weight:600;color:#888">Todo al día</div>
+      <div style="font-size:14px">No hay pedidos pendientes</div>
+    </div>`;
+  } else {
+    h += `<div style="padding:14px;display:flex;flex-direction:column;gap:12px">`;
+    orders.forEach(o=>{
+      const table = DB.tables[o.tableId];
+      const tableLabel = table ? table.label : (o.tableId||'Mesa');
+      const items = restaurantItems(o);
+      const isPreparing = o.status === 'preparing';
+      const isListo = o.status === 'listo';
+      const borderColor = isPreparing ? '#f59e0b' : '#333';
+      const timeSince = elapsed(o);
+      const minsAgo = Math.floor((now-(o.createdAt||now))/60000);
+      const urgentColor = minsAgo >= 15 ? '#ef4444' : minsAgo >= 8 ? '#f59e0b' : '#888';
+
+      h += `<div style="background:#1a1a1a;border:1.5px solid ${borderColor};border-radius:12px;overflow:hidden">`;
+      // Card header
+      h += `<div style="padding:12px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #2a2a2a">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="background:var(--brand);color:#fff;padding:4px 12px;border-radius:6px;font-size:15px;font-weight:700">${tableLabel}</div>
+          ${o.orderMode==='individual'&&o.personName?`<span style="font-size:13px;color:#aaa">👤 ${o.personName}</span>`:''}
+          ${isPreparing?`<span style="font-size:11px;background:#f59e0b22;color:#f59e0b;padding:2px 8px;border-radius:4px;font-weight:600">EN PREPARACIÓN</span>`:''}
+        </div>
+        <span style="font-size:12px;color:${urgentColor};font-weight:500">${timeSince}</span>
+      </div>`;
+      // Items
+      h += `<div style="padding:12px 14px">`;
+      items.forEach(item=>{
+        h += `<div style="display:flex;align-items:baseline;gap:10px;padding:6px 0;border-bottom:0.5px solid #2a2a2a">
+          <span style="font-size:22px;font-weight:800;color:#fff;min-width:28px">${item.qty}x</span>
+          <div style="flex:1">
+            <div style="font-size:16px;font-weight:600;color:#fff">${item.name}${item.selectedType?` <span style="font-size:12px;background:#1e40af33;color:#93c5fd;padding:1px 6px;border-radius:4px">${item.selectedType}</span>`:''}</div>
+            ${item.excluded&&item.excluded.length>0?`<div style="font-size:12px;color:#ef4444;margin-top:2px">⚠️ SIN: ${item.excluded.join(', ')}</div>`:''}
+          </div>
+        </div>`;
+      });
+      h += `</div>`;
+      // Actions
+      h += `<div style="padding:10px 14px;display:flex;gap:8px">`;
+      if(!isPreparing){
+        h += `<button onclick="cocinaPreparando('${o._key}')" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #f59e0b;background:#f59e0b22;color:#f59e0b;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">🔥 Preparando</button>`;
+      }
+      h += `<button onclick="cocinaListo('${o._key}')" style="flex:1;padding:10px;border-radius:8px;border:none;background:#10b981;color:#fff;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">✓ Listo para entregar</button>`;
+      h += `</div></div>`;
+    });
+    h += `</div>`;
+  }
+  h += `</div>`;
+  mc.innerHTML = h;
+}
+
+window.cocinaPreparando=async key=>{
+  await update(ref(db,`orders/${key}`),{status:'preparing'});
+};
+window.cocinaListo=async key=>{
+  await update(ref(db,`orders/${key}`),{status:'delivered',readyAt:Date.now()});
+};
+
 window.doLogout=async()=>{
   await signOut(auth);
   currentUser=null;
