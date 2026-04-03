@@ -1091,7 +1091,12 @@ function renderWaiterMesasScreen(mc){
         h+=`<button onclick="waiterMarkCobrado('${tableId}')" style="padding:6px 14px;border-radius:8px;border:0.5px solid #065f46;background:#d1fae5;color:#065f46;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
         h+=`</div>`;
       } else {
-        h+=`<button onclick="waiterOpenPayPicker('${tableId}')" style="margin-top:10px;width:100%;padding:8px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">💜 Pedir cuenta</button>`;
+        const hasPendingKitchen=orders.some(o=>o.status==='preparing'||(o.status==='delivered'&&o.readyAt));
+        if(hasPendingKitchen){
+          h+=`<div style="margin-top:10px;padding:10px 12px;background:#fff7ed;border:0.5px solid #f59e0b;border-radius:8px;font-size:13px;color:#92400e;text-align:center">⏳ Hay platos sin confirmar entrega</div>`;
+        } else {
+          h+=`<button onclick="waiterOpenPayPicker('${tableId}')" style="margin-top:10px;width:100%;padding:8px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">💜 Pedir cuenta</button>`;
+        }
       }
 
       h+=`</div>`;
@@ -3688,6 +3693,8 @@ function renderConfirmScreen(mc){
 window.backToMenu=()=>{C.cart={};C.custDishId=null;C.typePickerDishId=null;C.customerStep='menu';render();};
 
 window.goToBill=()=>{
+  const tableOrders=Object.values(DB.orders).filter(o=>o.tableId===C.customerTableId&&(o.status==='preparing'||(o.status==='delivered'&&o.readyAt)));
+  if(tableOrders.length>0){alert('Hay platos que aún no fueron entregados. Esperá a que la moza confirme la entrega.');return;}
   C.survey={items:[],ratings:{},paymentMethod:null};
   C.billRequested=true;
   C.customerStep='payment';
