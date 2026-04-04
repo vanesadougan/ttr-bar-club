@@ -3097,6 +3097,9 @@ window.updateKioskoSearch=()=>{
 };
 window.kioskoAddItem=key=>{
   const d=DB.kioskItems[key];if(!d||!C.kioskoOrder)return;
+  // Guardar el nombre antes de re-renderizar
+  const nombreInp=document.getElementById('kiosko-nombre');
+  if(nombreInp) C.kioskoOrder.personName=nombreInp.value;
   const existing=C.kioskoOrder.items.find(i=>i.kioskKey===key);
   if(existing){existing.qty++;}
   else{C.kioskoOrder.items.push({kioskKey:key,name:d.name,price:Number(d.price),qty:1});}
