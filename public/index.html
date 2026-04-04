@@ -2578,70 +2578,152 @@ function renderOrdersTab(){
     h+=`<button class="btn btn-sm" onclick="printGroupPDF(${gi})" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #0369a1;color:#0369a1;background:#e0f2fe;cursor:pointer;font-family:inherit">📄 PDF</button>`;
     h+=`</div></div></div>`;
   });
-  // Renderizar pedidos individuales no-billed
+  // ── Agrupar nonBilledOrders por mesa + persona ──
+  const tableGroups={};
   nonBilledOrders.forEach(o=>{
-    const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-    const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
-    const waiterChip=o.takenBy?`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px;font-weight:500">👩 ${o.takenBy}</span>`:'';
-    const isEditing=C.adminEditOrderKey===o._key;
-    h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}${waiterChip}</div><div class="order-time">${o.createdAt?new Date(o.createdAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+new Date(o.createdAt).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}):o.time||''}</div></div>`;
-    if(isEditing){
-      const editItems=window._adminEditItems||o.items||[];
-      const editTotal=editItems.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-      h+=`<div style="margin:8px 0;border:1px dashed #e5e7eb;border-radius:8px;padding:10px;background:#f9fafb">`;
-      h+=`<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">Editar ítems del pedido</div>`;
-      // Items existentes
-      editItems.forEach((item,idx)=>{
-        const price=(item.finalPrice||item.price);
-        h+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #f3f4f6">`;
-        h+=`<div style="flex:1;font-size:13px"><strong>${item.name}</strong>${item.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${item.selectedType}</span>`:''}<div style="font-size:11px;color:var(--muted)">$${price.toLocaleString()} c/u</div></div>`;
-        h+=`<div style="display:flex;align-items:center;gap:6px">`;
-        h+=`<button onclick="adminOrderQty(${idx},-1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">−</button>`;
-        h+=`<span style="font-size:14px;font-weight:600;min-width:20px;text-align:center">${item.qty}</span>`;
-        h+=`<button onclick="adminOrderQty(${idx},+1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">+</button>`;
-        h+=`<button onclick="adminOrderRemoveItem(${idx})" style="width:28px;height:28px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit" title="Eliminar ítem">✕</button>`;
-        h+=`</div></div>`;
-      });
-      // Total parcial
-      h+=`<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:600;border-bottom:0.5px solid #e5e7eb;margin-bottom:10px"><span>Total</span><span style="color:var(--accent)">$${editTotal.toLocaleString()}</span></div>`;
-      // Buscador para agregar items
-      h+=`<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Agregar item</div>`;
-      h+=`<input id="edit-order-search" placeholder="Buscar plato o item de cafetería..." oninput="updateEditOrderSearch()" autocomplete="off" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;background:var(--card);outline:none">`;
-      h+=`<div id="edit-order-results" style="border:0.5px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;background:var(--card);margin-top:4px;display:none"></div></div>`;
-      // Botones
-      h+=`<div style="display:flex;gap:8px;margin-top:6px">`;
-      h+=`<button onclick="adminSaveOrderEdit()" class="btn btn-primary btn-sm">Guardar cambios</button>`;
-      h+=`<button onclick="adminCancelEdit()" class="btn btn-ghost btn-sm">Cancelar</button>`;
-      h+=`<button onclick="adminDeleteOrder()" style="margin-left:auto;padding:5px 12px;border-radius:6px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">🗑 Cancelar pedido</button>`;
-      h+=`</div></div>`;
-    } else {
-      h+=`<div class="order-items-text">`;
-      (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''} <span style="color:var(--accent)">$${(i.finalPrice||i.price).toLocaleString()}</span><br>`;});
+    const tKey=o.tableId||'__notable__';
+    if(!tableGroups[tKey]) tableGroups[tKey]={tableId:o.tableId,personGroups:{}};
+    const pKey=o.orderMode==='individual'&&o.personName?o.personName:'__general__';
+    if(!tableGroups[tKey].personGroups[pKey])
+      tableGroups[tKey].personGroups[pKey]={orderMode:o.orderMode,personName:o.personName||null,takenBy:o.takenBy||null,orders:[]};
+    tableGroups[tKey].personGroups[pKey].orders.push(o);
+  });
+
+  // Ordenar mesas por el pedido más reciente
+  const tableGroupList=Object.values(tableGroups).sort((a,b)=>{
+    const latA=Math.max(...Object.values(a.personGroups).flatMap(pg=>pg.orders.map(o=>o.createdAt||0)));
+    const latB=Math.max(...Object.values(b.personGroups).flatMap(pg=>pg.orders.map(o=>o.createdAt||0)));
+    return latB-latA;
+  });
+
+  tableGroupList.forEach(tg=>{
+    const personGroupList=Object.values(tg.personGroups);
+    const isMultiPerson=personGroupList.length>1||(personGroupList.length===1&&personGroupList[0].orderMode==='individual'&&personGroupList[0].personName);
+
+    // Card por mesa (wrapper)
+    const tableTotal=personGroupList.flatMap(pg=>pg.orders).reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
+
+    if(isMultiPerson){
+      // Mesa con personas individuales — card contenedor con sub-cards por persona
+      h+=`<div class="order-card" style="padding:0;overflow:hidden;margin-bottom:1rem">`;
+      h+=`<div style="padding:12px 14px;background:#f8f7f4;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between">`;
+      h+=`<div style="font-size:15px;font-weight:700">${tableLabel(tg.tableId)}</div>`;
+      h+=`<div style="font-size:13px;font-weight:600;color:var(--accent)">Total mesa: $${tableTotal.toLocaleString()}</div>`;
       h+=`</div>`;
+
+      personGroupList.forEach(pg=>{
+        const pgOrders=pg.orders;
+        const pgTotal=pgOrders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
+        const waiterChip=pg.takenBy?`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px;font-weight:500">👩 ${pg.takenBy}</span>`:'';
+        const statuses=[...new Set(pgOrders.map(o=>o.status))];
+        const hasReadyAt=pgOrders.some(o=>o.status==='delivered'&&o.readyAt);
+        const hasPreparing=pgOrders.some(o=>o.status==='preparing');
+        const allKeys=pgOrders.map(o=>o._key);
+
+        h+=`<div style="padding:10px 14px;border-bottom:0.5px solid var(--border)">`;
+        h+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">`;
+        h+=`<span style="font-size:13px;font-weight:600">👤 ${pg.personName||'General'}</span>`;
+        h+=waiterChip;
+        // chips de estado
+        statuses.forEach(st=>{
+          const lbl=st==='delivered'&&hasReadyAt?'✅ Listo':st==='pending'?'⏳ Pendiente':st==='preparing'?'🔥 Preparando':st==='delivered'?'Entregado':st==='billed'?'Pide cuenta':'';
+          if(lbl) h+=`<span class="status status-${st==='delivered'&&hasReadyAt?'delivered':'status-'+st}" style="font-size:10px">${lbl}</span>`;
+        });
+        h+=`</div>`;
+        // Items agrupados
+        const seen={};
+        pgOrders.forEach(o=>(o.items||[]).forEach(i=>{
+          const k=i.name+(i.selectedType?'|'+i.selectedType:'');
+          if(seen[k])seen[k].qty+=i.qty;
+          else seen[k]={...i};
+        }));
+        h+=`<div style="font-size:13px;margin-bottom:8px">`;
+        Object.values(seen).forEach(i=>{
+          h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <em style="font-size:11px">(${i.selectedType})</em>`:''}${i.excluded&&i.excluded.length?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''} <span style="color:var(--accent)">$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span><br>`;
+        });
+        h+=`</div>`;
+        // Acciones
+        h+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">`;
+        h+=`<span style="font-weight:600;font-size:14px;color:var(--accent)">$${pgTotal.toLocaleString()}</span>`;
+        h+=`<div style="display:flex;gap:6px;flex-wrap:wrap">`;
+        if(hasReadyAt){
+          h+=`<button onclick="adminGroupConfirmEntrega(${JSON.stringify(allKeys)})" style="padding:5px 10px;font-size:12px;border-radius:6px;border:none;background:#10b981;color:#fff;cursor:pointer;font-family:inherit">🛎 Confirmar entrega</button>`;
+        }
+        if(!hasPreparing&&!hasReadyAt){
+          h+=`<button onclick="adminGroupCobrado(${JSON.stringify(allKeys)})" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
+          h+=`<button onclick="adminGroupDeudor(${JSON.stringify(allKeys)})" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor</button>`;
+        }
+        h+=`</div></div>`;
+        h+=`</div>`;
+      });
+      h+=`</div>`;
+
+    } else {
+      // Mesa general (un solo grupo) — mostrar los pedidos individuales como antes pero agrupados
+      const pg=personGroupList[0];
+      const pgOrders=pg.orders;
+
+      pgOrders.forEach(o=>{
+        const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+        const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
+        const waiterChip=o.takenBy?`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px;font-weight:500">👩 ${o.takenBy}</span>`:'';
+        const isEditing=C.adminEditOrderKey===o._key;
+        h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${tableLabel(o.tableId)}${chip}${waiterChip}</div><div class="order-time">${o.createdAt?new Date(o.createdAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+new Date(o.createdAt).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}):o.time||''}</div></div>`;
+        if(isEditing){
+          const editItems=window._adminEditItems||o.items||[];
+          const editTotal=editItems.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+          h+=`<div style="margin:8px 0;border:1px dashed #e5e7eb;border-radius:8px;padding:10px;background:#f9fafb">`;
+          h+=`<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px;text-transform:uppercase;letter-spacing:0.05em">Editar ítems del pedido</div>`;
+          editItems.forEach((item,idx)=>{
+            const price=(item.finalPrice||item.price);
+            h+=`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #f3f4f6">`;
+            h+=`<div style="flex:1;font-size:13px"><strong>${item.name}</strong>${item.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${item.selectedType}</span>`:''}<div style="font-size:11px;color:var(--muted)">$${price.toLocaleString()} c/u</div></div>`;
+            h+=`<div style="display:flex;align-items:center;gap:6px">`;
+            h+=`<button onclick="adminOrderQty(${idx},-1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">−</button>`;
+            h+=`<span style="font-size:14px;font-weight:600;min-width:20px;text-align:center">${item.qty}</span>`;
+            h+=`<button onclick="adminOrderQty(${idx},+1)" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">+</button>`;
+            h+=`<button onclick="adminOrderRemoveItem(${idx})" style="width:28px;height:28px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit">✕</button>`;
+            h+=`</div></div>`;
+          });
+          h+=`<div style="display:flex;justify-content:space-between;padding:8px 0;font-size:13px;font-weight:600;border-bottom:0.5px solid #e5e7eb;margin-bottom:10px"><span>Total</span><span style="color:var(--accent)">$${editTotal.toLocaleString()}</span></div>`;
+          h+=`<div style="margin-bottom:8px"><div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.05em">Agregar item</div>`;
+          h+=`<input id="edit-order-search" placeholder="Buscar plato o item de cafetería..." oninput="updateEditOrderSearch()" autocomplete="off" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:13px;background:var(--card);outline:none">`;
+          h+=`<div id="edit-order-results" style="border:0.5px solid var(--border);border-radius:8px;max-height:160px;overflow-y:auto;background:var(--card);margin-top:4px;display:none"></div></div>`;
+          h+=`<div style="display:flex;gap:8px;margin-top:6px">`;
+          h+=`<button onclick="adminSaveOrderEdit()" class="btn btn-primary btn-sm">Guardar cambios</button>`;
+          h+=`<button onclick="adminCancelEdit()" class="btn btn-ghost btn-sm">Cancelar</button>`;
+          h+=`<button onclick="adminDeleteOrder()" style="margin-left:auto;padding:5px 12px;border-radius:6px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">🗑 Cancelar pedido</button>`;
+          h+=`</div></div>`;
+        } else {
+          h+=`<div class="order-items-text">`;
+          (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''} <span style="color:var(--accent)">$${(i.finalPrice||i.price).toLocaleString()}</span><br>`;});
+          h+=`</div>`;
+        }
+        const _statusLabel=o.status==='delivered'&&o.readyAt?'✅ Listo para entregar':{pending:'Pendiente',preparing:'🔥 En preparación',delivered:'Entregado',billed:'Pide cuenta',cobrado:'Cobrado'}[o.status]||o.status;
+        const _statusCss=o.status==='delivered'&&o.readyAt?'status-delivered':'status-'+o.status;
+        h+=`<div class="order-footer" style="margin-top:8px"><span class="status ${_statusCss}">${_statusLabel}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>`;
+        if(o.status==='pending'){
+          h+=`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`;
+          h+=`<button class="btn btn-sm" onclick="adminMarkPreparing('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #f59e0b;color:#c2410c;background:#fff7ed;cursor:pointer;font-family:inherit">🔥 Preparando</button>`;
+          h+=`<button class="btn btn-sm" onclick="adminEditOrder('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️ Editar</button>`;
+          h+=`<button class="btn btn-sm" onclick="marcarDeudor('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor</button>`;
+        }
+        if(o.status==='preparing'){
+          h+=`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`;
+          h+=`<button class="btn btn-sm" onclick="adminEditOrder('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️ Editar</button>`;
+        }
+        if(o.status==='delivered'&&o.readyAt){
+          h+=`<button class="btn btn-sm" onclick="adminConfirmEntrega('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:none;background:#10b981;color:#fff;cursor:pointer;font-family:inherit">🛎 Confirmar entrega</button>`;
+          h+=`<button class="btn btn-sm" onclick="markCobrado('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
+        }
+        if(o.status==='delivered'&&!o.readyAt){
+          h+=`<button class="btn btn-sm" onclick="markCobrado('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
+          h+=` <button class="btn btn-sm" onclick="printOrderPDF('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #0369a1;color:#0369a1;background:#e0f2fe;cursor:pointer;font-family:inherit">📄 PDF</button>`;
+          h+=` <button class="btn btn-sm" onclick="marcarDeudor('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor</button>`;
+        }
+        h+=`</div></div></div>`;
+      });
     }
-    const _statusLabel=o.status==='delivered'&&o.readyAt?'✅ Listo para entregar':{pending:'Pendiente',preparing:'🔥 En preparación',delivered:'Entregado',billed:'Pide cuenta',cobrado:'Cobrado'}[o.status]||o.status;
-    const _statusCss=o.status==='delivered'&&o.readyAt?'status-delivered':'status-'+o.status;
-    h+=`<div class="order-footer" style="margin-top:8px"><span class="status ${_statusCss}">${_statusLabel}</span><div style="display:flex;align-items:center;gap:8px"><span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span>`;
-    if(o.status==='pending'){
-      h+=`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`;
-      h+=`<button class="btn btn-sm" onclick="adminMarkPreparing('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #f59e0b;color:#c2410c;background:#fff7ed;cursor:pointer;font-family:inherit">🔥 Preparando</button>`;
-      h+=`<button class="btn btn-sm" onclick="adminEditOrder('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️ Editar</button>`;
-      h+=`<button class="btn btn-sm" onclick="marcarDeudor('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor</button>`;
-    }
-    if(o.status==='preparing'){
-      h+=`<button class="btn btn-primary btn-sm" onclick="markDelivered('${o._key}')">Marcar entregado</button>`;
-      h+=`<button class="btn btn-sm" onclick="adminEditOrder('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️ Editar</button>`;
-    }
-    if(o.status==='delivered'&&o.readyAt){
-      h+=`<button class="btn btn-sm" onclick="adminConfirmEntrega('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:none;background:#10b981;color:#fff;cursor:pointer;font-family:inherit">🛎 Confirmar entrega</button>`;
-      h+=`<button class="btn btn-sm" onclick="markCobrado('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
-    }
-    if(o.status==='delivered'&&!o.readyAt){
-      h+=`<button class="btn btn-sm" onclick="markCobrado('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
-      h+=` <button class="btn btn-sm" onclick="printOrderPDF('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #0369a1;color:#0369a1;background:#e0f2fe;cursor:pointer;font-family:inherit">📄 PDF</button>`;
-      h+=` <button class="btn btn-sm" onclick="marcarDeudor('${o._key}')" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor</button>`;
-    }
-    h+=`</div></div></div>`;
   });
   return h+`</div>`;
 }
@@ -3169,6 +3251,15 @@ window.submitKioskoOrder=async(modo)=>{
   render();
 };
 
+window.adminGroupCobrado=async keys=>{
+  for(const k of keys) await update(ref(db,`orders/${k}`),{status:'cobrado'});
+};
+window.adminGroupDeudor=async keys=>{
+  for(const k of keys) await update(ref(db,`orders/${k}`),{status:'deudor'});
+};
+window.adminGroupConfirmEntrega=async keys=>{
+  for(const k of keys) await update(ref(db,`orders/${k}`),{readyAt:deleteField()});
+};
 window.adminMarkPreparing=async key=>{ await update(ref(db,`orders/${key}`),{status:'preparing'}); };
 window.adminConfirmEntrega=async key=>{ await update(ref(db,`orders/${key}`),{readyAt:null}); };
 window.markDelivered=async key=>{
