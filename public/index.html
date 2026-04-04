@@ -1367,6 +1367,8 @@ function renderDishesTab(){
   formH+='<div class="two-col" style="margin-bottom:10px">';
   formH+='<div class="form-group" style="margin-bottom:0"><label>Precio ($)</label><input type="number" placeholder="0" value="'+f.price+'" oninput="uF(\'dish\',\'price\',this.value)"></div>';
   const _s2=Number(f.stock);const _hasStock=f.stock!=null&&f.stock!=='';
+  const _catDirectStock=selCat&&selCat.directStock;
+  if(_catDirectStock) formH+=`<div style="padding:6px 10px;background:#eff6ff;border:0.5px solid #93c5fd;border-radius:6px;font-size:12px;color:#1e40af;margin-bottom:8px">📦 La categoría <b>${selCat.label||selCat.icon||''}</b> requiere stock directo</div>`;
   formH+='<div class="form-group" style="margin-bottom:0"><label>Stock <span style="font-size:10px;color:var(--muted)">(opcional)</span></label><input id="dish-stock-inp" type="number" min="0" placeholder="∞" value="'+(_hasStock?f.stock:'')+'" oninput="uFStock(this.value)"></div>';
   formH+='</div>';
 
@@ -1534,9 +1536,13 @@ function renderCategoriesTab(){
       <label class="toggle-switch"><input type="checkbox" ${fc.isPromo?'checked':''} onchange="uCat('isPromo',this.checked)"><span class="toggle-slider"></span></label>
       <span style="font-size:13px">Es categoría de <strong>Promo del día</strong> (muestra descuentos)</span>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
       <label class="toggle-switch"><input type="checkbox" ${fc.noRating?'checked':''} onchange="uCat('noRating',this.checked)"><span class="toggle-slider"></span></label>
       <span style="font-size:13px">No calificar platos de esta categoría</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+      <label class="toggle-switch"><input type="checkbox" ${fc.directStock?'checked':''} onchange="uCat('directStock',this.checked)"><span class="toggle-slider"></span></label>
+      <span style="font-size:13px">📦 <strong>Stock directo</strong> — todos los platos de esta categoría manejan stock individual</span>
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn btn-primary" onclick="${C.editingCat?'saveEditCat()':'addCat()'}">${C.editingCat?'Guardar':'Agregar categoría'}</button>
@@ -1562,7 +1568,7 @@ function renderCategoriesTab(){
       <div style="font-size:22px;width:32px;text-align:center;flex-shrink:0">${cat.icon}</div>
       <div style="flex:1;min-width:0">
         <div style="font-size:14px;font-weight:500">${cat.label}</div>
-        <div style="font-size:12px;color:var(--muted)">${dishCount} plato${dishCount!==1?'s':''}${cat.isPromo?' · 🔥 Promo':''}${cat.noRating?' · ⭐ No calificar':''}</div>
+        <div style="font-size:12px;color:var(--muted)">${dishCount} plato${dishCount!==1?'s':''}${cat.isPromo?' · 🔥 Promo':''}${cat.noRating?' · ⭐ No calificar':''}${cat.directStock?' · 📦 Stock directo':''}</div>
       </div>
       <div class="row-btns">
         <button class="btn btn-ghost btn-sm" onclick="editCat('${cat._key}')">✏️</button>
@@ -1603,6 +1609,7 @@ function renderCafeteriaTab(){
   formH+='<div class="form-group" style="margin-bottom:8px"><label>Nombre</label><input placeholder="Nombre del item" value="'+f.name+'" oninput="uCafF(\'name\',this.value)"></div>';
   // Descripción
   formH+='<div class="form-group" style="margin-bottom:8px"><label>Descripción <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><textarea style="min-height:44px" oninput="uCafF(\'desc\',this.value)">'+f.desc+'</textarea></div>';
+  formH+='<div class="form-group" style="margin-bottom:8px"><label>🔍 Código de barras <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><input placeholder="Escaneá o escribí el código" value="'+(f.barcode||'')+'" oninput="uCafF(\'barcode\',this.value)" style="font-family:monospace;padding:4px 8px;height:30px;font-size:12px"></div>';
   // Precio / Stock
   const _sc=Number(f.stock);const _hs=f.stock!=null&&f.stock!=='';
   const _scCol=_sc===0?'#b91c1c':_sc<=5?'#92400e':'#065f46';
@@ -1640,6 +1647,7 @@ function renderCafeteriaTab(){
     allIngsCaf.filter(ing=>!(recipeCaf||[]).some(r=>r.ingredientId===ing._key)).forEach(ing=>{formH+='<option value="'+ing._key+'">'+ing.name+' ('+(ing.stock||0)+' '+ing.unit+')</option>';});
     formH+='</select></div>';
   }
+
   formH+='<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-primary" onclick="'+(C.editingCafItem?'saveEditCafItem()':'addCafItem()') +'">'+(C.editingCafItem?'Guardar cambios':'Agregar item')+'</button>'+(C.editingCafItem?'<button class="btn btn-ghost" onclick="cancelEditCafItem()">Cancelar</button>':'')+'</div></div>';
 
   let listH=`<div class="cat-sections">`;
@@ -1769,6 +1777,7 @@ function renderKioskoTab(){
   formH+=`<div class="card-title">${C.editingKioskItem?'✏️ Editar item':'+ Agregar item'}</div>`;
   formH+=`<div class="form-group" style="margin-bottom:8px"><label>Nombre</label><input placeholder="Nombre del producto" value="${f.name||''}" oninput="uKiosk('name',this.value)"></div>`;
   formH+=`<div class="form-group" style="margin-bottom:8px"><label>Descripción <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><textarea style="min-height:44px" oninput="uKiosk('desc',this.value)">${f.desc||''}</textarea></div>`;
+  formH+=`<div class="form-group" style="margin-bottom:8px"><label>🔍 Código de barras <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><input placeholder="Escaneá o escribí el código" value="${f.barcode||''}" oninput="uKiosk('barcode',this.value)" style="font-family:monospace;padding:4px 8px;height:30px;font-size:12px"></div>`;
   const _sc=Number(f.stock);const _hs=f.stock!=null&&f.stock!=='';
   const _scCol=_sc===0?'#b91c1c':_sc<=5?'#92400e':'#065f46';
   const _scBg=_sc===0?'#fee2e2':_sc<=5?'#fef3c7':'#d1fae5';
@@ -1778,6 +1787,7 @@ function renderKioskoTab(){
   formH+=`<div class="form-group" style="margin-bottom:0"><label>Stock</label><div style="display:flex;align-items:center;gap:6px"><input id="kiosk-stock-inp" type="number" min="0" placeholder="0" value="${_hs?f.stock:''}" oninput="uKioskStock(this.value)" style="flex:1">${_sb}</div></div>`;
   formH+=`</div>`;
   formH+=`<div id="kiosk-alertat-row" style="display:${_hs?'block':'none'};margin-bottom:12px"><div class="form-group"><label>Alerta cuando quede ≤ <span style="font-size:11px;color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="${f.alertAt!=null&&f.alertAt!==''?f.alertAt:''}" oninput="uKiosk('alertAt',this.value)"></div></div>`;
+
   formH+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="${C.editingKioskItem?'saveKioskItem()':'addKioskItem()'}">`;
   formH+=`${C.editingKioskItem?'Guardar cambios':'Agregar item'}</button>`;
   formH+=`${C.editingKioskItem?`<button class="btn btn-ghost" onclick="cancelKioskItem()">Cancelar</button>`:''}</div></div>`;
@@ -1863,7 +1873,7 @@ window.addKioskItem=()=>{
   if(stockInp&&stockInp.value!=='')f.stock=stockInp.value;
   if(!f.name||!f.price){alert('Ingresá nombre y precio');return;}
   if(f.stock!==''&&f.stock!=null&&(f.alertAt===''||f.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
-  push(ref(db,'kioskItems'),{name:f.name.trim(),desc:f.desc||'',price:Number(f.price),stock:f.stock!==''&&f.stock!=null?Number(f.stock):null,alertAt:f.alertAt!==''&&f.alertAt!=null?Number(f.alertAt):null});
+  push(ref(db,'kioskItems'),{name:f.name.trim(),desc:f.desc||'',price:Number(f.price),stock:f.stock!==''&&f.stock!=null?Number(f.stock):null,alertAt:f.alertAt!==''&&f.alertAt!=null?Number(f.alertAt):null,barcode:f.barcode&&f.barcode.trim()?f.barcode.trim():null});
   C.newKioskItem={name:'',desc:'',price:'',stock:''};C._prevKioskStock=null;render();
 };
 window.editKioskItem=key=>{C.editingKioskItem={...DB.kioskItems[key],_key:key};C._prevKioskStock=DB.kioskItems[key].stock;render();};
@@ -1872,7 +1882,7 @@ window.saveKioskItem=()=>{
   if(stockInp&&stockInp.value!=='')C.editingKioskItem.stock=stockInp.value;
   const {_key,...data}=C.editingKioskItem;
   if(data.stock!==''&&data.stock!=null&&(data.alertAt===''||data.alertAt==null)){alert('Ingresá el valor de alerta de stock');return;}
-  set(ref(db,`kioskItems/${_key}`),{name:data.name,desc:data.desc||'',price:Number(data.price),stock:data.stock!==''&&data.stock!=null?Number(data.stock):null,alertAt:data.alertAt!==''&&data.alertAt!=null?Number(data.alertAt):null});
+  set(ref(db,`kioskItems/${_key}`),{name:data.name,desc:data.desc||'',price:Number(data.price),stock:data.stock!==''&&data.stock!=null?Number(data.stock):null,alertAt:data.alertAt!==''&&data.alertAt!=null?Number(data.alertAt):null,barcode:data.barcode&&data.barcode.trim()?data.barcode.trim():null});
   C.editingKioskItem=null;C._prevKioskStock=null;render();
 };
 window.cancelKioskItem=()=>{C.editingKioskItem=null;render();};
@@ -1883,8 +1893,9 @@ function renderStockTab(){
   const fi=C.editingIng||C.newIng||{name:'',unit:'u',stock:'',alertAt:''};
   const UNITS=['u','kg','g','l','ml'];
 
+  const directStockCats=new Set(getCats().filter(c=>c.directStock).map(c=>c._key));
   const directStockDishes=[
-    ...Object.entries(DB.dishes).filter(([,d])=>d.stock!=null&&(!d.recipe||d.recipe.length===0)).map(([k,d])=>({...d,_key:k,_src:'dishes'})),
+    ...Object.entries(DB.dishes).filter(([,d])=>(d.stock!=null||directStockCats.has(d.cat))&&(!d.recipe||d.recipe.length===0)).map(([k,d])=>({...d,_key:k,_src:'dishes',stock:d.stock??0})),
     ...Object.entries(DB.cafeteriaItems||{}).filter(([,d])=>d.stock!=null&&(!d.recipe||d.recipe.length===0)).map(([k,d])=>({...d,_key:k,_src:'cafeteria'})),
     ...Object.entries(DB.kioskItems||{}).filter(([,d])=>d.stock!=null).map(([k,d])=>({...d,_key:k,_src:'kiosko'}))
   ];
@@ -2810,7 +2821,15 @@ window.uF=(type,field,val)=>{
     render();return;
   }
   // only re-render on category change (dropdown); for typed fields update preview inline
-  if(type==='dish'&&field==='cat'){render();return;}
+  if(type==='dish'&&field==='cat'){
+    // Si la categoría tiene directStock, activar stock automáticamente
+    const cats=getCats();
+    const selCat=cats.find(c=>c._key===val);
+    if(selCat&&selCat.directStock&&(o.stock===null||o.stock==='')){
+      o.stock=0;
+    }
+    render();return;
+  }
   if(type==='dish'&&(field==='price'||field==='promoDiscount')){
     // Si 2x1 activo, re-renderizar para actualizar el preview
     if(o.is2x1){render();return;}
