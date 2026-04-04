@@ -1889,30 +1889,53 @@ function renderStockTab(){
     ...Object.entries(DB.kioskItems||{}).filter(([,d])=>d.stock!=null).map(([k,d])=>({...d,_key:k,_src:'kiosko'}))
   ];
 
-  // ── Scanner de código de barras ──
+  // ── Scanner de código de barras (modo carga masiva) ──
   let h=`<div style="max-width:900px">`;
-  h+=`<div class="card" style="margin-bottom:1.25rem;padding:12px 14px;border-color:var(--brand)">
-    <div style="display:flex;align-items:center;gap:10px">
-      <span style="font-size:20px">🔍</span>
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:600;margin-bottom:4px">Buscar por código de barras</div>
-        <input id="barcode-scanner-input" placeholder="Escaneá un producto o escribí el código..."
-          autocomplete="off"
-          style="width:100%;padding:8px 12px;border:0.5px solid var(--border);border-radius:8px;font-family:monospace;font-size:14px;background:var(--bg)"
-          oninput="stockBarcodeSearch(this.value)"
-          onkeydown="if(event.key==='Enter'){stockBarcodeSearch(this.value,true);}"
-        >
-      </div>
+  const batchItems = C._barcodeBatch || [];
+  const batchCount = batchItems.length;
+  h+=`<div class="card" style="margin-bottom:1.25rem;padding:14px;border-color:var(--brand)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:14px;font-weight:600">🔍 Carga de stock por código de barras</div>
+      ${batchCount>0?`<button onclick="stockBatchClear()" style="padding:4px 10px;border-radius:6px;border:0.5px solid #ef4444;background:#fff;color:#ef4444;font-size:12px;cursor:pointer;font-family:inherit">✕ Limpiar</button>`:''}
     </div>
-    <div id="barcode-result" style="margin-top:8px;display:none"></div>
-  </div>`;
-  // Restaurar resultado si había un item encontrado
-  if(C._barcodeFound){
-    const bf=C._barcodeFound;
-    const dbObj=bf.src==='ing'?DB.ingredients:bf.src==='dishes'?DB.dishes:bf.src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
-    const item=dbObj[bf.key];
-    if(item) setTimeout(()=>stockBarcodeSearch(item.barcode||'__restore__',false,item,bf.src),0);
+    <div style="display:flex;gap:8px;align-items:center">
+      <input id="barcode-scanner-input" placeholder="Escaneá o escribí el código y presioná Enter..."
+        autocomplete="off"
+        style="flex:1;padding:8px 12px;border:0.5px solid var(--border);border-radius:8px;font-family:monospace;font-size:14px;background:var(--bg)"
+        onkeydown="if(event.key==='Enter'){stockBatchScan(this.value);this.value='';}"
+      >
+      <div style="font-size:12px;color:var(--muted);white-space:nowrap">${batchCount} producto${batchCount!==1?'s':''}</div>
+    </div>`;
+
+  // Lista de productos escaneados
+  if(batchCount>0){
+    h+=`<div style="margin-top:10px;border:0.5px solid var(--border);border-radius:8px;overflow:hidden">`;
+    h+=`<div style="display:grid;grid-template-columns:1fr 60px 100px 32px;gap:8px;padding:6px 10px;background:#f8f7f4;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase">
+      <span>Producto</span><span style="text-align:center">Stock actual</span><span style="text-align:center">Ajuste</span><span></span>
+    </div>`;
+    batchItems.forEach((item,idx)=>{
+      const col=item.delta>0?'#065f46':'#b91c1c';
+      const bg=item.delta>0?'#f0fdf4':'#fff8f8';
+      h+=`<div style="display:grid;grid-template-columns:1fr 60px 100px 32px;gap:8px;padding:8px 10px;border-top:0.5px solid var(--border);align-items:center;background:${bg}">
+        <div>
+          <div style="font-size:13px;font-weight:600">${item.name}</div>
+          <div style="font-size:11px;color:var(--muted)">${item.barcode}</div>
+        </div>
+        <div style="text-align:center;font-size:13px;font-weight:600">${item.currentStock} ${item.unit||'u'}</div>
+        <div style="display:flex;align-items:center;gap:4px;justify-content:center">
+          <button onclick="stockBatchDelta(${idx},-1)" style="width:24px;height:24px;border-radius:4px;border:0.5px solid var(--border);background:var(--bg);cursor:pointer;font-size:14px;line-height:1">−</button>
+          <input type="number" value="${item.delta}" oninput="stockBatchSetDelta(${idx},this.value)" style="width:42px;padding:3px;border:0.5px solid var(--border);border-radius:4px;font-size:13px;text-align:center;font-family:inherit;font-weight:600;color:${col}">
+          <button onclick="stockBatchDelta(${idx},1)" style="width:24px;height:24px;border-radius:4px;border:0.5px solid var(--border);background:var(--bg);cursor:pointer;font-size:14px;line-height:1">+</button>
+        </div>
+        <button onclick="stockBatchRemove(${idx})" style="width:24px;height:24px;border-radius:4px;border:none;background:#fee2e2;color:#b91c1c;cursor:pointer;font-size:12px;line-height:1">✕</button>
+      </div>`;
+    });
+    h+=`</div>`;
+    h+=`<div style="margin-top:10px;display:flex;justify-content:flex-end">
+      <button onclick="stockBatchApply()" style="padding:10px 24px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">✓ Confirmar actualización (${batchCount})</button>
+    </div>`;
   }
+  h+=`</div>`;
 
   // ── Métricas ──
   const allItems=[
@@ -2058,61 +2081,84 @@ function renderStockTab(){
 
 // ── INGREDIENT ACTIONS ────────────────────────────
 // ── BARCODE SCANNER ───────────────────────────────
-window.stockBarcodeSearch=(code,confirmed=false,directItem=null,directSrc=null)=>{
-  const result=document.getElementById('barcode-result');
-  if(!result)return;
-  let found=directItem||null, foundSrc=directSrc||null;
-  if(!directItem){
-    const q=code.trim();
-    if(!q){result.style.display='none';return;}
-    const ingMatch=Object.entries(DB.ingredients||{}).find(([,i])=>i.barcode===q);
-    if(ingMatch){found={...ingMatch[1],_key:ingMatch[0]};foundSrc='ing';}
-    if(!found){const m=Object.entries(DB.dishes||{}).find(([,d])=>d.barcode===q);if(m){found={...m[1],_key:m[0]};foundSrc='dishes';}}
-    if(!found){const m=Object.entries(DB.cafeteriaItems||{}).find(([,d])=>d.barcode===q);if(m){found={...m[1],_key:m[0]};foundSrc='cafeteria';}}
-    if(!found){const m=Object.entries(DB.kioskItems||{}).find(([,d])=>d.barcode===q);if(m){found={...m[1],_key:m[0]};foundSrc='kiosko';}}
-    if(!found&&q.length>=4){
-      result.style.display='block';
-      result.innerHTML=`<div style="padding:10px 12px;background:#fff8f8;border:1px solid #fca5a5;border-radius:8px;font-size:13px;color:#b91c1c">❌ Código <b>${q}</b> no encontrado. Editá el ingrediente o plato y asignale este código.</div>`;
-      return;
-    } else if(!found){result.style.display='none';return;}
+// ── BARCODE BATCH SCANNER ─────────────────────────
+window.stockBatchScan=(code)=>{
+  const q=(code||'').trim();
+  if(!q) return;
+  // Buscar en todos los orígenes
+  let found=null, foundSrc=null;
+  const ingMatch=Object.entries(DB.ingredients||{}).find(([,i])=>i.barcode===q);
+  if(ingMatch){found={...ingMatch[1],_key:ingMatch[0]};foundSrc='ing';}
+  if(!found){const m=Object.entries(DB.dishes||{}).find(([,d])=>d.barcode===q);if(m){found={...m[1],_key:m[0]};foundSrc='dishes';}}
+  if(!found){const m=Object.entries(DB.cafeteriaItems||{}).find(([,d])=>d.barcode===q);if(m){found={...m[1],_key:m[0]};foundSrc='cafeteria';}}
+  if(!found){const m=Object.entries(DB.kioskItems||{}).find(([,d])=>d.barcode===q);if(m){found={...m[1],_key:m[0]};foundSrc='kiosko';}}
+
+  if(!found){
+    alert(`❌ Código "${q}" no encontrado.\nEditá el ingrediente o plato y asignale este código.`);
+    return;
   }
-  // Guardar en C para que el botón lo use sin pasar parámetros
-  C._barcodeFound={key:found._key,src:foundSrc};
-  const stock=found.stock||0;
-  const col=stock===0?'#b91c1c':(found.alertAt&&stock<=found.alertAt)?'#92400e':'#065f46';
-  result.style.display='block';
-  result.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;gap:12px;flex-wrap:wrap">
-      <div>
-        <div style="font-size:14px;font-weight:700">${found.name}</div>
-        <div style="font-size:12px;color:var(--muted)">Stock actual: <span style="font-weight:700;color:${col}">${stock} ${found.unit||'u'}</span></div>
-      </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <input id="scanner-adj-qty" type="number" min="1" value="${C._barcodeQty||1}" oninput="C._barcodeQty=Math.abs(Number(this.value)||1)" style="width:55px;padding:6px;border:0.5px solid var(--border);border-radius:6px;font-size:14px;text-align:center;font-family:inherit">
-        <button onclick="stockBarcodeApply(1)" style="padding:7px 14px;border-radius:8px;border:none;background:#10b981;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar</button>
-        <button onclick="stockBarcodeApply(-1)" style="padding:7px 14px;border-radius:8px;border:0.5px solid #ef4444;background:#fff;color:#ef4444;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">− Restar</button>
-      </div>
-    </div>`;
-};
-window.stockBarcodeApply=async(sign)=>{
-  const bf=C._barcodeFound;
-  if(!bf){alert('Escaneá un producto primero');return;}
-  const qty=Math.abs(C._barcodeQty||Number(document.getElementById('scanner-adj-qty')?.value)||1);
-  if(!qty)return;
-  const {key,src}=bf;
-  if(src==='ing'){
-    const cur=Number(DB.ingredients[key]?.stock||0);
-    await update(ref(db,`ingredients/${key}`),{stock:Math.max(0,cur+(sign*qty))});
+  if(!C._barcodeBatch) C._barcodeBatch=[];
+
+  // Si ya está en la lista, sumar 1
+  const existing=C._barcodeBatch.find(i=>i.key===found._key&&i.src===foundSrc);
+  if(existing){
+    existing.delta+=1;
   } else {
-    const dbPath=src==='dishes'?'dishes':src==='cafeteria'?'cafeteriaItems':'kioskItems';
-    const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
-    const cur=Number(dbObj[key]?.stock||0);
-    await update(ref(db,`${dbPath}/${key}`),{stock:Math.max(0,cur+(sign*qty))});
+    C._barcodeBatch.push({
+      key: found._key,
+      src: foundSrc,
+      name: found.name,
+      barcode: q,
+      unit: found.unit||'u',
+      currentStock: found.stock||0,
+      delta: 1
+    });
   }
-  C._barcodeFound=null;
-  C._barcodeQty=1;
-  const inp=document.getElementById('barcode-scanner-input');
-  if(inp){inp.value='';inp.focus();}
-  document.getElementById('barcode-result').style.display='none';
+  render();
+  // Re-enfocar input después del render
+  setTimeout(()=>{const inp=document.getElementById('barcode-scanner-input');if(inp)inp.focus();},50);
+};
+
+window.stockBatchDelta=(idx,delta)=>{
+  if(!C._barcodeBatch)return;
+  C._barcodeBatch[idx].delta=Number(C._barcodeBatch[idx].delta||0)+delta;
+  render();
+  setTimeout(()=>{const inp=document.getElementById('barcode-scanner-input');if(inp)inp.focus();},50);
+};
+
+window.stockBatchSetDelta=(idx,val)=>{
+  if(!C._barcodeBatch)return;
+  C._barcodeBatch[idx].delta=Number(val)||0;
+};
+
+window.stockBatchRemove=(idx)=>{
+  if(!C._barcodeBatch)return;
+  C._barcodeBatch.splice(idx,1);
+  render();
+};
+
+window.stockBatchClear=()=>{
+  C._barcodeBatch=[];
+  render();
+};
+
+window.stockBatchApply=async()=>{
+  const batch=C._barcodeBatch||[];
+  if(!batch.length)return;
+  const updates={};
+  batch.forEach(item=>{
+    const dbPath=item.src==='ing'?'ingredients':item.src==='dishes'?'dishes':item.src==='cafeteria'?'cafeteriaItems':'kioskItems';
+    const newStock=Math.max(0,(item.currentStock||0)+Number(item.delta||0));
+    updates[`${dbPath}/${item.key}/stock`]=newStock;
+  });
+  // Actualizar todo de una sola vez
+  const {update:fbUpdate,ref:fbRef}={update,ref};
+  for(const [path,val] of Object.entries(updates)){
+    await update(ref(db,path.split('/').slice(0,-1).join('/')),{stock:val});
+  }
+  C._barcodeBatch=[];
+  render();
+  setTimeout(()=>{const inp=document.getElementById('barcode-scanner-input');if(inp)inp.focus();},50);
 };
 
 window.uIng=(field,val)=>{
