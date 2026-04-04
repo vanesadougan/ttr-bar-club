@@ -2639,8 +2639,9 @@ function renderOrdersTab(){
         h+=`<div style="padding:8px 14px;border-bottom:0.5px solid #f3f4f6">`;
         // Items
         h+=`<div style="font-size:12px;margin-bottom:6px;line-height:1.6">`;
+        const _multiItems=(o.items||[]).length>1;
         (o.items||[]).forEach(i=>{
-          h+='<div style="display:flex;justify-content:space-between;gap:8px"><span>'+i.qty+'× <strong>'+i.name+'</strong>'+(i.selectedType?' <em style="color:var(--muted);font-size:11px">('+i.selectedType+')</em>':'')+(i.excluded&&i.excluded.length?' <span class="removed-ing">sin: '+i.excluded.join(', ')+'</span>':'')+'</span><span style="color:var(--accent);white-space:nowrap">$'+((i.finalPrice||i.price)*i.qty).toLocaleString()+'</span></div>';
+          h+='<div style="display:flex;justify-content:space-between;gap:8px"><span>'+i.qty+'× <strong>'+i.name+'</strong>'+(i.selectedType?' <em style="color:var(--muted);font-size:11px">('+i.selectedType+')</em>':'')+(i.excluded&&i.excluded.length?' <span class="removed-ing">sin: '+i.excluded.join(', ')+'</span>':'')+'</span>'+(_multiItems?'<span style="color:var(--accent);white-space:nowrap">$'+((i.finalPrice||i.price)*i.qty).toLocaleString()+'</span>':'')+'</div>';
         });
         h+=`</div>`;
         // Fila de estado + acciones
