@@ -1982,7 +1982,7 @@ function renderStockTab(){
       </div>
       <div style="display:flex;gap:4px;align-items:center">
         <button onclick="applyStockAdj('${id}','${src||'ing'}')" style="flex:1;padding:6px 8px;border-radius:6px;border:0.5px solid #10b981;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">✓ Aplicar</button>
-        ${!src?`<button class="btn btn-ghost btn-sm" onclick="editIng('${id}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteIng('${id}')">✕</button>`:''}
+        ${!src?`<button class="btn btn-ghost btn-sm" onclick="editIng('${id}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteIng('${id}')">✕</button>`:`<button class="btn btn-ghost btn-sm" onclick="toggleStockEdit('${id}','${src}')">✏️</button>`}
       </div>
     </div>`;
   };
@@ -2080,7 +2080,27 @@ function renderStockTab(){
       if(bySection[sec].length===0)return;
       h+=`<div style="padding:6px 14px;background:#fafaf9;border-bottom:0.5px solid var(--border);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${sectionLabel[sec]}</div>`;
       bySection[sec].forEach(d=>{
+        const isOpen=(C._stockEdit||{})[`${sec}-${d._key}`];
         h+=itemRow(d._key,d.name,d.stock||0,'u',d.alertAt,d._src,'');
+        // Reemplazar el botón de acción con editar
+        // Mini-form expandible
+        h+=`<div style="grid-column:1/-1;display:${isOpen?'block':'none'};padding:10px 14px;background:#f8f7f4;border-bottom:0.5px solid var(--border)" id="stock-edit-${sec}-${d._key}">
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+            <div class="form-group" style="margin:0;flex:1;min-width:120px">
+              <label style="font-size:11px">Alerta ≤</label>
+              <input type="number" min="0" placeholder="Ej: 3" value="${d.alertAt!=null?d.alertAt:''}"
+                oninput="stockDirectUpdate('${d._key}','${sec}','alertAt',this.value)"
+                style="padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;width:100%">
+            </div>
+            <div class="form-group" style="margin:0;flex:2;min-width:160px">
+              <label style="font-size:11px">🔍 Código de barras</label>
+              <input placeholder="Escaneá o escribí el código" value="${d.barcode||''}"
+                oninput="stockDirectUpdate('${d._key}','${sec}','barcode',this.value)"
+                style="padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;width:100%;font-family:monospace">
+            </div>
+            <button onclick="stockDirectSave('${d._key}','${sec}')" style="padding:6px 14px;border-radius:6px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
+          </div>
+        </div>`;
       });
     });
     h+=`</div>`;
@@ -2091,6 +2111,40 @@ function renderStockTab(){
 }
 
 // ── INGREDIENT ACTIONS ────────────────────────────
+window.toggleStockEdit=(key,src)=>{
+  if(!C._stockEdit) C._stockEdit={};
+  const k=`${src}-${key}`;
+  C._stockEdit[k]=!C._stockEdit[k];
+  render();
+  // Enfocar primer input del mini-form
+  setTimeout(()=>{
+    const el=document.getElementById(`stock-edit-${src}-${key}`);
+    if(el){const inp=el.querySelector('input');if(inp)inp.focus();}
+  },50);
+};
+
+window.stockDirectUpdate=(key,src,field,val)=>{
+  // Guardar temporalmente en C para no perder cambios al re-render
+  if(!C._stockEditData) C._stockEditData={};
+  const k=`${src}-${key}`;
+  if(!C._stockEditData[k]) C._stockEditData[k]={};
+  C._stockEditData[k][field]=val;
+};
+
+window.stockDirectSave=async(key,src)=>{
+  const k=`${src}-${key}`;
+  const data=(C._stockEditData||{})[k]||{};
+  const dbPath=src==='dishes'?'dishes':src==='cafeteria'?'cafeteriaItems':'kioskItems';
+  const updates={};
+  if('alertAt' in data) updates.alertAt=data.alertAt===''||data.alertAt==null?null:Number(data.alertAt);
+  if('barcode' in data) updates.barcode=data.barcode&&data.barcode.trim()?data.barcode.trim():null;
+  if(Object.keys(updates).length>0){
+    await update(ref(db,`${dbPath}/${key}`),updates);
+  }
+  if(C._stockEdit) C._stockEdit[k]=false;
+  if(C._stockEditData) delete C._stockEditData[k];
+  render();
+};
 // ── BARCODE SCANNER ───────────────────────────────
 // ── BARCODE BATCH SCANNER ─────────────────────────
 window.stockBatchScan=(code)=>{
