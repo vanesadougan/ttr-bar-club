@@ -2064,6 +2064,8 @@ window.stockBarcodeSearch=(code,confirmed=false)=>{
   if(!found){const m=Object.entries(DB.cafeteriaItems||{}).find(([,d])=>d.barcode===q);if(m){found={...m[1],_key:m[0]};foundSrc='cafeteria';}}
   if(!found){const m=Object.entries(DB.kioskItems||{}).find(([,d])=>d.barcode===q);if(m){found={...m[1],_key:m[0]};foundSrc='kiosko';}}
   if(found){
+    // Guardar en C para que el botón lo use sin pasar parámetros
+    C._barcodeFound={key:found._key,src:foundSrc};
     const stock=found.stock||0;
     const col=stock===0?'#b91c1c':(found.alertAt&&stock<=found.alertAt)?'#92400e':'#065f46';
     result.style.display='block';
@@ -2074,8 +2076,8 @@ window.stockBarcodeSearch=(code,confirmed=false)=>{
       </div>
       <div style="display:flex;align-items:center;gap:6px">
         <input id="scanner-adj-qty" type="number" min="1" value="1" style="width:55px;padding:6px;border:0.5px solid var(--border);border-radius:6px;font-size:14px;text-align:center;font-family:inherit">
-        <button onclick="stockBarcodeApply('${found._key}','${foundSrc}',1)" style="padding:7px 14px;border-radius:8px;border:none;background:#10b981;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar</button>
-        <button onclick="stockBarcodeApply('${found._key}','${foundSrc}',-1)" style="padding:7px 14px;border-radius:8px;border:0.5px solid #ef4444;background:#fff;color:#ef4444;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">− Restar</button>
+        <button onclick="stockBarcodeApply(1)" style="padding:7px 14px;border-radius:8px;border:none;background:#10b981;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar</button>
+        <button onclick="stockBarcodeApply(-1)" style="padding:7px 14px;border-radius:8px;border:0.5px solid #ef4444;background:#fff;color:#ef4444;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">− Restar</button>
       </div>
     </div>`;
   } else if(q.length>=4){
@@ -2085,13 +2087,22 @@ window.stockBarcodeSearch=(code,confirmed=false)=>{
     result.style.display='none';
   }
 };
-window.stockBarcodeApply=async(key,src,sign)=>{
+window.stockBarcodeApply=async(sign)=>{
+  const bf=C._barcodeFound;
+  if(!bf){alert('Escaneá un producto primero');return;}
   const qty=Math.abs(Number(document.getElementById('scanner-adj-qty')?.value||1));
   if(!qty)return;
-  const dbPath=src==='ing'?'ingredients':src==='dishes'?'dishes':src==='cafeteria'?'cafeteriaItems':'kioskItems';
-  const dbKey=src==='ing'?'ingredients':src==='dishes'?'dishes':src==='cafeteria'?'cafeteriaItems':'kioskItems';
-  const cur=Number((DB[dbKey]||{})[key]?.stock||0);
-  await update(ref(db,`${dbPath}/${key}`),{stock:Math.max(0,cur+(sign*qty))});
+  const {key,src}=bf;
+  if(src==='ing'){
+    const cur=Number(DB.ingredients[key]?.stock||0);
+    await update(ref(db,`ingredients/${key}`),{stock:Math.max(0,cur+(sign*qty))});
+  } else {
+    const dbPath=src==='dishes'?'dishes':src==='cafeteria'?'cafeteriaItems':'kioskItems';
+    const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
+    const cur=Number(dbObj[key]?.stock||0);
+    await update(ref(db,`${dbPath}/${key}`),{stock:Math.max(0,cur+(sign*qty))});
+  }
+  C._barcodeFound=null;
   const inp=document.getElementById('barcode-scanner-input');
   if(inp){inp.value='';inp.focus();}
   document.getElementById('barcode-result').style.display='none';
