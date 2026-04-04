@@ -2691,6 +2691,7 @@ function renderOrdersTab(){
 
 // ── DEUDORES TAB ──────────────────────────────────
 function renderDeudoresTab(){
+  window._deudorKeys=[];
   const deudores=Object.entries(DB.orders)
     .map(([k,v])=>({...v,_key:k}))
     .filter(o=>o.status==='deudor')
@@ -2707,24 +2708,46 @@ function renderDeudoresTab(){
     h+=`<div style="font-size:16px;font-weight:500">Sin deudas pendientes</div>`;
     h+=`</div>`;
   } else {
+    // Agrupar por nombre de deudor
+    const grupos={};
     deudores.forEach(o=>{
-      const fecha=o.createdAt?new Date(o.createdAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}):'—';
-      const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-      const table=DB.tables[o.tableId];
+      const nombre=(o.deudorNombre||'Sin nombre').trim();
+      if(!grupos[nombre]) grupos[nombre]={nombre,orders:[]};
+      grupos[nombre].orders.push(o);
+    });
+
+    Object.values(grupos).forEach(g=>{
+      const keys=g.orders.map(o=>o._key);
+      const total=g.orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
+      const firstOrder=g.orders[0];
+      const table=DB.tables[firstOrder.tableId];
+      const fecha=firstOrder.createdAt?new Date(firstOrder.createdAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}):'—';
+      const tableLabel2=table?table.label:(firstOrder.tableId||'—');
+
       h+=`<div class="card" style="margin-bottom:.875rem;border-left:3px solid #dc2626">`;
+      // Header
       h+=`<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">`;
-      h+=`<div>`;
-      h+=`<div style="font-size:16px;font-weight:700">${o.deudorNombre||''} ${o.deudorApellido||''}</div>`;
-      h+=`<div style="font-size:12px;color:var(--muted);margin-top:2px">${fecha} · ${table?table.label:o.tableId}${o.personName?' · '+o.personName:''}</div>`;
-      h+=`</div>`;
+      h+=`<div><div style="font-size:16px;font-weight:700">${g.nombre}</div>`;
+      h+=`<div style="font-size:12px;color:var(--muted);margin-top:2px">${fecha} · ${tableLabel2}</div></div>`;
       h+=`<div style="font-size:20px;font-weight:700;color:#dc2626">$${total.toLocaleString()}</div>`;
       h+=`</div>`;
+
+      // Items de todos los pedidos agrupados
+      const seen={};
+      g.orders.forEach(o=>(o.items||[]).forEach(i=>{
+        const k=i.name+(i.selectedType?'|'+i.selectedType:'');
+        if(seen[k])seen[k].qty+=i.qty;
+        else seen[k]={...i};
+      }));
       h+=`<div style="display:flex;flex-direction:column;gap:3px;margin-bottom:12px">`;
-      (o.items||[]).forEach(i=>{
+      Object.values(seen).forEach(i=>{
         h+=`<div style="font-size:13px;color:var(--muted)">${i.qty}× <strong style="color:var(--text)">${i.name}</strong>${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:''} <span style="color:var(--accent)">$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;
       });
       h+=`</div>`;
-      h+=`<button onclick="cobrarDeudor('${o._key}')" style="width:100%;padding:9px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrado ✓ — registrar pago</button>`;
+
+      // Botón cobrar (guarda keys en window._deudorKeys)
+      const dIdx=window._deudorKeys.push(keys)-1;
+      h+=`<button onclick="cobrarDeudorGrupo(window._deudorKeys[${dIdx}])" style="width:100%;padding:9px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrado ✓ — registrar pago</button>`;
       h+=`</div>`;
     });
   }
@@ -2759,6 +2782,30 @@ window.marcarDeudor=async key=>{
     await update(ref(db,`orders/${key}`),{status:'deudor',deudorNombre:nombre,deudorApellido:apellido,deudorRegistradoAt:Date.now()});
     C.adminTab='deudores';render();
   };
+};
+
+window.cobrarDeudorGrupo=async keys=>{
+  if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
+  const pm=await showPaymentChoiceModal(null);
+  if(!pm)return;
+  const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+  let totalGrupo=0;
+  let nombreDeudor='';
+  let tableLabel3='';
+  for(const k of keys){
+    const o=DB.orders[k];if(!o)continue;
+    const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+    totalGrupo+=total;
+    if(!nombreDeudor) nombreDeudor=`${o.deudorNombre||''} ${o.deudorApellido||''}`.trim();
+    if(!tableLabel3){const t=DB.tables[o.tableId];tableLabel3=t?t.label:(o.tableId||'');}
+    await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now()});
+  }
+  if(totalGrupo>0&&getCajaAbierta()){
+    const concepto=`Deudor: ${nombreDeudor} · ${tableLabel3} (${pmL[pm]||pm})`;
+    const hoy=new Date().toISOString().slice(0,10);
+    await push(ref(db,'caja'),{tipo:'venta',concepto,monto:totalGrupo,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm});
+  }
+  render();
 };
 
 window.cobrarDeudor=async key=>{
@@ -3226,7 +3273,32 @@ window.adminGroupCobrado=async keys=>{
   for(const k of keys) await update(ref(db,`orders/${k}`),{status:'cobrado'});
 };
 window.adminGroupDeudor=async keys=>{
-  for(const k of keys) await update(ref(db,`orders/${k}`),{status:'deudor'});
+  // Mostrar modal igual que marcarDeudor
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="font-size:16px;font-weight:600;margin-bottom:4px">💳 Registrar deudor</div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:16px">Ingresá los datos del deudor para registrar la deuda pendiente</div>
+    <div class="form-group" style="margin-bottom:16px"><label>Nombre y apellido</label><input id="deudor-nombre-g" placeholder="Nombre y apellido" style="width:100%;padding:8px 10px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:14px;font-family:inherit"></div>
+    <div style="display:flex;gap:8px">
+      <button id="deudor-ok-g" class="btn btn-primary" style="flex:1">Registrar deuda</button>
+      <button id="deudor-cancel-g" class="btn btn-ghost">Cancelar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(()=>document.getElementById('deudor-nombre-g')?.focus(),50);
+  const cleanup=()=>document.body.removeChild(overlay);
+  document.getElementById('deudor-cancel-g').onclick=cleanup;
+  overlay.addEventListener('click',e=>{if(e.target===overlay)cleanup();});
+  document.getElementById('deudor-ok-g').onclick=async()=>{
+    const nombre=(document.getElementById('deudor-nombre-g')?.value||'').trim();
+    if(!nombre){alert('Ingresá nombre y apellido');return;}
+    cleanup();
+    for(const k of keys){
+      await update(ref(db,`orders/${k}`),{status:'deudor',deudorNombre:nombre,deudorApellido:'',deudorRegistradoAt:Date.now()});
+    }
+    C.adminTab='deudores';render();
+  };
 };
 window.adminGroupConfirmEntrega=async keys=>{
   for(const k of keys) await update(ref(db,`orders/${k}`),{readyAt:deleteField()});
