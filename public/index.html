@@ -2606,34 +2606,62 @@ function renderOrdersTab(){
     const tableTotal=personGroupList.flatMap(pg=>pg.orders).reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
 
     if(isMultiOrder){
-      // Mesa general con múltiples pedidos — consolidar en un solo card
+      // Mesa general con múltiples pedidos — mostrar expandido con botón cobrar todo
       const pg=personGroupList[0];
       const pgOrders=pg.orders;
       const pgTotal=pgOrders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
       const waiterChip=pg.takenBy?`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px;font-weight:500">👩 ${pg.takenBy}</span>`:'';
-      const statuses=[...new Set(pgOrders.map(o=>o.status))];
       const hasReadyAt=pgOrders.some(o=>o.status==='delivered'&&o.readyAt);
       const hasPreparing=pgOrders.some(o=>o.status==='preparing');
       const allKeys=pgOrders.map(o=>o._key);
       const latestTime=Math.max(...pgOrders.map(o=>o.createdAt||0));
       const timeStr=latestTime?new Date(latestTime).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+new Date(latestTime).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}):'';
-      const seen={};
-      pgOrders.forEach(o=>(o.items||[]).forEach(i=>{const k=i.name+(i.selectedType?'|'+i.selectedType:'');if(seen[k])seen[k].qty+=i.qty;else seen[k]={...i};}));
 
-      h+=`<div class="order-card">`;
-      h+=`<div class="order-header"><div class="order-tname">${tableLabel(tg.tableId)}<span class="order-type-chip ot-general">👥 General</span>${waiterChip}</div><div class="order-time">${timeStr}</div></div>`;
-      h+=`<div class="order-items-text">`;
-      Object.values(seen).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <em>(${i.selectedType})</em>`:''}${i.excluded&&i.excluded.length?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''} <span style="color:var(--accent)">$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span><br>`;});
+      // Card contenedor
+      h+=`<div class="order-card" style="padding:0;overflow:hidden;margin-bottom:1rem">`;
+      // Header de mesa
+      h+=`<div style="padding:10px 14px;background:#f8f7f4;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between">`;
+      h+=`<div style="display:flex;align-items:center;gap:8px"><span style="font-size:15px;font-weight:700">${tableLabel(tg.tableId)}</span><span class="order-type-chip ot-general">👥 General</span>${waiterChip}</div>`;
+      h+=`<div style="display:flex;align-items:center;gap:10px"><span style="font-size:12px;color:var(--muted)">${timeStr}</span><span style="font-size:13px;font-weight:700;color:var(--accent)">$${pgTotal.toLocaleString()}</span></div>`;
       h+=`</div>`;
-      const stChips=statuses.map(st=>{const lbl=st==='delivered'&&hasReadyAt?'✅ Listo para entregar':{pending:'Pendiente',preparing:'🔥 En preparación',delivered:'Entregado'}[st]||'';return lbl?`<span class="status status-${st}">${lbl}</span>`:''}).join(' ');
-      h+=`<div class="order-footer" style="margin-top:8px"><div style="display:flex;gap:6px;flex-wrap:wrap">${stChips}</div>`;
-      h+=`<div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap"><span style="font-weight:600;font-size:14px">$${pgTotal.toLocaleString()}</span>`;
-      if(hasReadyAt) h+=`<button onclick="adminGroupConfirmEntrega(${JSON.stringify(allKeys)})" style="padding:5px 10px;font-size:12px;border-radius:6px;border:none;background:#10b981;color:#fff;cursor:pointer;font-family:inherit">🛎 Confirmar entrega</button>`;
+
+      // Pedidos individuales con sus estados y botones
+      pgOrders.forEach((o,oi)=>{
+        const oTotal=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+        const _statusLabel=o.status==='delivered'&&o.readyAt?'✅ Listo para entregar':{pending:'Pendiente',preparing:'🔥 En preparación',delivered:'Entregado'}[o.status]||o.status;
+        const _statusCss=o.status==='delivered'&&o.readyAt?'status-delivered':'status-'+o.status;
+        const isLast=oi===pgOrders.length-1;
+        h+=`<div style="padding:10px 14px;${!isLast?'border-bottom:0.5px solid var(--border)':''}">`;
+        // Items
+        h+=`<div style="font-size:13px;margin-bottom:8px">`;
+        (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <em style="font-size:11px">(${i.selectedType})</em>`:''}${i.excluded&&i.excluded.length?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''} <span style="color:var(--accent)">$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span><br>`;});
+        h+=`</div>`;
+        // Footer con estado y acciones
+        h+=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">`;
+        h+=`<span class="status ${_statusCss}" style="font-size:11px">${_statusLabel}</span>`;
+        h+=`<span style="font-size:12px;font-weight:600;color:var(--muted);margin-left:4px">$${oTotal.toLocaleString()}</span>`;
+        if(o.status==='pending'){
+          h+=`<button onclick="markDelivered('${o._key}')" class="btn btn-primary btn-sm" style="font-size:11px;padding:3px 8px">Entregado</button>`;
+          h+=`<button onclick="adminMarkPreparing('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:0.5px solid #f59e0b;color:#c2410c;background:#fff7ed;cursor:pointer;font-family:inherit">🔥 Prep.</button>`;
+          h+=`<button onclick="adminEditOrder('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️</button>`;
+        }
+        if(o.status==='preparing'){
+          h+=`<button onclick="markDelivered('${o._key}')" class="btn btn-primary btn-sm" style="font-size:11px;padding:3px 8px">Entregado</button>`;
+        }
+        if(o.status==='delivered'&&o.readyAt){
+          h+=`<button onclick="adminConfirmEntrega('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:none;background:#10b981;color:#fff;cursor:pointer;font-family:inherit">🛎 Confirmar</button>`;
+        }
+        h+=`</div></div>`;
+      });
+
+      // Footer con cobro grupal
+      h+=`<div style="padding:10px 14px;background:#f8f7f4;border-top:0.5px solid var(--border);display:flex;align-items:center;justify-content:flex-end;gap:8px">`;
+      if(hasReadyAt) h+=`<button onclick="adminGroupConfirmEntrega(${JSON.stringify(allKeys)})" style="padding:6px 12px;font-size:12px;border-radius:6px;border:none;background:#10b981;color:#fff;cursor:pointer;font-family:inherit">🛎 Confirmar todo</button>`;
       if(!hasPreparing&&!hasReadyAt){
-        h+=`<button onclick="adminGroupCobrado(${JSON.stringify(allKeys)})" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
-        h+=`<button onclick="adminGroupDeudor(${JSON.stringify(allKeys)})" style="padding:5px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor</button>`;
+        h+=`<button onclick="adminGroupCobrado(${JSON.stringify(allKeys)})" style="padding:6px 12px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓ todo</button>`;
+        h+=`<button onclick="adminGroupDeudor(${JSON.stringify(allKeys)})" style="padding:6px 12px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor todo</button>`;
       }
-      h+=`</div></div></div>`;
+      h+=`</div></div>`;
 
     } else if(isMultiPerson){
       h+=`<div class="order-card" style="padding:0;overflow:hidden;margin-bottom:1rem">`;
