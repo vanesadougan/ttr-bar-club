@@ -2636,37 +2636,64 @@ function renderOrdersTab(){
         const _stInfo={pending:{label:'Pendiente',css:'status-pending'},preparing:{label:'🔥 Preparando',css:'status-preparing'},delivered:{label:'Entregado',css:'status-delivered'},listo:{label:'✅ Listo',css:'status-delivered'},billed:{label:'Pide cuenta',css:'status-billed'}}[_st]||{label:_st,css:''};
         const hora=o.createdAt?new Date(o.createdAt).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}):o.time||'';
 
+        const isEditing=C.adminEditOrderKey===o._key;
         h+=`<div style="padding:8px 14px;border-bottom:0.5px solid #f3f4f6">`;
-        // Items
-        h+=`<div style="font-size:12px;margin-bottom:6px;line-height:1.6">`;
-        const _multiItems=(o.items||[]).length>1;
-        (o.items||[]).forEach(i=>{
-          h+='<div style="display:flex;justify-content:space-between;gap:8px"><span>'+i.qty+'× <strong>'+i.name+'</strong>'+(i.selectedType?' <em style="color:var(--muted);font-size:11px">('+i.selectedType+')</em>':'')+(i.excluded&&i.excluded.length?' <span class="removed-ing">sin: '+i.excluded.join(', ')+'</span>':'')+'</span>'+(_multiItems?'<span style="color:var(--accent);white-space:nowrap">$'+((i.finalPrice||i.price)*i.qty).toLocaleString()+'</span>':'')+'</div>';
-        });
+
+        if(isEditing){
+          // Form de edición inline
+          const editItems=window._adminEditItems||o.items||[];
+          const editTotal=editItems.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+          h+=`<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Editar pedido</div>`;
+          editItems.forEach((item,idx)=>{
+            const price=(item.finalPrice||item.price);
+            h+=`<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:0.5px solid #f3f4f6">`;
+            h+=`<div style="flex:1;font-size:12px"><strong>${item.name}</strong>${item.selectedType?` <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 4px;border-radius:3px">${item.selectedType}</span>`:''}<div style="font-size:11px;color:var(--muted)">$${price.toLocaleString()} c/u</div></div>`;
+            h+=`<button onclick="adminOrderQty(${idx},-1)" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:14px;cursor:pointer;font-family:inherit;line-height:1">−</button>`;
+            h+=`<span style="font-size:13px;font-weight:600;min-width:16px;text-align:center">${item.qty}</span>`;
+            h+=`<button onclick="adminOrderQty(${idx},+1)" style="width:22px;height:22px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:14px;cursor:pointer;font-family:inherit;line-height:1">+</button>`;
+            h+=`<button onclick="adminOrderRemoveItem(${idx})" style="width:22px;height:22px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:12px;cursor:pointer;font-family:inherit;line-height:1">✕</button>`;
+            h+=`</div>`;
+          });
+          h+=`<div style="font-size:12px;font-weight:600;text-align:right;padding:6px 0;color:var(--accent)">$${editTotal.toLocaleString()}</div>`;
+          h+=`<input id="edit-order-search" placeholder="+ Agregar plato..." oninput="updateEditOrderSearch()" autocomplete="off" style="width:100%;padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;margin-bottom:4px">`;
+          h+=`<div id="edit-order-results" style="border:0.5px solid var(--border);border-radius:6px;max-height:140px;overflow-y:auto;background:var(--card);display:none;margin-bottom:8px"></div>`;
+          h+=`<div style="display:flex;gap:6px">`;
+          h+=`<button onclick="adminSaveOrderEdit()" style="flex:1;padding:5px;border-radius:6px;border:none;background:var(--brand);color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>`;
+          h+=`<button onclick="adminCancelEdit()" style="padding:5px 10px;border-radius:6px;border:0.5px solid var(--border);background:transparent;font-size:12px;cursor:pointer;font-family:inherit">Cancelar</button>`;
+          h+=`<button onclick="adminDeleteOrder()" style="padding:5px 10px;border-radius:6px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:12px;cursor:pointer;font-family:inherit">🗑</button>`;
+          h+=`</div>`;
+        } else {
+          // Vista normal
+          h+=`<div style="font-size:12px;margin-bottom:6px;line-height:1.6">`;
+          const _multiItems=(o.items||[]).length>1;
+          (o.items||[]).forEach(i=>{
+            h+='<div style="display:flex;justify-content:space-between;gap:8px"><span>'+i.qty+'× <strong>'+i.name+'</strong>'+(i.selectedType?' <em style="color:var(--muted);font-size:11px">('+i.selectedType+')</em>':'')+(i.excluded&&i.excluded.length?' <span class="removed-ing">sin: '+i.excluded.join(', ')+'</span>':'')+'</span>'+(_multiItems?'<span style="color:var(--accent);white-space:nowrap">$'+((i.finalPrice||i.price)*i.qty).toLocaleString()+'</span>':'')+'</div>';
+          });
+          h+=`</div>`;
+          // Fila de estado + acciones
+          h+=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+            <span class="status ${_stInfo.css}" style="font-size:10px">${_stInfo.label}</span>
+            <span style="font-size:11px;color:var(--muted)">${hora}</span>
+            <span style="flex:1"></span>
+            <span style="font-size:12px;font-weight:600">$${oTotal.toLocaleString()}</span>`;
+          if(o.status==='pending'){
+            h+=`<button onclick="markDelivered('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:none;background:var(--brand);color:#fff;cursor:pointer;font-family:inherit">Entregado</button>`;
+            h+=`<button onclick="adminMarkPreparing('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:0.5px solid #f59e0b;color:#c2410c;background:#fff7ed;cursor:pointer;font-family:inherit">🔥</button>`;
+            h+=`<button onclick="adminEditOrder('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️</button>`;
+          }
+          if(o.status==='preparing'){
+            h+=`<button onclick="markDelivered('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:none;background:var(--brand);color:#fff;cursor:pointer;font-family:inherit">Entregado</button>`;
+          }
+          if(o.status==='delivered'&&o.readyAt){
+            h+=`<button onclick="adminConfirmEntrega('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:none;background:#10b981;color:#fff;cursor:pointer;font-family:inherit">🛎</button>`;
+          }
+          h+=`</div>`;
+        }
         h+=`</div>`;
-        // Fila de estado + acciones
-        h+=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          <span class="status ${_stInfo.css}" style="font-size:10px">${_stInfo.label}</span>
-          <span style="font-size:11px;color:var(--muted)">${hora}</span>
-          <span style="flex:1"></span>
-          <span style="font-size:12px;font-weight:600">$${oTotal.toLocaleString()}</span>`;
-        if(o.status==='pending'){
-          h+=`<button onclick="markDelivered('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:none;background:var(--brand);color:#fff;cursor:pointer;font-family:inherit">Entregado</button>`;
-          h+=`<button onclick="adminMarkPreparing('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:0.5px solid #f59e0b;color:#c2410c;background:#fff7ed;cursor:pointer;font-family:inherit">🔥</button>`;
-          h+=`<button onclick="adminEditOrder('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️</button>`;
-        }
-        if(o.status==='preparing'){
-          h+=`<button onclick="markDelivered('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:none;background:var(--brand);color:#fff;cursor:pointer;font-family:inherit">Entregado</button>`;
-          h+=`<button onclick="adminEditOrder('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️</button>`;
-        }
-        if(o.status==='delivered'&&o.readyAt){
-          h+=`<button onclick="adminConfirmEntrega('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:none;background:#10b981;color:#fff;cursor:pointer;font-family:inherit">🛎</button>`;
-        }
-        h+=`</div></div>`;
       });
 
       // Footer de cobro por persona/grupo
-      const canCobrar=!hasPreparing&&!hasReadyAt&&!isBilled;
+      const canCobrar=!hasPending&&!hasPreparing&&!hasReadyAt&&!isBilled;
       if(isBilled){
         const pm=pgOrders.find(o=>o.paymentMethod)?.paymentMethod;
         const pmLabels={efectivo:'Efectivo',credito:'Créd.',debito:'Déb.',transferencia:'Transfer.',mercadopago:'Mercado Pago'};
@@ -2675,6 +2702,8 @@ function renderOrdersTab(){
       } else if(canCobrar){
         const _pgIdx=window._pgKeys.push(allKeys)-1;
         h+=`<div style="padding:8px 14px;border-top:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:600;color:var(--accent)">$${pgTotal.toLocaleString()}</span><div style="display:flex;gap:6px"><button onclick="adminGroupCobrado(window._pgKeys[${_pgIdx}])" style="padding:4px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button><button onclick="adminGroupDeudor(window._pgKeys[${_pgIdx}])" style="padding:4px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor</button></div></div>`;
+      } else if(hasPending||hasPreparing){
+        h+=`<div style="padding:8px 14px;border-top:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:600;color:var(--accent)">$${pgTotal.toLocaleString()}</span><span style="font-size:11px;color:var(--muted)">⏳ Esperando entrega</span></div>`;
       }
     });
 
