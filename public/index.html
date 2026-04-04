@@ -226,7 +226,7 @@
 <!-- Firebase SDK -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, push, onValue, update, remove, serverTimestamp }
+import { getDatabase, ref, set, push, onValue, update, remove, serverTimestamp, deleteField }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -1246,7 +1246,7 @@ window.waiterCancelPayPicker=()=>{C.waiterPayMesa=null;C.waiterPayMethod=null;re
 window.waiterSelectPayMethod=pm=>{C.waiterPayMethod=pm;render();};
 window.waiterConfirmEntrega=async keys=>{
   for(const k of keys){
-    await update(ref(db,`orders/${k}`),{readyAt:null});
+    await update(ref(db,`orders/${k}`),{readyAt:deleteField()});
   }
 };
 window.waiterRequestBill=async tableId=>{
@@ -1383,6 +1383,7 @@ function renderDishesTab(){
   formH+='<span id="dish-stock-badge" style="font-size:12px;padding:3px 10px;border-radius:6px;font-weight:600;background:'+stockBg+';color:'+stockCol+'">'+stockLabel+' ('+_s2+')</span>';
   formH+='<div style="flex:1"><label style="font-size:11px;color:var(--muted)">Alerta ≤ <span style="color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uF(\'dish\',\'alertAt\',this.value)" style="padding:4px 8px;height:30px;font-size:12px"></div>';
   formH+='</div>';
+  formH+='<div class="form-group" style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">🔍 Código de barras <span style="font-weight:400">(opcional)</span></label><input placeholder="Escaneá o escribí el código" value="'+(f.barcode||'')+'" oninput="uF(\'dish\',\'barcode\',this.value)" style="font-family:monospace;padding:4px 8px;height:30px;font-size:12px"></div>';
 
   // ── Sección PROMO (solo si cat es promo)
   if(isPromo){
@@ -1893,6 +1894,23 @@ function renderStockTab(){
     ...Object.entries(DB.kioskItems||{}).filter(([,d])=>d.stock!=null).map(([k,d])=>({...d,_key:k,_src:'kiosko'}))
   ];
 
+  // ── Scanner de código de barras ──
+  h+=`<div class="card" style="margin-bottom:1.25rem;padding:12px 14px;border-color:var(--brand)">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:20px">🔍</span>
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">Buscar por código de barras</div>
+        <input id="barcode-scanner-input" placeholder="Escaneá un producto o escribí el código..." 
+          autocomplete="off"
+          style="width:100%;padding:8px 12px;border:0.5px solid var(--border);border-radius:8px;font-family:monospace;font-size:14px;background:var(--bg)"
+          oninput="stockBarcodeSearch(this.value)"
+          onkeydown="if(event.key==='Enter'){stockBarcodeSearch(this.value,true);this.value='';}"
+        >
+      </div>
+    </div>
+    <div id="barcode-result" style="margin-top:8px;display:none"></div>
+  </div>`;
+
   // ── Métricas ──
   const allItems=[
     ...ings.map(i=>({stock:i.stock||0,alertAt:i.alertAt})),
@@ -1986,6 +2004,7 @@ function renderStockTab(){
     h+=`<div class="form-group" style="margin-bottom:0"><label>Unidad</label><select onchange="uIng('unit',this.value)">${UNITS.map(u=>`<option value="${u}"${fi.unit===u?' selected':''}>${u}</option>`).join('')}</select></div>`;
     h+=`<div class="form-group" style="margin-bottom:0"><label>Alerta ≤</label><input type="number" min="0" step="0.1" placeholder="Ej: 5" value="${fi.alertAt!=null&&fi.alertAt!==''?fi.alertAt:''}" oninput="uIng('alertAt',this.value)"></div>`;
     h+=`</div>`;
+    h+=`<div class="form-group" style="margin-bottom:12px"><label>🔍 Código de barras <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional — escaneá el producto)</span></label><input placeholder="Escaneá o escribí el código" value="${fi.barcode||''}" oninput="uIng('barcode',this.value)" style="font-family:monospace"></div>`;
     h+=`<div style="display:flex;gap:8px">`;
     h+=`<button class="btn btn-primary" onclick="${C.editingIng?'saveEditIng()':'addIng()'}">`;
     h+=`${C.editingIng?'Guardar cambios':'Agregar ingrediente'}</button>`;
@@ -2037,6 +2056,96 @@ function renderStockTab(){
 }
 
 // ── INGREDIENT ACTIONS ────────────────────────────
+window.stockBarcodeSearch=(code, confirmed=false)=>{
+  const result = document.getElementById('barcode-result');
+  if(!result) return;
+  const q = code.trim();
+  if(!q){ result.style.display='none'; return; }
+
+  // Buscar en ingredientes y platos con stock directo
+  let found = null;
+  let foundSrc = null;
+
+  // Buscar en ingredientes
+  const ingMatch = Object.entries(DB.ingredients||{}).find(([,i])=>i.barcode===q);
+  if(ingMatch){ found = {...ingMatch[1], _key:ingMatch[0]}; foundSrc='ing'; }
+
+  // Buscar en platos
+  if(!found){
+    const dishMatch = Object.entries(DB.dishes||{}).find(([,d])=>d.barcode===q);
+    if(dishMatch){ found = {...dishMatch[1], _key:dishMatch[0]}; foundSrc='dishes'; }
+  }
+  if(!found){
+    const cafMatch = Object.entries(DB.cafeteriaItems||{}).find(([,d])=>d.barcode===q);
+    if(cafMatch){ found = {...cafMatch[1], _key:cafMatch[0]}; foundSrc='cafeteria'; }
+  }
+  if(!found){
+    const kioskMatch = Object.entries(DB.kioskItems||{}).find(([,d])=>d.barcode===q);
+    if(kioskMatch){ found = {...kioskMatch[1], _key:kioskMatch[0]}; foundSrc='kiosko'; }
+  }
+
+  if(found){
+    const stock = found.stock||0;
+    const col = stock===0?'#b91c1c':stock<=(found.alertAt||0)?'#92400e':'#065f46';
+    result.style.display='block';
+    result.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;gap:12px">
+      <div>
+        <div style="font-size:14px;font-weight:700">${found.name}</div>
+        <div style="font-size:12px;color:var(--muted)">Stock actual: <span style="font-weight:700;color:${col}">${stock} ${found.unit||'u'}</span></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <input id="scanner-adj-qty" type="number" min="1" value="1" style="width:60px;padding:6px;border:0.5px solid var(--border);border-radius:6px;font-size:14px;text-align:center;font-family:inherit">
+        <button onclick="stockBarcodeApply('${found._key}','${foundSrc}')" style="padding:7px 14px;border-radius:8px;border:none;background:#10b981;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar</button>
+        <button onclick="stockBarcodeSub('${found._key}','${foundSrc}')" style="padding:7px 14px;border-radius:8px;border:0.5px solid #ef4444;background:#fff;color:#ef4444;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">− Restar</button>
+      </div>
+    </div>`;
+    // Scroll al resultado
+    result.scrollIntoView({behavior:'smooth', block:'center'});
+  } else if(q.length >= 4){
+    result.style.display='block';
+    result.innerHTML=`<div style="padding:10px 12px;background:#fff8f8;border:1px solid #fca5a5;border-radius:8px;font-size:13px;color:#b91c1c">
+      ❌ Código <code>${q}</code> no encontrado. Editá el ingrediente/plato y asignale este código de barras.
+    </div>`;
+  } else {
+    result.style.display='none';
+  }
+};
+
+window.stockBarcodeApply=async(key, src)=>{
+  const inp = document.getElementById('scanner-adj-qty');
+  const qty = Math.abs(Number(inp?.value||1));
+  if(!qty) return;
+  if(src==='ing'){
+    const cur = DB.ingredients[key]?.stock||0;
+    await update(ref(db,`ingredients/${key}`),{stock: cur+qty});
+  } else {
+    const dbPath = src==='dishes'?'dishes':src==='cafeteria'?'cafeteriaItems':'kioskItems';
+    const cur = DB[src==='dishes'?'dishes':src==='cafeteria'?'cafeteriaItems':'kioskItems'][key]?.stock||0;
+    await update(ref(db,`${dbPath}/${key}`),{stock: cur+qty});
+  }
+  document.getElementById('barcode-scanner-input').value='';
+  document.getElementById('barcode-result').style.display='none';
+  document.getElementById('barcode-scanner-input').focus();
+};
+
+window.stockBarcodeSub=async(key, src)=>{
+  const inp = document.getElementById('scanner-adj-qty');
+  const qty = Math.abs(Number(inp?.value||1));
+  if(!qty) return;
+  if(src==='ing'){
+    const cur = DB.ingredients[key]?.stock||0;
+    await update(ref(db,`ingredients/${key}`),{stock: Math.max(0,cur-qty)});
+  } else {
+    const dbPath = src==='dishes'?'dishes':src==='cafeteria'?'cafeteriaItems':'kioskItems';
+    const dbKey = src==='dishes'?'dishes':src==='cafeteria'?'cafeteriaItems':'kioskItems';
+    const cur = DB[dbKey][key]?.stock||0;
+    await update(ref(db,`${dbPath}/${key}`),{stock: Math.max(0,cur-qty)});
+  }
+  document.getElementById('barcode-scanner-input').value='';
+  document.getElementById('barcode-result').style.display='none';
+  document.getElementById('barcode-scanner-input').focus();
+};
+
 window.uIng=(field,val)=>{
   const o=C.editingIng||(C.newIng=C.newIng||{name:'',unit:'u',stock:'',alertAt:''});
   o[field]=(field==='stock'||field==='alertAt')?Number(val):val;
@@ -2045,13 +2154,13 @@ window.toggleIngForm=()=>{C.showIngForm=!C.showIngForm;if(!C.showIngForm)C.editi
 window.addIng=()=>{
   const d=C.newIng||{};
   if(!d.name){alert('Ingresá el nombre del ingrediente');return;}
-  push(ref(db,'ingredients'),{name:d.name.trim(),unit:d.unit||'u',stock:Number(d.stock||0),alertAt:d.alertAt!=null&&d.alertAt!==''?Number(d.alertAt):null});
+  push(ref(db,'ingredients'),{name:d.name.trim(),unit:d.unit||'u',stock:Number(d.stock||0),alertAt:d.alertAt!=null&&d.alertAt!==''?Number(d.alertAt):null,barcode:d.barcode&&d.barcode.trim()?d.barcode.trim():null});
   C.newIng={name:'',unit:'u',stock:'',alertAt:''};C.showIngForm=false;render();
 };
 window.editIng=key=>{C.editingIng={...DB.ingredients[key],_key:key};C.showIngForm=true;render();};
 window.saveEditIng=async()=>{
   const {_key,...data}=C.editingIng;
-  await set(ref(db,`ingredients/${_key}`),{...data,stock:Number(data.stock||0)});
+  await set(ref(db,`ingredients/${_key}`),{...data,stock:Number(data.stock||0),barcode:data.barcode&&data.barcode.trim()?data.barcode.trim():null});
   C.editingIng=null;C.showIngForm=false;render();
 };
 window.cancelEditIng=()=>{C.editingIng=null;C.showIngForm=false;render();};
