@@ -1232,7 +1232,8 @@ function renderWaiterMenu(mc){
   cartH+='</div><div class="cart-footer">';
   if(cartEntries.length>0){cartH+='<div class="cart-total-row big"><span>Total</span><span>$'+total.toLocaleString()+'</span></div><button class="btn btn-primary btn-block" style="margin-top:10px" onclick="waiterPlaceOrder()">Confirmar pedido</button><button class="btn btn-ghost btn-block" style="margin-top:6px;color:var(--danger);border-color:var(--danger)" onclick="waiterLimpiarCarrito()">Limpiar carrito</button>';}
   cartH+='<button class="btn btn-outline btn-block" style="margin-top:8px" onclick="waiterNuevaMesa()">← Mis mesas</button></div>';
-  mc.innerHTML='<div class="content"><div class="menu-layout"><div class="menu-col waiter-menu-col">'+(ct>0?`<button onclick="document.querySelector('.cart-col').scrollIntoView({behavior:'smooth',block:'start'})" style="position:sticky;top:8px;z-index:100;display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 14px;border-radius:20px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 2px 8px rgba(0,0,0,.15)">🛒 <span>${ct} ítem${ct>1?'s':''}</span> <span style="opacity:.8">· $${total.toLocaleString()}</span></button>`:'')+menuH+'</div><div class="cart-col"><div class="cart-widget">'+cartH+'</div></div></div></div>';
+  mc.innerHTML='<div class="content"><div class="menu-layout"><div class="menu-col waiter-menu-col">'+menuH+'</div><div class="cart-col"><div class="cart-widget">'+cartH+'</div></div></div></div>';
+  updateTopbarCart();
 }
 // Waiter nav helpers
 window.setWaiterStep=s=>{C.waiterStep=s;render();};
@@ -4338,11 +4339,12 @@ function updateTopbarCart(){
   const cartEl=document.getElementById('topbar-cart');
   const countEl=document.getElementById('topbar-cart-count');
   if(!cartEl||!countEl)return;
-  // only show in customer menu mode
-  const show=C.mode==='customer'&&C.customerStep==='menu';
+  const isCustomer=C.mode==='customer'&&C.customerStep==='menu';
+  const isWaiter=C.mode==='mozas'&&C.waiterStep==='menu';
+  const show=isCustomer||isWaiter;
   cartEl.style.display=show?'block':'none';
   if(show){
-    const ct=cartCount();
+    const ct=isWaiter?waiterCartCount():cartCount();
     countEl.textContent=ct;
     countEl.style.display=ct>0?'flex':'none';
   }
