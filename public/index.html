@@ -1128,7 +1128,7 @@ function renderWaiterNameInput(mc){
 }
 window.waiterConfirmName=()=>{const inp=document.getElementById('waiter-name-inp');const name=(inp?inp.value:'').trim();if(!name){alert('Ingresá el nombre');return;}C.waiterPersonName=name;C.waiterStep='menu';render();};
 function waiterCartCount(){return Object.values(C.waiterCart).reduce((s,v)=>s+v.qty,0);}
-function waiterCartTotal(){return Object.entries(C.waiterCart).reduce((s,[id,v])=>{const d=DB.dishes[id]||DB.cafeteriaItems[id];if(!d)return s;return s+(DB.cafeteriaItems[id]?Number(d.price):dishFinalPrice(d,v.qty))*v.qty;},0);}
+function waiterCartTotal(){return Object.entries(C.waiterCart).reduce((s,[key,v])=>{const id=key.includes('|')?key.split('|')[0]:key;const d=DB.dishes[id]||DB.cafeteriaItems[id];if(!d)return s;return s+(DB.cafeteriaItems[id]?Number(d.price):dishFinalPrice(d,v.qty))*v.qty;},0);}
 function buildWaiterMenuH(){
   const section=C.waiterMenuSection||'platos';
   const table=DB.tables[C.waiterTableId];
@@ -4340,7 +4340,7 @@ function updateTopbarCart(){
   const countEl=document.getElementById('topbar-cart-count');
   if(!cartEl||!countEl)return;
   const isCustomer=C.mode==='customer'&&C.customerStep==='menu';
-  const isWaiter=C.mode==='mozas'&&C.waiterStep==='menu';
+  const isWaiter=C.mode==='waiter'&&C.waiterStep==='menu';
   const show=isCustomer||isWaiter;
   cartEl.style.display=show?'block':'none';
   if(show){
