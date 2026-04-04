@@ -1890,6 +1890,7 @@ function renderStockTab(){
   ];
 
   // ── Scanner de código de barras ──
+  let h=`<div style="max-width:900px">`;
   h+=`<div class="card" style="margin-bottom:1.25rem;padding:12px 14px;border-color:var(--brand)">
     <div style="display:flex;align-items:center;gap:10px">
       <span style="font-size:20px">🔍</span>
@@ -1951,8 +1952,6 @@ function renderStockTab(){
       </div>
     </div>`;
   };
-
-  let h=`<div style="max-width:900px">`;
 
   // Métricas
   h+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.5rem">`;
