@@ -86,7 +86,7 @@
     .cat-icon-entrada{color:#854d0e}.cat-icon-principal{color:#1e40af}.cat-icon-postre{color:#9d174d}.cat-icon-bebida{color:#065f46}.cat-icon-promo{color:#c2410c}
     .promo-section{border:0.5px solid #fed7aa;border-radius:10px;padding:12px;margin-bottom:10px;background:#fff7ed}
     .discount-preview{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--card);border-radius:8px;font-size:13px;margin-top:8px;flex-wrap:wrap}
-    .orders-list{display:flex;flex-direction:column;gap:10px;max-height:500px;overflow-y:auto}
+    .orders-list{display:flex;flex-direction:column;gap:10px}
     .order-card{background:var(--bg);border:0.5px solid var(--border);border-radius:10px;padding:1rem}
     .order-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
     .order-tname{font-weight:600;font-size:15px}.order-time{font-size:12px;color:var(--muted)}
@@ -2546,6 +2546,7 @@ function renderOrdersTab(){
   <div class="orders-list">`;
   // ── Nuevo diseño: dos columnas, colapsable por mesa ──
   if(!C._ordersExpanded) C._ordersExpanded={};
+  window._pgKeys=[];
 
   // Agrupar todos los pedidos activos por mesa
   const allTableGroups={};
@@ -2676,13 +2677,8 @@ function renderOrdersTab(){
           </div>
         </div>`;
       } else if(canCobrar){
-        h+=`<div style="padding:8px 14px;border-top:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-          <span style="font-size:13px;font-weight:600;color:var(--accent)">$${pgTotal.toLocaleString()}</span>
-          <div style="display:flex;gap:6px">
-            <button onclick="adminGroupCobrado(${JSON.stringify(allKeys)})" style="padding:4px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button>
-            <button onclick="adminGroupDeudor(${JSON.stringify(allKeys)})" style="padding:4px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳</button>
-          </div>
-        </div>`;
+        const _pgIdx=window._pgKeys.push(allKeys)-1;
+        h+=`<div style="padding:8px 14px;border-top:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:600;color:var(--accent)">$${pgTotal.toLocaleString()}</span><div style="display:flex;gap:6px"><button onclick="adminGroupCobrado(window._pgKeys[${_pgIdx}])" style="padding:4px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrado ✓</button><button onclick="adminGroupDeudor(window._pgKeys[${_pgIdx}])" style="padding:4px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor</button></div></div>`;
       }
     });
 
