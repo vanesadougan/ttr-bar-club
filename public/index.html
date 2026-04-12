@@ -137,9 +137,10 @@
     .mesa-btn:hover{border-color:var(--accent);color:var(--accent)}
     .mesa-btn-label{font-size:11px;color:var(--muted);font-weight:400;margin-top:2px}
     .back-btn{background:none;border:0.5px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;font-family:inherit;color:var(--muted)}
-    .cat-tabs{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:1.25rem}
-    .cat-tab{padding:14px 10px;border-radius:12px;font-size:13px;cursor:pointer;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;transition:all 0.15s;display:flex;flex-direction:column;align-items:center;gap:6px;font-weight:500;line-height:1.2;text-align:center}
-    .cat-tab .cat-emoji{font-size:26px;line-height:1}
+    .cat-tabs{display:flex;gap:8px;margin-bottom:1.25rem;overflow-x:auto;padding-bottom:4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+    .cat-tabs::-webkit-scrollbar{display:none}
+    .cat-tab{padding:10px 14px;border-radius:12px;font-size:13px;cursor:pointer;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;transition:all 0.15s;display:flex;flex-direction:column;align-items:center;gap:4px;font-weight:500;line-height:1.2;text-align:center;flex-shrink:0;min-width:72px}
+    .cat-tab .cat-emoji{font-size:24px;line-height:1}
     .cat-tab.active{background:var(--brand);color:#fff;border-color:var(--brand)}
     .cat-tab.promo-tab{border-color:#fed7aa;color:#c2410c;background:#fff7ed}
     .cat-tab.promo-tab.active{background:#c2410c;color:#fff;border-color:#c2410c}
