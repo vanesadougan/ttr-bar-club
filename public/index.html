@@ -2008,8 +2008,8 @@ window.moveCafCat=(key,dir)=>{const cats=getCafCats();const idx=cats.findIndex(c
 function renderKioskoTab(){
   const kioskSubTab=C.kioskSubTab||'items';
   let h=`<div style="display:flex;gap:4px;margin-bottom:1rem;border-bottom:0.5px solid var(--border)">`;
-  h+=`<button onclick="C.kioskSubTab='items';render()" style="padding:6px 14px;border-radius:0;border:none;border-bottom:2px solid ${kioskSubTab==='items'?'var(--brand)':'transparent'};cursor:pointer;font-family:inherit;font-size:13px;font-weight:${kioskSubTab==='items'?'600':'400'};background:transparent;color:${kioskSubTab==='items'?'var(--brand)':'var(--muted)'};margin-bottom:-1px">🏪 Items</button>`;
-  h+=`<button onclick="C.kioskSubTab='cats';render()" style="padding:6px 14px;border-radius:0;border:none;border-bottom:2px solid ${kioskSubTab==='cats'?'var(--brand)':'transparent'};cursor:pointer;font-family:inherit;font-size:13px;font-weight:${kioskSubTab==='cats'?'600':'400'};background:transparent;color:${kioskSubTab==='cats'?'var(--brand)':'var(--muted)'};margin-bottom:-1px">🗂 Categorías</button>`;
+  h+=`<button onclick="setKioskSubTab('items')" style="padding:6px 14px;border-radius:0;border:none;border-bottom:2px solid ${kioskSubTab==='items'?'var(--brand)':'transparent'};cursor:pointer;font-family:inherit;font-size:13px;font-weight:${kioskSubTab==='items'?'600':'400'};background:transparent;color:${kioskSubTab==='items'?'var(--brand)':'var(--muted)'};margin-bottom:-1px">🏪 Items</button>`;
+  h+=`<button onclick="setKioskSubTab('cats')" style="padding:6px 14px;border-radius:0;border:none;border-bottom:2px solid ${kioskSubTab==='cats'?'var(--brand)':'transparent'};cursor:pointer;font-family:inherit;font-size:13px;font-weight:${kioskSubTab==='cats'?'600':'400'};background:transparent;color:${kioskSubTab==='cats'?'var(--brand)':'var(--muted)'};margin-bottom:-1px">🗂 Categorías</button>`;
   h+=`</div>`;
   if(kioskSubTab==='cats') return h+renderKioskCatsTab();
 
@@ -4603,6 +4603,7 @@ function renderKioskoMenuCust(mc, menuH, ct, isIndividual){
   menuH+=`</div>`;
   renderCartPanel(mc, menuH, cartCount(), isIndividual, []);
 }
+window.setKioskSubTab=tab=>{C.kioskSubTab=tab;render();};
 window.setKioskCat=c=>{C.kioskCat=c;refreshMenuWithScroll();scrollActiveCat();};
 window.quickAddKiosk=id=>{const k='kiosk|'+id;if(!C.cart[k])C.cart[k]={qty:0,_kioskKey:id};C.cart[k].qty++;refreshMenuWithScroll();};
 window.removeFromCartKiosk=id=>{const k='kiosk|'+id;if(C.cart[k]){if(C.cart[k].qty>1)C.cart[k].qty--;else delete C.cart[k];}refreshMenuWithScroll();};
