@@ -2235,7 +2235,7 @@ window.addKioskItem=()=>{
   if(!f.name||!f.price){alert('Ingresá nombre y precio');return;}
   if(f.stock===''||f.stock==null){alert('Ingresá el stock del producto');return;}
   if(f.alertAt===''||f.alertAt==null){alert('Ingresá el valor de alerta de stock');return;}
-  push(ref(db,'kioskItems'),{name:f.name.trim(),desc:f.desc||'',price:Number(f.price),stock:f.stock!==''&&f.stock!=null?Number(f.stock):null,alertAt:f.alertAt!==''&&f.alertAt!=null?Number(f.alertAt):null,barcode:f.barcode&&f.barcode.trim()?f.barcode.trim():null});
+  push(ref(db,'kioskItems'),{name:f.name.trim(),desc:f.desc||'',price:Number(f.price),stock:f.stock!==''&&f.stock!=null?Number(f.stock):null,alertAt:f.alertAt!==''&&f.alertAt!=null?Number(f.alertAt):null,barcode:f.barcode&&f.barcode.trim()?f.barcode.trim():null,cat:f.cat||null});
   C.newKioskItem={name:'',desc:'',price:'',stock:''};C._prevKioskStock=null;render();
 };
 window.editKioskItem=key=>{C.editingKioskItem={...DB.kioskItems[key],_key:key};C._prevKioskStock=DB.kioskItems[key].stock;render();};
@@ -2245,7 +2245,7 @@ window.saveKioskItem=()=>{
   const {_key,...data}=C.editingKioskItem;
   if(data.stock===''||data.stock==null){alert('Ingresá el stock del producto');return;}
   if(data.alertAt===''||data.alertAt==null){alert('Ingresá el valor de alerta de stock');return;}
-  set(ref(db,`kioskItems/${_key}`),{name:data.name,desc:data.desc||'',price:Number(data.price),stock:data.stock!==''&&data.stock!=null?Number(data.stock):null,alertAt:data.alertAt!==''&&data.alertAt!=null?Number(data.alertAt):null,barcode:data.barcode&&data.barcode.trim()?data.barcode.trim():null});
+  set(ref(db,`kioskItems/${_key}`),{name:data.name,desc:data.desc||'',price:Number(data.price),stock:data.stock!==''&&data.stock!=null?Number(data.stock):null,alertAt:data.alertAt!==''&&data.alertAt!=null?Number(data.alertAt):null,barcode:data.barcode&&data.barcode.trim()?data.barcode.trim():null,cat:data.cat||null});
   C.editingKioskItem=null;C._prevKioskStock=null;render();
 };
 window.cancelKioskItem=()=>{C.editingKioskItem=null;render();};
