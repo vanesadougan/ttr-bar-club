@@ -2352,6 +2352,8 @@ window.toggleStockEdit=(key,src)=>{
     if(!('barcodes' in C._stockEditData[k])){
       const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
       const item=dbObj[key]||{};
+      // Inicializar alertAt también para que siempre se guarde
+      if(!('alertAt' in C._stockEditData[k]))C._stockEditData[k].alertAt=item.alertAt!=null?item.alertAt:'';
       // Preferir barcodes[] si existe; solo usar barcode legacy si no hay barcodes[]
       let bs=[];
       if(item.barcodes&&item.barcodes.length>0){
@@ -2381,16 +2383,18 @@ window.stockDirectSave=async(key,src)=>{
   const k=`${src}-${key}`;
   const data=(C._stockEditData||{})[k]||{};
   const dbPath=src==='dishes'?'dishes':src==='cafeteria'?'cafeteriaItems':'kioskItems';
+  const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
+  const item=dbObj[key]||{};
   const updates={};
-  if('alertAt' in data) updates.alertAt=data.alertAt===''||data.alertAt==null?null:Number(data.alertAt);
-  if('barcodes' in data){
-    const bcs=[...new Set(data.barcodes.filter(b=>b&&b.trim()))];
-    updates.barcodes=bcs;
-    updates.barcode=deleteField(); // eliminar campo legacy para no duplicar
-  }
-  if(Object.keys(updates).length>0){
-    await update(ref(db,`${dbPath}/${key}`),updates);
-  }
+  // Siempre guardar alertAt (del estado o del DB)
+  const alertVal='alertAt' in data?data.alertAt:item.alertAt;
+  updates.alertAt=alertVal===''||alertVal==null?null:Number(alertVal);
+  // Siempre guardar barcodes (del estado o del DB)
+  const bcsRaw='barcodes' in data?data.barcodes:(()=>{const bs=[];if(item.barcodes&&item.barcodes.length>0)bs.push(...item.barcodes);else if(item.barcode)bs.push(item.barcode);return bs;})();
+  const bcs=[...new Set(bcsRaw.filter(b=>b&&b.trim()))];
+  updates.barcodes=bcs;
+  updates.barcode=deleteField();
+  await update(ref(db,`${dbPath}/${key}`),updates);
   if(C._stockEdit) C._stockEdit[k]=false;
   if(C._stockEditData) delete C._stockEditData[k];
   render();
