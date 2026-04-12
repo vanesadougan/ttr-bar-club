@@ -970,7 +970,7 @@ window.selectWaiter=(id,name)=>{C.waiterId=id;C.waiterName=name;C.waiterStep='me
 function renderWaiterMesasScreen(mc){
   const myOrders=Object.entries(DB.orders)
     .map(([k,v])=>({...v,_key:k}))
-    .filter(o=>o.takenBy===C.waiterName && o.status!=='cobrado'&&o.status!=='deudor')
+    .filter(o=>o.status!=='cobrado'&&o.status!=='deudor')
     .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 
   const byTable={};
@@ -986,7 +986,7 @@ function renderWaiterMesasScreen(mc){
 
   // ── Header ──
   h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-bottom:1rem;border-bottom:0.5px solid var(--border)">`;
-  h+=`<div style="display:flex;align-items:center;gap:10px">${initial}<div><div style="font-size:18px;font-weight:600">${C.waiterName}</div><div style="font-size:12px;color:var(--muted)">${nMesas===0?'Sin mesas en curso':nMesas+' mesa'+(nMesas!==1?'s':'')+' en curso'}</div></div></div>`;
+  h+=`<div style="display:flex;align-items:center;gap:10px">${initial}<div><div style="font-size:18px;font-weight:600">${C.waiterName}</div><div style="font-size:12px;color:var(--muted)">${nMesas===0?'Sin mesas activas':nMesas+' mesa'+(nMesas!==1?'s':'')+' activa'+(nMesas!==1?'s':'')}</div></div></div>`;
   h+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="setWaiterStep('mesa')">+ Nueva mesa</button><button class="btn btn-ghost btn-sm" onclick="setWaiterStep('select')" style="font-size:12px">Salir</button></div>`;
   h+=`</div>`;
 
@@ -1007,13 +1007,18 @@ function renderWaiterMesasScreen(mc){
       const preparingCt=orders.filter(o=>o.status==='preparing').length;
       const delivCt=orders.filter(o=>o.status==='delivered').length;
       const isIndiv=orders.some(o=>o.orderMode==='individual');
+      const mozasEnMesa=[...new Set(orders.map(o=>o.takenBy).filter(Boolean))];
 
       h+=`<div class="card" style="margin-bottom:.875rem">`;
 
       // ── Mesa title row ──
       h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">`;
-      h+=`<div style="display:flex;align-items:center;gap:10px">`;
+      h+=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">`;
       h+=`<div style="display:inline-flex;align-items:center;padding:4px 10px;border-radius:8px;background:var(--brand);color:#fff;font-size:13px;font-weight:700;flex-shrink:0;white-space:nowrap">${tLabel}</div>`;
+      mozasEnMesa.forEach(m=>{
+        const esYo=m===C.waiterName;
+        h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:${esYo?'#dbeafe':'#f3f4f6'};color:${esYo?'#1e40af':'#374151'}">👩 ${m}${esYo?' (vos)':''}</span>`;
+      });
       h+=`<div style="display:flex;gap:5px;flex-wrap:wrap">`;
       if(pendingCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#fef3c7;color:#92400e">⏳ ${pendingCt} pend.</span>`;
       if(preparingCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#fff7ed;color:#c2410c">🔥 ${preparingCt} en prep.</span>`;
@@ -1273,7 +1278,7 @@ window.waiterConfirmEntrega=async keys=>{
 };
 window.waiterRequestBill=async tableId=>{
   if(!C.waiterPayMethod){alert('Seleccioná el medio de pago');return;}
-  const orders=Object.entries(DB.orders).filter(([,o])=>o.takenBy===C.waiterName&&o.tableId===tableId&&o.status!=='cobrado');
+  const orders=Object.entries(DB.orders).filter(([,o])=>o.tableId===tableId&&o.status!=='cobrado');
   for(const [k] of orders){
     await update(ref(db,`orders/${k}`),{status:'billed',billRequested:true,paymentMethod:C.waiterPayMethod});
   }
@@ -1281,7 +1286,7 @@ window.waiterRequestBill=async tableId=>{
 };
 window.waiterMarkCobrado=async tableId=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
-  const orders=Object.entries(DB.orders).filter(([,o])=>o.takenBy===C.waiterName&&o.tableId===tableId&&(o.status==='billed'||o.status==='delivered'||o.status==='pending')&&o.status!=='deudor');
+  const orders=Object.entries(DB.orders).filter(([,o])=>o.tableId===tableId&&(o.status==='billed'||o.status==='delivered'||o.status==='pending')&&o.status!=='deudor');
   // Verificar método de pago
   const pm=orders.find(([,o])=>o.paymentMethod)?.[1]?.paymentMethod||C.waiterPayMethod||null;
   let finalPm=pm;
