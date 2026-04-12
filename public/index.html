@@ -137,8 +137,9 @@
     .mesa-btn:hover{border-color:var(--accent);color:var(--accent)}
     .mesa-btn-label{font-size:11px;color:var(--muted);font-weight:400;margin-top:2px}
     .back-btn{background:none;border:0.5px solid var(--border);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;font-family:inherit;color:var(--muted)}
-    .cat-tabs{display:flex;gap:6px;margin-bottom:1.25rem;flex-wrap:wrap}
-    .cat-tab{padding:6px 14px;border-radius:20px;font-size:13px;cursor:pointer;border:0.5px solid var(--border);background:var(--card);color:var(--muted);font-family:inherit;transition:all 0.15s}
+    .cat-tabs{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:1.25rem}
+    .cat-tab{padding:14px 10px;border-radius:12px;font-size:13px;cursor:pointer;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-family:inherit;transition:all 0.15s;display:flex;flex-direction:column;align-items:center;gap:6px;font-weight:500;line-height:1.2;text-align:center}
+    .cat-tab .cat-emoji{font-size:26px;line-height:1}
     .cat-tab.active{background:var(--brand);color:#fff;border-color:var(--brand)}
     .cat-tab.promo-tab{border-color:#fed7aa;color:#c2410c;background:#fff7ed}
     .cat-tab.promo-tab.active{background:#c2410c;color:#fff;border-color:#c2410c}
@@ -1164,7 +1165,7 @@ function buildWaiterMenuH(){
   if(section==='cafeteria'){
     const allItems=Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
     const cats=getCafCats().filter(c=>allItems.some(d=>d.cat===c._key));
-    menuH+='<div class="cat-tabs">';cats.forEach(c=>{menuH+='<button class="cat-tab'+(C.waiterCafCat===c._key?' active':'')+'" onclick="setWaiterCafCat(\''+c._key+'\')">'+c.icon+' '+c.label+'</button>';});menuH+='</div>';
+    menuH+='<div class="cat-tabs">';cats.forEach(c=>{menuH+='<button class="cat-tab'+(C.waiterCafCat===c._key?' active':'')+'" onclick="setWaiterCafCat(\''+c._key+'\')">'+'<span class="cat-emoji">'+c.icon+'</span>'+c.label+'</button>';});menuH+='</div>';
   // Modal picker — después del cat-tabs, igual que comensal
   if(C.waiterCustDishId){
     const _d=DB.dishes[C.waiterCustDishId]||DB.cafeteriaItems[C.waiterCustDishId];
@@ -1190,7 +1191,7 @@ function buildWaiterMenuH(){
   } else {
     const allDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
     const cats=getCats();const catIds=cats.map(c=>c._key).filter(id=>allDishes.some(d=>d.cat===id));
-    menuH+='<div class="cat-tabs">';catIds.forEach(cid=>{const cat=cats.find(c=>c._key===cid);menuH+='<button class="cat-tab'+(C.waiterCat===cid?' active':'')+(cat&&cat.isPromo?' promo-tab':'')+'" onclick="setWaiterCat(\''+cid+'\')">'+(cat?cat.icon+' '+cat.label:cid)+'</button>';});menuH+='</div>';
+    menuH+='<div class="cat-tabs">';catIds.forEach(cid=>{const cat=cats.find(c=>c._key===cid);menuH+='<button class="cat-tab'+(C.waiterCat===cid?' active':'')+(cat&&cat.isPromo?' promo-tab':'')+'" onclick="setWaiterCat(\''+cid+'\')">'+(cat?'<span class="cat-emoji">'+cat.icon+'</span>'+cat.label:'<span class="cat-emoji">🍽</span>'+cid)+'</button>';});menuH+='</div>';
   // Modal picker — después del cat-tabs, igual que comensal
   if(C.waiterCustDishId){
     const _d=DB.dishes[C.waiterCustDishId]||DB.cafeteriaItems[C.waiterCustDishId];
@@ -3832,7 +3833,7 @@ function renderMenuOnly(mc){
     const cafCats=getCafCats().filter(c=>allCafItems.some(d=>d.cat===c._key));
     if(!C.cafCat&&cafCats.length)C.cafCat=cafCats[0]._key;
     h+=`<div class="cat-tabs">`;
-    cafCats.forEach(c=>{h+=`<button class="cat-tab${C.cafCat===c._key?' active':''}" onclick="setCafCat('${c._key}')">${c.icon} ${c.label}</button>`;});
+    cafCats.forEach(c=>{h+=`<button class="cat-tab${C.cafCat===c._key?' active':''}" onclick="setCafCat('${c._key}')"><span class="cat-emoji">${c.icon}</span>${c.label}</button>`;});
     h+=`</div><div class="menu-grid">`;
     const filtered=C.cafCat?allCafItems.filter(d=>d.cat===C.cafCat):allCafItems;
     filtered.forEach(d=>{
@@ -3849,7 +3850,7 @@ function renderMenuOnly(mc){
     allCatIds.forEach(cid=>{
       const cat=cats.find(c=>c._key===cid);
       const isP=cat&&cat.isPromo;
-      h+=`<button class="cat-tab${C.customerCat===cid?' active':''}${isP?' promo-tab':''}" onclick="setCat('${cid}')">${cat?cat.icon+' '+cat.label:cid}</button>`;
+      h+=`<button class="cat-tab${C.customerCat===cid?' active':''}${isP?' promo-tab':''}" onclick="setCat('${cid}')"><span class="cat-emoji">${cat?cat.icon:'🍽'}</span>${cat?cat.label:cid}</button>`;
     });
     h+=`</div><div class="menu-grid">`;
     const filtered=C.customerCat?allDishes.filter(d=>d.cat===C.customerCat):allDishes;
@@ -3921,7 +3922,8 @@ function renderMenuWithCart(mc){
   allCatIds.forEach(c=>{
     const cat=cats.find(x=>x._key===c);
     const isP=cat&&cat.isPromo;
-    menuH+=`<button class="cat-tab${C.customerCat===c?' active':''}${isP?' promo-tab':''}" onclick="setCat('${c}')">${tabLabel(c)}</button>`;
+    const _tabParts=tabLabel(c).split(' ');const _tabEmoji=_tabParts[0];const _tabName=_tabParts.slice(1).join(' ')||_tabParts[0];
+    menuH+=`<button class="cat-tab${C.customerCat===c?' active':''}${isP?' promo-tab':''}" onclick="setCat('${c}')"><span class="cat-emoji">${_tabEmoji}</span>${_tabName}</button>`;
   });
   menuH+=`</div>`;
 
