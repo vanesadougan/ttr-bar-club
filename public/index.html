@@ -1296,7 +1296,7 @@ function buildWaiterMenuH(){
       const _selExcl=new Set(C.waiterPickExcl||[]);
       const _catIcon=!_isCaf?(getCats().find(c=>c._key===_d.cat)||{}).icon||'🍽':(_d.emoji||'☕');
       menuH+=`<div class="cust-modal"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:20px">${_catIcon}</span><div><div style="font-size:16px;font-weight:500">${_d.name}</div><div style="font-size:12px;color:var(--muted)">${_hasTypes&&!_selType?'Elegí una variante':'Destildá lo que no querés'}</div></div></div>`;
-      if(_hasTypes){menuH+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">`;(_d.types||[]).forEach(_t=>{const _tn=typeof _t==='string'?_t:_t.name;const _tp=typeof _t==='object'&&_t.priceMode!=='base'?(_t.priceMode==='extra'?'+$'+(_t.priceExtra||0).toLocaleString():'$'+(_t.priceVal||0).toLocaleString()):null;const _s=_selType===_tn;menuH+=`<button onclick="waiterPickType('${_tn.replace(/'/g,"\'")}')" style="padding:8px 16px;border-radius:20px;border:0.5px solid ${_s?'var(--accent)':'var(--border)'};background:${_s?'var(--accent)':'var(--card)'};color:${_s?'#fff':'var(--text)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${_tn}${_tp?'<span style="font-size:11px;opacity:.75;margin-left:4px">'+_tp+'</span>':''}</button>`;});menuH+=`</div>`;}
+      if(_hasTypes){menuH+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">`;availableTypes(_d).forEach(_t=>{const _tn=typeof _t==='string'?_t:_t.name;const _tp=typeof _t==='object'&&_t.priceMode!=='base'?(_t.priceMode==='extra'?'+$'+(_t.priceExtra||0).toLocaleString():'$'+(_t.priceVal||0).toLocaleString()):null;const _ts=typeof _t==='object'&&_t.stock!=null?_t.stock:null;const _s=_selType===_tn;menuH+=`<button onclick="waiterPickType('${_tn.replace(/'/g,"\'")}')" style="padding:8px 16px;border-radius:20px;border:0.5px solid ${_s?'var(--accent)':'var(--border)'};background:${_s?'var(--accent)':'var(--card)'};color:${_s?'#fff':'var(--text)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${_tn}${_tp?'<span style="font-size:11px;opacity:.75;margin-left:4px">'+_tp+'</span>':''}${_ts!=null?'<span style="font-size:10px;color:var(--muted);margin-left:4px">📦'+_ts+'</span>':''}</button>`;});menuH+=`</div>`;}
       if(_hasCustom&&(!_hasTypes||_selType)){menuH+=`<div class="cust-ing-list">`;(_d.ingredients||[]).forEach(_ing=>{const _ex=_selExcl.has(_ing);menuH+=`<div class="cust-ing-row${_ex?' excluded':''}" onclick="waiterToggleExcl('${_ing.replace(/'/g,"\'")}')"><div style="display:flex;align-items:center;gap:8px"><div class="cust-check ${_ex?'unchecked':'checked'}">${_ex?'':'✓'}</div><span class="${_ex?'strikethrough':''}">${_ing}</span></div>${_ex?'<span style="font-size:11px;color:#b45309">Sin esto</span>':''}</div>`;});menuH+=`</div>`;}
       const _canConfirm=!_hasTypes||_selType;
       menuH+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" ${_canConfirm?'':'disabled'} onclick="waiterConfirmDish('${C.waiterCustDishId}','${_src}')">Agregar al pedido</button><button class="btn btn-ghost" onclick="waiterCancelPick()">Cancelar</button></div></div>`;
@@ -1322,7 +1322,7 @@ function buildWaiterMenuH(){
       const _selExcl=new Set(C.waiterPickExcl||[]);
       const _catIcon=!_isCaf?(getCats().find(c=>c._key===_d.cat)||{}).icon||'🍽':(_d.emoji||'☕');
       menuH+=`<div class="cust-modal"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:20px">${_catIcon}</span><div><div style="font-size:16px;font-weight:500">${_d.name}</div><div style="font-size:12px;color:var(--muted)">${_hasTypes&&!_selType?'Elegí una variante':'Destildá lo que no querés'}</div></div></div>`;
-      if(_hasTypes){menuH+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">`;(_d.types||[]).forEach(_t=>{const _tn=typeof _t==='string'?_t:_t.name;const _tp=typeof _t==='object'&&_t.priceMode!=='base'?(_t.priceMode==='extra'?'+$'+(_t.priceExtra||0).toLocaleString():'$'+(_t.priceVal||0).toLocaleString()):null;const _s=_selType===_tn;menuH+=`<button onclick="waiterPickType('${_tn.replace(/'/g,"\'")}')" style="padding:8px 16px;border-radius:20px;border:0.5px solid ${_s?'var(--accent)':'var(--border)'};background:${_s?'var(--accent)':'var(--card)'};color:${_s?'#fff':'var(--text)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${_tn}${_tp?'<span style="font-size:11px;opacity:.75;margin-left:4px">'+_tp+'</span>':''}</button>`;});menuH+=`</div>`;}
+      if(_hasTypes){menuH+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">`;availableTypes(_d).forEach(_t=>{const _tn=typeof _t==='string'?_t:_t.name;const _tp=typeof _t==='object'&&_t.priceMode!=='base'?(_t.priceMode==='extra'?'+$'+(_t.priceExtra||0).toLocaleString():'$'+(_t.priceVal||0).toLocaleString()):null;const _ts=typeof _t==='object'&&_t.stock!=null?_t.stock:null;const _s=_selType===_tn;menuH+=`<button onclick="waiterPickType('${_tn.replace(/'/g,"\'")}')" style="padding:8px 16px;border-radius:20px;border:0.5px solid ${_s?'var(--accent)':'var(--border)'};background:${_s?'var(--accent)':'var(--card)'};color:${_s?'#fff':'var(--text)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${_tn}${_tp?'<span style="font-size:11px;opacity:.75;margin-left:4px">'+_tp+'</span>':''}${_ts!=null?'<span style="font-size:10px;color:var(--muted);margin-left:4px">📦'+_ts+'</span>':''}</button>`;});menuH+=`</div>`;}
       if(_hasCustom&&(!_hasTypes||_selType)){menuH+=`<div class="cust-ing-list">`;(_d.ingredients||[]).forEach(_ing=>{const _ex=_selExcl.has(_ing);menuH+=`<div class="cust-ing-row${_ex?' excluded':''}" onclick="waiterToggleExcl('${_ing.replace(/'/g,"\'")}')"><div style="display:flex;align-items:center;gap:8px"><div class="cust-check ${_ex?'unchecked':'checked'}">${_ex?'':'✓'}</div><span class="${_ex?'strikethrough':''}">${_ing}</span></div>${_ex?'<span style="font-size:11px;color:#b45309">Sin esto</span>':''}</div>`;});menuH+=`</div>`;}
       const _canConfirm=!_hasTypes||_selType;
       menuH+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" ${_canConfirm?'':'disabled'} onclick="waiterConfirmDish('${C.waiterCustDishId}','${_src}')">Agregar al pedido</button><button class="btn btn-ghost" onclick="waiterCancelPick()">Cancelar</button></div></div>`;
@@ -1584,6 +1584,7 @@ window.waiterPlaceOrder=async()=>{
     return{name:d.name,qty:v.qty,price:Number(d.price),finalPrice:isCaf?Number(d.price):dishFinalPrice(d,v.qty,v.selectedType||null),excluded:v.excluded||[],selectedType:v.selectedType||null,isCafeteria:isCaf,emoji:d.emoji||null};
   }).filter(Boolean);
   await push(ref(db,'orders'),{tableId:C.waiterTableId,items,status:'pending',time:nowStr(),billRequested:false,orderMode:C.waiterOrderMode,personName:C.waiterOrderMode==='individual'?C.waiterPersonName:null,createdAt:Date.now(),takenBy:C.waiterName});
+  deductTypeStock(items);
   C.waiterCart={};C.waiterStep='mesas';C.waiterTableId=null;render();
 };
 
@@ -1695,9 +1696,11 @@ function renderDishesTab(){
           formH+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">';
           types.forEach((t,i)=>{
             const tname=typeof t==='string'?t:t.name;const pm=typeof t==='object'?t.priceMode:'base';const pval=typeof t==='object'?(pm==='total'?t.priceVal:t.priceExtra)||'':'';
+            const tstock=typeof t==='object'&&t.stock!=null?t.stock:'';
             formH+='<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)"><span style="flex:1;font-size:13px;font-weight:500">'+tname+'</span>';
             formH+='<select onchange="updateTypePrice('+i+',\'mode\',this.value)" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border);border-radius:5px;font-family:inherit;background:var(--card)"><option value="base"'+(pm==='base'?' selected':'')+'>Precio base</option><option value="extra"'+(pm==='extra'?' selected':'')+'>+ Extra</option><option value="total"'+(pm==='total'?' selected':'')+'>Precio total</option></select>';
             if(pm!=='base')formH+='<input type="number" min="0" placeholder="$" value="'+pval+'" oninput="updateTypePrice('+i+',\'val\',this.value)" style="width:70px;font-size:12px;padding:3px 6px;border:0.5px solid var(--border);border-radius:5px;font-family:inherit">';
+            formH+='<input type="number" min="0" placeholder="Stock" title="Stock de este tipo" value="'+tstock+'" oninput="updateTypeStock('+i+',this.value)" style="width:60px;font-size:12px;padding:3px 6px;border:0.5px solid var(--border);border-radius:5px;font-family:inherit">';
             formH+='<button onclick="removeType('+i+')" style="width:20px;height:20px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:12px;cursor:pointer;line-height:1">×</button></div>';
           });
           formH+='</div>';
@@ -2527,6 +2530,7 @@ function renderStockTab(){
             <button onclick="stockDirectAddBarcode('${d._key}','${sec}')" style="padding:5px 12px;border-radius:6px;border:0.5px solid var(--brand);color:var(--brand);background:transparent;font-size:13px;cursor:pointer;font-family:inherit">+ Agregar</button>
           </div>
           <button onclick="stockDirectSave('${d._key}','${sec}')" style="padding:6px 14px;border-radius:6px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
+          ${(()=>{const dish=DB.dishes[d._key];const typesWithStock=(dish&&dish.types||[]).filter(t=>typeof t==='object'&&t.stock!=null);if(typesWithStock.length===0)return '';let th='<div style="margin-top:14px;border-top:0.5px solid var(--border);padding-top:10px"><div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px">📦 Stock por tipo</div><div style="display:flex;flex-direction:column;gap:6px">';typesWithStock.forEach((t,i)=>{const realIdx=(dish.types||[]).findIndex(x=>(typeof x==='string'?x:x.name)===t.name);th+=`<div style="display:flex;align-items:center;gap:8px"><span style="flex:1;font-size:13px">${t.name}</span><input type="number" min="0" value="${t.stock}" oninput="updateTypeStockDirect('${d._key}',${realIdx},this.value)" style="width:70px;padding:4px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px"><span style="font-size:11px;color:${t.stock===0?'#b91c1c':t.stock<=3?'#92400e':'#065f46'}">${t.stock===0?'Sin stock':t.stock<=3?'⚠️ Bajo':'✓'}</span></div>`;});th+='</div></div>';return th;})()}
         </div>`;
         }
         h+=`</div>`;
@@ -3541,6 +3545,20 @@ window.updateTypePrice=(idx,field,val)=>{
     f.types[idx].priceVal=n;
   }
 };
+window.updateTypeStock=(idx,val)=>{
+  const f=C.editingDish||C.newDish;
+  if(!f.types||!f.types[idx])return;
+  if(typeof f.types[idx]==='string') f.types[idx]={name:f.types[idx],priceMode:'base',priceExtra:0,priceVal:0};
+  f.types[idx].stock=val===''||val==null?null:Math.max(0,Number(val));
+};
+window.updateTypeStockDirect=async(dishId,typeIdx,val)=>{
+  const dish=DB.dishes[dishId];
+  if(!dish||!dish.types||!dish.types[typeIdx])return;
+  const updatedTypes=[...dish.types];
+  if(typeof updatedTypes[typeIdx]==='string')updatedTypes[typeIdx]={name:updatedTypes[typeIdx],priceMode:'base'};
+  updatedTypes[typeIdx]={...updatedTypes[typeIdx],stock:val===''||val==null?null:Math.max(0,Number(val))};
+  await update(ref(db,`dishes/${dishId}`),{types:updatedTypes});
+};
 window.addIngredient=()=>{const inp=document.getElementById('ing-input');const val=(inp?inp.value:C.newIngInput).trim();if(!val)return;const f=C.editingDish||C.newDish;if(!f.ingredients)f.ingredients=[];val.split(',').map(v=>v.trim()).filter(Boolean).forEach(v=>{if(!f.ingredients.includes(v))f.ingredients.push(v);});C.newIngInput='';render();};
 window.removeIngredient=idx=>{const f=C.editingDish||C.newDish;f.ingredients.splice(idx,1);render();};
 window.addDish=()=>{
@@ -4265,7 +4283,30 @@ window.backToMesas=()=>{C.customerTableId=null;C.orderMode=null;C.customerName='
 
 function cartCount(){return Object.values(C.cart).reduce((s,v)=>s+v.qty,0);}
 function exclArr(excl){return excl instanceof Set?[...excl]:Array.isArray(excl)?excl:[];}
-function exclNote(excl){const a=exclArr(excl);return a.length>0?'<div style="font-size:11px;color:#b45309">Sin: '+a.join(", ")+'</div>':"";}
+function exclNote(excl){const a=exclArr(excl);return a.length>0?'<div style="font-size:11px;color:#b45309">Sin: '+a.join(", ")+'</div>':"";} 
+// Stock por tipo
+function typeStockOf(d,typeName){if(!d||!d.types)return null;const t=d.types.find(t=>(typeof t==='string'?t:t.name)===typeName);if(!t||typeof t==='string')return null;return t.stock!=null?t.stock:null;}
+function availableTypes(d){if(!d||!d.types)return[];return d.types.filter(t=>{const s=typeof t==='object'?t.stock:null;return s==null||s>0;});}
+// Descuenta stock de tipos al confirmar pedido
+async function deductTypeStock(items){
+  for(const item of items){
+    if(!item.selectedType)continue;
+    // Buscar el plato por nombre en DB.dishes
+    const dishEntry=Object.entries(DB.dishes).find(([,d])=>d.name===item.name);
+    if(!dishEntry)continue;
+    const [dishId,dish]=dishEntry;
+    if(!dish.types)continue;
+    const typeIdx=dish.types.findIndex(t=>(typeof t==='string'?t:t.name)===item.selectedType);
+    if(typeIdx<0)continue;
+    const t=dish.types[typeIdx];
+    if(typeof t==='string'||t.stock==null)continue;
+    const newStock=Math.max(0,t.stock-item.qty);
+    const updatedTypes=[...dish.types];
+    updatedTypes[typeIdx]={...t,stock:newStock};
+    await update(ref(db,`dishes/${dishId}`),{types:updatedTypes});
+  }
+}
+
 
 function cartTotal(){
   return Object.entries(C.cart).reduce((s,[id,v])=>{
@@ -4456,7 +4497,8 @@ function renderMenuWithCart(mc){
   // Type picker modal
   if(C.typePickerDishId!==null){
     const d=DB.dishes[C.typePickerDishId];
-    if(d&&d.hasTypes&&(d.types||[]).length>0){
+    const avTypes=availableTypes(d);
+    if(d&&d.hasTypes&&avTypes.length>0){
       const dishCatIcon=(cats.find(c=>c._key===d.cat)||{}).icon||'🍽';
       menuH+=`<div class="cust-modal">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
@@ -4465,10 +4507,12 @@ function renderMenuWithCart(mc){
           <div style="font-size:12px;color:var(--muted)">Elegí el tipo</div></div>
         </div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">
-          ${d.types.map((t,ti)=>`<button onclick="pickType(${ti})" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);font-size:14px;font-family:inherit;cursor:pointer;text-align:left">${t}</button>`).join('')}
+          ${avTypes.map((t,ti)=>{const tname=typeof t==='string'?t:t.name;const tstock=typeof t==='object'&&t.stock!=null?t.stock:null;const tp=typeof t==='object'&&t.priceMode!=='base'?(t.priceMode==='extra'?'+$'+(t.priceExtra||0).toLocaleString():'$'+(t.priceVal||0).toLocaleString()):null;return`<button onclick="pickTypeByName('${tname.replace(/'/g,"\\'")}')" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);font-size:14px;font-family:inherit;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between">${tname}${tp?`<span style="font-size:12px;color:#7c3aed">${tp}</span>`:''}${tstock!=null?`<span style="font-size:11px;color:var(--muted);margin-left:4px">📦 ${tstock}</span>`:''}</button>`;}).join('')}
         </div>
         <button class="btn btn-ghost" style="width:100%" onclick="closeTypePicker()">Cancelar</button>
       </div>`;
+    } else if(d&&d.hasTypes){
+      menuH+=`<div class="cust-modal"><div style="text-align:center;padding:1rem;color:var(--muted)">Sin stock disponible</div><button class="btn btn-ghost" style="width:100%" onclick="closeTypePicker()">Volver</button></div>`;
     }
   }
 
@@ -4577,7 +4621,12 @@ window.custCancelMitad=()=>{C.custMitadDishId=null;C.custMitad1=null;C.custMitad
 window.pickType=idx=>{
   const d=DB.dishes[C.typePickerDishId];
   if(!d)return;
-  const typeName=d.types[idx];
+  const avTypes=availableTypes(d);
+  if(!avTypes[idx])return;
+  const typeName=typeof avTypes[idx]==='string'?avTypes[idx]:avTypes[idx].name;
+  window.selectType(C.typePickerDishId,typeName);
+};
+window.pickTypeByName=typeName=>{
   window.selectType(C.typePickerDishId,typeName);
 };
 window.closeTypePicker=()=>{C.typePickerDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
@@ -4928,6 +4977,7 @@ window.placeOrder=()=>{
     return{name:d.name,qty:v.qty,price:d.price,finalPrice:isCaf?Number(d.price):dishFinalPrice(d,v.qty),excluded:v.excluded?[...v.excluded]:[],selectedType:v.selectedType||null,is2x1:(!isCaf&&d.is2x1)||false,isCafeteria:isCaf||false,emoji:d.emoji||null};
   }).filter(Boolean);
   push(ref(db,'orders'),{tableId:C.customerTableId,items,status:'pending',time:nowStr(),billRequested:false,orderMode:C.orderMode,personName:C.orderMode==='individual'?C.customerName:null,createdAt:Date.now()});
+  deductTypeStock(items);
   C.cart={};C.custDishId=null;C.cafCustId=null;C.custMitadDishId=null;C.customerStep='confirm';render();
 };
 
