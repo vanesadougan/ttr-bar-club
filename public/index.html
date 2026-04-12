@@ -700,7 +700,7 @@ function renderWaitersAdminTab(){
   const fw=C.editingWaiter||C.newWaiter||{name:'',pin:''};
   let formH='<div class="card"><div class="card-title">'+(C.editingWaiter?'✏️ Editar moza/mozo':'+ Agregar moza/mozo')+'</div>';
   formH+='<div class="form-group"><label>Nombre</label><input placeholder="Ej: María, Juan..." value="'+(fw.name||'')+'" oninput="uWaiter(\'name\',this.value)"></div>';
-  formH+='<div class="form-group"><label>PIN <span style="font-size:11px;font-weight:400;color:var(--muted)">(4 dígitos)</span></label><input type="tel" maxlength="4" placeholder="Ej: 1234" value="'+(fw.pin||'')+'" oninput="uWaiter(\'pin\',this.value.replace(/\\D/g,\'\').slice(0,4))"></div>';
+  formH+='<div class="form-group"><label>PIN <span style="font-size:11px;font-weight:400;color:var(--muted)">(4 dígitos)</span></label><input type="password" maxlength="4" placeholder="'+(C.editingWaiter&&fw.pin?'Dejá vacío para no cambiar':'Ej: 1234')+'" value="" oninput="uWaiter(\'pin\',this.value.replace(/\\D/g,\'\').slice(0,4))"><div style="font-size:11px;color:var(--muted);margin-top:3px">'+(C.editingWaiter&&fw.pin?'El PIN actual está guardado. Solo completá si querés cambiarlo.':'')+'</div></div>';
   formH+='<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="'+(C.editingWaiter?'saveEditWaiter()':'addWaiter()') +'">'+(C.editingWaiter?'Guardar':'Agregar')+'</button>'+(C.editingWaiter?'<button class="btn btn-ghost" onclick="cancelEditWaiter()">Cancelar</button>':'')+'</div></div>';
   let listH='<div class="card"><div class="card-title">Mozas/Mozos ('+waiters.length+')</div><div style="display:flex;flex-direction:column;gap:8px">';
   if(waiters.length===0){listH+='<div class="empty-state">No hay mozas/mozos cargados</div>';}
@@ -713,7 +713,17 @@ function renderWaitersAdminTab(){
 window.uWaiter=(field,val)=>{const o=C.editingWaiter||(C.newWaiter=C.newWaiter||{name:'',pin:''});o[field]=val;};
 window.addWaiter=()=>{const d=C.newWaiter||{};if(!d.name||!d.name.trim()){alert('Ingresá el nombre');return;}if(!d.pin||String(d.pin).length!==4){alert('Ingresá un PIN de 4 dígitos');return;}push(ref(db,'waiters'),{name:d.name.trim(),pin:String(d.pin)});C.newWaiter={name:'',pin:''};render();};
 window.editWaiter=key=>{C.editingWaiter={...DB.waiters[key],_key:key};render();};
-window.saveEditWaiter=()=>{const {_key,...data}=C.editingWaiter;if(!data.pin||String(data.pin).length!==4){alert('Ingresá un PIN de 4 dígitos');return;}set(ref(db,`waiters/${_key}`),{...data,pin:String(data.pin)});C.editingWaiter=null;render();};
+window.saveEditWaiter=()=>{
+  const {_key,...data}=C.editingWaiter;
+  // Si no ingresó nuevo PIN, conservar el existente
+  const existingPin=DB.waiters[_key]?.pin||'';
+  const newPin=data.pin?String(data.pin):'';
+  if(newPin&&newPin.length!==4){alert('El PIN debe tener exactamente 4 dígitos');return;}
+  const finalPin=newPin||existingPin;
+  if(!finalPin){alert('Ingresá un PIN de 4 dígitos');return;}
+  set(ref(db,`waiters/${_key}`),{...data,pin:finalPin});
+  C.editingWaiter=null;render();
+};
 window.cancelEditWaiter=()=>{C.editingWaiter=null;render();};
 window.deleteWaiter=key=>{if(confirm('¿Eliminar esta moza/mozo?'))remove(ref(db,`waiters/${key}`));};
 
