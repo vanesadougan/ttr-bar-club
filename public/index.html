@@ -1542,7 +1542,17 @@ function renderDishesTab(){
   formH+='<span id="dish-stock-badge" style="font-size:12px;padding:3px 10px;border-radius:6px;font-weight:600;background:'+stockBg+';color:'+stockCol+'">'+stockLabel+' ('+_s2+')</span>';
   formH+='<div style="flex:1"><label style="font-size:11px;color:var(--muted)">Alerta ≤ <span style="color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uF(\'dish\',\'alertAt\',this.value)" style="padding:4px 8px;height:30px;font-size:12px"></div>';
   formH+='</div>';
-  formH+='<div class="form-group" style="margin-bottom:10px"><label style="font-size:11px;color:var(--muted)">🔍 Código de barras <span style="font-weight:400">(opcional)</span></label><input placeholder="Escaneá o escribí el código" value="'+(f.barcode||'')+'\" oninput="uF(\'dish\',\'barcode\',this.value)" style="font-family:monospace;padding:4px 8px;height:30px;font-size:12px"></div>';
+
+  // ── Sección AVANZADO (barcode)
+  const openAvanz=sec.avanzado||false;
+  formH+='<div class="form-section"><div class="form-section-header" onclick="toggleDishSection(\'avanzado\')">';
+  formH+='<span>⚙️ Avanzado'+(f.barcode?' <span style="font-size:11px;background:#f3f4f6;color:#374151;padding:1px 7px;border-radius:10px">🔍 Código cargado</span>':'')+'</span><span>'+(openAvanz?'▲':'▼')+'</span></div>';
+  if(openAvanz){
+    formH+='<div class="form-section-body">';
+    formH+='<div class="form-group" style="margin-bottom:0"><label style="font-size:12px">🔍 Código de barras <span style="font-weight:400;color:var(--muted)">(opcional)</span></label><input placeholder="Escaneá o escribí el código" value="'+(f.barcode||'')+'" oninput="uF(\'dish\',\'barcode\',this.value)" style="font-family:monospace;padding:4px 8px;height:30px;font-size:12px"></div>';
+    formH+='</div>';
+  }
+  formH+='</div>';
 
   // ── Sección PROMO (solo si cat es promo)
   if(isPromo){
