@@ -2953,7 +2953,7 @@ function renderOrdersTab(){
   ${kioskoH}
   ${pendingAlerts.length>0?`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:1rem">
     ${pendingAlerts.map(([k,a])=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fef3c7;border:0.5px solid #fcd34d;border-radius:10px">
-      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">🛎</span><div><div style="font-weight:500;font-size:14px">${a.tableLabel} llama al mozo</div><div style="font-size:12px;color:#92400e">${a.time}</div></div></div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">🛎</span><div><div style="font-weight:500;font-size:14px">${a.tableLabel} llama al mozo</div>${a.message?`<div style="font-size:13px;color:#92400e;margin-top:2px;font-style:italic">"${a.message}"</div>`:''}<div style="font-size:12px;color:#92400e;margin-top:2px">${a.time}</div></div></div>
       <button onclick="dismissAlert('${k}')" style="padding:5px 12px;border-radius:6px;border:0.5px solid #92400e;background:transparent;color:#92400e;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">Atendido ✓</button>
     </div>`).join('')}
   </div>`:''}
@@ -4547,15 +4547,40 @@ window.initCustomerCat=()=>{
   const firstCatWithDishes=cats.find(c=>availDishes.some(d=>d.cat===c._key));
   if(C.customerCat==='todos'&&firstCatWithDishes) C.customerCat=firstCatWithDishes._key;
 };
-window.callWaiter=()=>{
+window.callWaiter=()=>{showWaiterModal();};
+window.showWaiterModal=()=>{
+  // Remove existing modal if any
+  document.getElementById('waiter-modal')?.remove();
+  const overlay=document.createElement('div');
+  overlay.id='waiter-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
+  overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+    <div style="font-size:22px;text-align:center;margin-bottom:6px">🛎</div>
+    <div style="font-size:16px;font-weight:600;text-align:center;margin-bottom:4px">Llamar al mozo</div>
+    <div style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:16px">¿Necesitás algo en particular?</div>
+    <textarea id="waiter-msg" placeholder="Ej: Traeme la cuenta, necesito servilletas... (opcional)" style="width:100%;min-height:80px;padding:10px;border:0.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;resize:none;box-sizing:border-box;outline:none"></textarea>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button onclick="document.getElementById('waiter-modal').remove()" style="flex:1;padding:12px;border-radius:10px;border:0.5px solid var(--border);background:transparent;font-family:inherit;font-size:14px;cursor:pointer;color:var(--muted)">Cancelar</button>
+      <button onclick="confirmCallWaiter()" style="flex:2;padding:12px;border-radius:10px;border:none;background:var(--brand);color:#fff;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">Llamar al mozo</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  setTimeout(()=>document.getElementById('waiter-msg')?.focus(),100);
+};
+window.confirmCallWaiter=()=>{
+  const msg=(document.getElementById('waiter-msg')?.value||'').trim();
   const tableObj=DB.tables[C.customerTableId];
-  const label=tableObj?tableObj.label:`Mesa`;
+  const label=tableObj?tableObj.label:'Mesa';
   const n=new Date();
   const time=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');
-  push(ref(db,'alerts'),{tableId:C.customerTableId,tableLabel:label,time,status:'pending',createdAt:Date.now()});
-  // visual feedback
-  const btn=document.querySelector('button[onclick="callWaiter()"]');
-  if(btn){btn.textContent='✅ Mozo avisado';btn.style.background='#d1fae5';btn.style.borderColor='#10b981';btn.style.color='#065f46';btn.disabled=true;setTimeout(()=>{btn.textContent='🛎 Llamar al mozo';btn.style.background='#fef3c7';btn.style.borderColor='#f59e0b';btn.style.color='#92400e';btn.disabled=false;},4000);}
+  push(ref(db,'alerts'),{tableId:C.customerTableId,tableLabel:label,time,status:'pending',createdAt:Date.now(),...(msg?{message:msg}:{})});
+  document.getElementById('waiter-modal')?.remove();
+  // Visual feedback on all waiter buttons
+  document.querySelectorAll('button[onclick="callWaiter()"]').forEach(btn=>{
+    btn.textContent='✅ Mozo avisado';btn.style.background='#d1fae5';btn.style.borderColor='#10b981';btn.style.color='#065f46';btn.disabled=true;
+    setTimeout(()=>{btn.textContent='🛎 Llamar al mozo';btn.style.background='#fef3c7';btn.style.borderColor='#f59e0b';btn.style.color='#92400e';btn.disabled=false;},4000);
+  });
 };
 window.cancelCart=()=>{
   if(confirm('¿Cancelar el pedido? Se van a borrar todos los ítems del carrito.')){
