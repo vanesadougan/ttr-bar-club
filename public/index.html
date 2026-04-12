@@ -2397,7 +2397,7 @@ window.stockDirectSave=async(key,src)=>{
   const bcsRaw='barcodes' in data?data.barcodes:(()=>{const bs=[];if(item.barcodes&&item.barcodes.length>0)bs.push(...item.barcodes);else if(item.barcode)bs.push(item.barcode);return bs;})();
   const bcs=[...new Set(bcsRaw.filter(b=>b&&b.trim()))];
   updates.barcodes=bcs;
-  updates.barcode=deleteField();
+  updates.barcode=null;
   await update(ref(db,`${dbPath}/${key}`),updates);
   if(C._stockEdit) C._stockEdit[k]=false;
   if(C._stockEditData) delete C._stockEditData[k];
@@ -3713,7 +3713,7 @@ window.adminGroupDeudor=async keys=>{
   };
 };
 window.adminGroupConfirmEntrega=async keys=>{
-  for(const k of keys) await update(ref(db,`orders/${k}`),{readyAt:deleteField()});
+  for(const k of keys) await update(ref(db,`orders/${k}`),{readyAt:null});
 };
 window.reprintOrder=async key=>{
   const o=DB.orders[key];if(!o)return;
