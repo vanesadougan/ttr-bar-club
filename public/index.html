@@ -1318,7 +1318,11 @@ function buildWaiterMenuH(){
       const fp=d.isMitadMitad?null:dishFinalPrice(d,1);const myEntries=Object.entries(C.waiterCart).filter(([k])=>k===d._key||k.startsWith(d._key+'|')||k.startsWith('mitad|'+d._key+'|'));
       const totalQty=myEntries.reduce((s,[,v])=>s+v.qty,0);
       menuH+='<div class="menu-card'+(isP?' promo-card':'')+'"><div class="menu-card-name">'+d.name+'</div><div class="menu-card-desc">'+(d.desc||'')+'</div>';
-      if(myEntries.length>0&&(hasTypes||hasCustom)){
+      if(d.isMitadMitad){
+        // Mostrar items de mitad en carrito
+        myEntries.forEach(([k,v])=>{menuH+='<div style="font-size:11px;color:var(--muted);margin-top:2px">🍕 '+(v._mitadName||k)+'<div class="qty-ctrl" style="display:inline-flex;margin-left:6px"><button class="qty-btn" onclick="waiterRemove(\''+k+'\')">−</button><span class="qty-val">'+v.qty+'</span></div></div>';});
+        menuH+='<div class="menu-card-footer"><span style="font-size:11px;color:var(--muted)">A definir</span><button class="add-btn" onclick="waiterAddDish(\''+d._key+'\',\'dish\')">+</button></div>';
+      } else if(myEntries.length>0&&(hasTypes||hasCustom)){
         myEntries.forEach(([k,v])=>{const lbl=v.selectedType?'<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">'+v.selectedType+'</span>':'';const excl=v.excluded&&v.excluded.length?'<div class="excl-note">sin: '+v.excluded.join(', ')+'</div>':'';menuH+=excl+'<div style="display:flex;align-items:center;gap:6px;margin-top:2px">'+lbl+'<div class="qty-ctrl"><button class="qty-btn" onclick="waiterRemove(\''+k+'\')">−</button><span class="qty-val">'+v.qty+'</span><button class="qty-btn" onclick="waiterQuickAdd(\''+k+'\',\'dish\')">+</button></div></div>';});
         menuH+='<div class="menu-card-footer"><span class="menu-card-price">'+(fp===null?'<span style="font-size:11px;color:var(--muted)">A definir</span>':'$'+fp.toLocaleString())+'</span><button class="add-btn" onclick="waiterAddDish(\''+d._key+'\',\'dish\')">+</button></div>';
       } else {
