@@ -301,7 +301,8 @@ let C = {
   dishSections:{promo:true,tipos:false,ings:false,receta:false,stock:false},
   // Cafetería state
   cafCat:'todos',
-  editingCafItem:null, editingCafCat:null, editingKioskItem:null, newKioskItem:{name:'',desc:'',price:'',stock:'0',alertAt:''},
+  editingCafItem:null, editingCafCat:null, editingKioskItem:null, editingKioskCat:null, newKioskItem:{name:'',desc:'',price:'',stock:'0',alertAt:''},
+  newKioskCat:{label:'',icon:'🛍'},
   showIngForm:false,
   newCafItem:{name:'',desc:'',price:'',cat:'',emoji:'☕',customizable:false,ingredients:[],promoDiscount:0,is2x1:false},
   newCafCat:{label:'',icon:'☕',isPromo:false,noRating:false},
@@ -385,6 +386,7 @@ onValue(ref(db,'waiters'), snap=>{ DB.waiters = snap.val()||{}; _markLoaded(); i
 onValue(ref(db,'caja'), snap=>{ DB.caja = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'deudores'), snap=>{ DB.deudores = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'kioskItems'), snap=>{ DB.kioskItems = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
+onValue(ref(db,'kioskCategories'), snap=>{ DB.kioskCategories = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
 onValue(ref(db,'ingredients'), snap=>{
   DB.ingredients = snap.val()||{};
   if(!firstLoad) checkIngredientStock();
@@ -1818,6 +1820,9 @@ function getCafCats(){
   cats.sort((a,b)=>(a.order||0)-(b.order||0));
   return cats;
 }
+function getKioskCats(){
+  return Object.entries(DB.kioskCategories||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.order||0)-(b.order||0));
+}
 const cafCatOpen={};
 function renderCafeteriaTab(){
   const cats=getCafCats();
@@ -2001,12 +2006,25 @@ window.moveCafCat=(key,dir)=>{const cats=getCafCats();const idx=cats.findIndex(c
 // ── STOCK TAB ─────────────────────────────────────
 // ── KIOSKO TAB ────────────────────────────────────
 function renderKioskoTab(){
+  const kioskSubTab=C.kioskSubTab||'items';
+  let h=`<div style="display:flex;gap:4px;margin-bottom:1rem;border-bottom:0.5px solid var(--border)">`;
+  h+=`<button onclick="C.kioskSubTab='items';render()" style="padding:6px 14px;border-radius:0;border:none;border-bottom:2px solid ${kioskSubTab==='items'?'var(--brand)':'transparent'};cursor:pointer;font-family:inherit;font-size:13px;font-weight:${kioskSubTab==='items'?'600':'400'};background:transparent;color:${kioskSubTab==='items'?'var(--brand)':'var(--muted)'};margin-bottom:-1px">🏪 Items</button>`;
+  h+=`<button onclick="C.kioskSubTab='cats';render()" style="padding:6px 14px;border-radius:0;border:none;border-bottom:2px solid ${kioskSubTab==='cats'?'var(--brand)':'transparent'};cursor:pointer;font-family:inherit;font-size:13px;font-weight:${kioskSubTab==='cats'?'600':'400'};background:transparent;color:${kioskSubTab==='cats'?'var(--brand)':'var(--muted)'};margin-bottom:-1px">🗂 Categorías</button>`;
+  h+=`</div>`;
+  if(kioskSubTab==='cats') return h+renderKioskCatsTab();
+
   const f=C.editingKioskItem||C.newKioskItem;
   const items=Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const kioskCats=getKioskCats();
 
   let formH=`<div class="card">`;
   formH+=`<div class="card-title">${C.editingKioskItem?'✏️ Editar item':'+ Agregar item'}</div>`;
   formH+=`<div class="form-group" style="margin-bottom:8px"><label>Nombre</label><input placeholder="Nombre del producto" value="${f.name||''}" oninput="uKiosk('name',this.value)"></div>`;
+  if(kioskCats.length>0){
+    formH+=`<div class="form-group" style="margin-bottom:8px"><label>Categoría</label><select oninput="uKiosk('cat',this.value)"><option value="">Sin categoría</option>`;
+    kioskCats.forEach(c=>{formH+=`<option value="${c._key}"${f.cat===c._key?' selected':''}>${c.icon} ${c.label}</option>`;});
+    formH+=`</select></div>`;
+  }
   formH+=`<div class="form-group" style="margin-bottom:8px"><label>Descripción <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><textarea style="min-height:44px" oninput="uKiosk('desc',this.value)">${f.desc||''}</textarea></div>`;
   formH+=`<div class="form-group" style="margin-bottom:8px"><label>🔍 Código de barras <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label><input placeholder="Escaneá o escribí el código" value="${f.barcode||''}" oninput="uKiosk('barcode',this.value)" style="font-family:monospace;padding:4px 8px;height:30px;font-size:12px"></div>`;
   const _sc=Number(f.stock);const _hs=f.stock!=null&&f.stock!=='';
@@ -2018,7 +2036,6 @@ function renderKioskoTab(){
   formH+=`<div class="form-group" style="margin-bottom:0"><label>Stock <span style="font-size:11px;color:#b91c1c;font-weight:600">*obligatorio</span></label><div style="display:flex;align-items:center;gap:6px"><input id="kiosk-stock-inp" type="number" min="0" placeholder="0" value="${_hs?f.stock:''}" oninput="uKioskStock(this.value)" style="flex:1">${_sb}</div></div>`;
   formH+=`</div>`;
   formH+=`<div id="kiosk-alertat-row" style="display:block;margin-bottom:12px"><div class="form-group"><label>Alerta cuando quede ≤ <span style="font-size:11px;color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="${f.alertAt!=null&&f.alertAt!==''?f.alertAt:''}" oninput="uKiosk('alertAt',this.value)"></div></div>`;
-
   formH+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="${C.editingKioskItem?'saveKioskItem()':'addKioskItem()'}">`;
   formH+=`${C.editingKioskItem?'Guardar cambios':'Agregar item'}</button>`;
   formH+=`${C.editingKioskItem?`<button class="btn btn-ghost" onclick="cancelKioskItem()">Cancelar</button>`:''}</div></div>`;
@@ -2030,8 +2047,10 @@ function renderKioskoTab(){
     listH+=`<div style="display:flex;flex-direction:column;gap:6px">`;
     items.forEach(d=>{
       const sc=d.stock!=null?Number(d.stock):null;
+      const cat=kioskCats.find(c=>c._key===d.cat);
       const stockChip=sc!=null?`<span style="font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px;background:${sc===0?'#fee2e2':sc<=5?'#fef3c7':'#d1fae5'};color:${sc===0?'#b91c1c':sc<=5?'#92400e':'#065f46'}">📦 ${sc}</span>`:'';
-      listH+=`<div class="dish-row"><div class="dish-info"><div style="display:flex;align-items:center;gap:6px"><div class="dish-name">🏪 ${d.name}</div>${stockChip}</div>`;
+      listH+=`<div class="dish-row"><div class="dish-info"><div style="display:flex;align-items:center;gap:6px"><div class="dish-name">${cat?cat.icon:'🏪'} ${d.name}</div>${stockChip}</div>`;
+      if(cat)listH+=`<div style="font-size:11px;color:var(--muted)">${cat.label}</div>`;
       if(d.desc)listH+=`<div class="dish-desc">${d.desc}</div>`;
       listH+=`<div class="dish-price-wrap"><span class="dish-price">$${Number(d.price||0).toLocaleString()}</span></div></div>`;
       listH+=`<div class="row-btns"><button class="btn btn-ghost btn-sm" onclick="editKioskItem('${d._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteKioskItem('${d._key}')">✕</button></div></div>`;
@@ -2039,8 +2058,76 @@ function renderKioskoTab(){
     listH+=`</div>`;
   }
   listH+=`</div>`;
-  return `<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
+  return h+`<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
 }
+
+function renderKioskCatsTab(){
+  const cats=getKioskCats();
+  const fc=C.editingKioskCat||C.newKioskCat;
+  let formH=`<div class="card">
+    <div class="card-title">${C.editingKioskCat?'Editar categoría':'Nueva categoría'}</div>
+    <div class="two-col">
+      <div class="form-group"><label>Emoji</label><input value="${fc.icon||'🛍'}" oninput="uKioskCat('icon',this.value)" style="font-size:18px"></div>
+      <div class="form-group"><label>Nombre</label><input placeholder="Ej: Bebidas, Snacks..." value="${fc.label||''}" oninput="uKioskCat('label',this.value)"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="${C.editingKioskCat?'saveKioskCat()':'addKioskCat()'}">
+        ${C.editingKioskCat?'Guardar':'Agregar categoría'}</button>
+      ${C.editingKioskCat?`<button class="btn btn-ghost" onclick="cancelKioskCat()">Cancelar</button>`:''}
+    </div>
+  </div>`;
+  let listH=`<div class="card"><div class="card-title">Categorías (${cats.length})</div>
+    <div style="display:flex;flex-direction:column;gap:8px">`;
+  if(cats.length===0)listH+=`<div class="empty-state">No hay categorías</div>`;
+  cats.forEach((cat,idx)=>{
+    const cnt=Object.values(DB.kioskItems||{}).filter(d=>d.cat===cat._key).length;
+    const isFirst=idx===0,isLast=idx===cats.length-1;
+    listH+=`<div style="display:flex;align-items:center;gap:8px;padding:10px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)">
+      <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0">
+        <button onclick="moveKioskCat('${cat._key}',-1)" ${isFirst?'disabled':''} style="width:22px;height:22px;border-radius:4px;border:0.5px solid var(--border);background:${isFirst?'transparent':'var(--card)'};cursor:${isFirst?'default':'pointer'};font-size:11px;display:flex;align-items:center;justify-content:center">▲</button>
+        <button onclick="moveKioskCat('${cat._key}',1)" ${isLast?'disabled':''} style="width:22px;height:22px;border-radius:4px;border:0.5px solid var(--border);background:${isLast?'transparent':'var(--card)'};cursor:${isLast?'default':'pointer'};font-size:11px;display:flex;align-items:center;justify-content:center">▼</button>
+      </div>
+      <div style="font-size:22px;width:32px;text-align:center">${cat.icon}</div>
+      <div style="flex:1"><div style="font-size:14px;font-weight:500">${cat.label}</div>
+        <div style="font-size:12px;color:var(--muted)">${cnt} item${cnt!==1?'s':''}</div></div>
+      <div class="row-btns">
+        <button class="btn btn-ghost btn-sm" onclick="editKioskCat('${cat._key}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteKioskCat('${cat._key}',${cnt})">✕</button>
+      </div>
+    </div>`;
+  });
+  listH+=`</div></div>`;
+  return `<div class="admin-grid">${formH}${listH}</div>`;
+}
+window.uKioskCat=(f,v)=>{const o=C.editingKioskCat||C.newKioskCat;o[f]=v;};
+window.addKioskCat=()=>{
+  const f=C.newKioskCat;
+  if(!f.label||!f.label.trim()){alert('Ingresá un nombre');return;}
+  const cats=getKioskCats();
+  push(ref(db,'kioskCategories'),{label:f.label.trim(),icon:f.icon||'🛍',order:cats.length});
+  C.newKioskCat={label:'',icon:'🛍'};render();
+};
+window.editKioskCat=key=>{C.editingKioskCat={...DB.kioskCategories[key],_key:key};render();};
+window.saveKioskCat=()=>{
+  const {_key,...data}=C.editingKioskCat;
+  set(ref(db,`kioskCategories/${_key}`),data);
+  C.editingKioskCat=null;render();
+};
+window.cancelKioskCat=()=>{C.editingKioskCat=null;render();};
+window.deleteKioskCat=(key,cnt)=>{
+  if(cnt>0&&!confirm(`Esta categoría tiene ${cnt} item${cnt!==1?'s':''}. ¿Eliminar igual?`))return;
+  remove(ref(db,`kioskCategories/${key}`));
+};
+window.moveKioskCat=async(key,dir)=>{
+  const cats=getKioskCats();
+  const idx=cats.findIndex(c=>c._key===key);
+  const swapIdx=idx+dir;
+  if(swapIdx<0||swapIdx>=cats.length)return;
+  const a=cats[idx],b=cats[swapIdx];
+  await update(ref(db,`kioskCategories/${a._key}`),{order:b.order??swapIdx});
+  await update(ref(db,`kioskCategories/${b._key}`),{order:a.order??idx});
+};
+
 window.uCafStock=val=>{
   const o=C.editingCafItem||C.newCafItem;
   o.stock=val===''||val==null?null:val;
@@ -4407,7 +4494,7 @@ window.removeFromCart=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;e
 window.custAddMitad=key=>{if(C.cart[key])C.cart[key].qty++;refreshMenuWithScroll();};
 window.setCat=c=>{C.customerCat=c;C.custDishId=null;render();scrollActiveCat();};
 window.setCafCat=c=>{C.cafCat=c;render();scrollActiveCat();};
-window.setMenuSection=section=>{C.customerMenuSection=section;C.cafCat='todos';C.custDishId=null;C._catScrollReset=true;render();scrollActiveCat();};
+window.setMenuSection=section=>{C.customerMenuSection=section;C.cafCat='todos';if(section!=='kiosko')C.kioskCat=null;C.custDishId=null;C._catScrollReset=true;render();scrollActiveCat();};
 window.initCustomerCat=()=>{
   const cats=getCats();
   const allDishes=Object.values(DB.dishes);
@@ -4484,7 +4571,19 @@ function renderCafeteriaMenu(mc, menuH, ct, isIndividual){
 }
 
 function renderKioskoMenuCust(mc, menuH, ct, isIndividual){
-  const items=Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k})).filter(d=>d.stock==null||d.stock>0).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
+  const kioskCats=getKioskCats();
+  const allItems=Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k})).filter(d=>d.stock==null||d.stock>0);
+  // Auto-select first cat with items
+  const catsWithItems=kioskCats.filter(c=>allItems.some(d=>d.cat===c._key));
+  if(!C.kioskCat||!catsWithItems.find(c=>c._key===C.kioskCat))
+    C.kioskCat=catsWithItems.length>0?catsWithItems[0]._key:null;
+  // Cat tabs if categories exist
+  if(catsWithItems.length>0){
+    menuH+=`<div class="cat-tabs">`;
+    catsWithItems.forEach(c=>{menuH+=`<button class="cat-tab${C.kioskCat===c._key?' active':''}" onclick="setKioskCat('${c._key}')"><span class="cat-emoji">${c.icon}</span>${c.label}</button>`;});
+    menuH+=`</div>`;
+  }
+  const items=(C.kioskCat&&catsWithItems.length>0?allItems.filter(d=>d.cat===C.kioskCat):allItems).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
   menuH+=`<div class="menu-grid">`;
   items.forEach(d=>{
     const cartKey='kiosk|'+d._key;
@@ -4500,10 +4599,11 @@ function renderKioskoMenuCust(mc, menuH, ct, isIndividual){
       </div>
     </div>`;
   });
-  if(items.length===0)menuH+=`<div class="empty-state" style="grid-column:1/-1">Sin items disponibles en kiosko</div>`;
+  if(items.length===0)menuH+=`<div class="empty-state" style="grid-column:1/-1">Sin items disponibles</div>`;
   menuH+=`</div>`;
   renderCartPanel(mc, menuH, cartCount(), isIndividual, []);
 }
+window.setKioskCat=c=>{C.kioskCat=c;refreshMenuWithScroll();scrollActiveCat();};
 window.quickAddKiosk=id=>{const k='kiosk|'+id;if(!C.cart[k])C.cart[k]={qty:0,_kioskKey:id};C.cart[k].qty++;refreshMenuWithScroll();};
 window.removeFromCartKiosk=id=>{const k='kiosk|'+id;if(C.cart[k]){if(C.cart[k].qty>1)C.cart[k].qty--;else delete C.cart[k];}refreshMenuWithScroll();};
 
