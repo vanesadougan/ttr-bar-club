@@ -2313,11 +2313,12 @@ function renderStockTab(){
       h+=`<div style="padding:6px 14px;background:#fafaf9;border-bottom:0.5px solid var(--border);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${sectionLabel[sec]}</div>`;
       bySection[sec].forEach(d=>{
         const isOpen=(C._stockEdit||{})[`${sec}-${d._key}`];
-        h+=itemRow(d._key,d.name,d.stock||0,'u',d.alertAt,d._src,'',d);
-        // Reemplazar el botón de acción con editar
-        // Mini-form expandible
         const _allBarcodes=(C._stockEditData&&C._stockEditData[`${sec}-${d._key}`]?.barcodes)||[];
-        h+=`<div style="grid-column:1/-1;display:${isOpen?'block':'none'};padding:10px 14px;background:#f8f7f4;border-bottom:0.5px solid var(--border)" id="stock-edit-${sec}-${d._key}">
+        h+=`<div style="border-bottom:0.5px solid var(--border)">`;
+        h+=itemRow(d._key,d.name,d.stock||0,'u',d.alertAt,d._src,'',d);
+        // Mini-form expandible — dentro del mismo contenedor
+        if(isOpen){
+          h+=`<div style="padding:10px 14px;background:#f8f7f4;">
           <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">
             <div class="form-group" style="margin:0;flex:1;min-width:120px">
               <label style="font-size:11px">Alerta ≤</label>
@@ -2329,13 +2330,15 @@ function renderStockTab(){
           <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">🔍 Códigos de barras</div>
           ${_allBarcodes.length>0?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${_allBarcodes.map((bc,bi)=>`<div style="display:flex;align-items:center;gap:4px;background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:3px 8px;font-family:monospace;font-size:12px">${bc}<button onclick="stockDirectRemoveBarcode('${d._key}','${sec}',${bi})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:12px;line-height:1;margin-left:2px">✕</button></div>`).join('')}</div>`:'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Sin códigos asignados</div>'}
           <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
-            <input id="new-barcode-${sec}-${d._key}" placeholder="Escaneá o escribí un código nuevo" 
+            <input id="new-barcode-${sec}-${d._key}" placeholder="Escaneá o escribí un código nuevo"
               style="flex:1;padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:monospace;font-size:13px"
               onkeydown="if(event.key==='Enter'){stockDirectAddBarcode('${d._key}','${sec}');event.preventDefault();}">
             <button onclick="stockDirectAddBarcode('${d._key}','${sec}')" style="padding:5px 12px;border-radius:6px;border:0.5px solid var(--brand);color:var(--brand);background:transparent;font-size:13px;cursor:pointer;font-family:inherit">+ Agregar</button>
           </div>
           <button onclick="stockDirectSave('${d._key}','${sec}')" style="padding:6px 14px;border-radius:6px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
         </div>`;
+        }
+        h+=`</div>`;
       });
     });
     h+=`</div>`;
@@ -2351,29 +2354,24 @@ window.toggleStockEdit=(key,src)=>{
   const k=`${src}-${key}`;
   const opening=!C._stockEdit[k];
   C._stockEdit[k]=opening;
-  // Al abrir: inicializar estado de barcodes desde DB para evitar lecturas parciales
+  // Al abrir: inicializar estado de barcodes y alertAt desde DB
   if(opening){
     if(!C._stockEditData) C._stockEditData={};
     if(!C._stockEditData[k]) C._stockEditData[k]={};
+    const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
+    const item=dbObj[key]||{};
+    if(!('alertAt' in C._stockEditData[k]))C._stockEditData[k].alertAt=item.alertAt!=null?item.alertAt:'';
     if(!('barcodes' in C._stockEditData[k])){
-      const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
-      const item=dbObj[key]||{};
-      // Inicializar alertAt también para que siempre se guarde
-      if(!('alertAt' in C._stockEditData[k]))C._stockEditData[k].alertAt=item.alertAt!=null?item.alertAt:'';
-      // Preferir barcodes[] si existe; solo usar barcode legacy si no hay barcodes[]
       let bs=[];
-      if(item.barcodes&&item.barcodes.length>0){
-        bs=[...item.barcodes];
-      } else if(item.barcode){
-        bs=[item.barcode];
-      }
+      if(item.barcodes&&item.barcodes.length>0)bs=[...item.barcodes];
+      else if(item.barcode)bs=[item.barcode];
       C._stockEditData[k].barcodes=[...new Set(bs.filter(Boolean))];
     }
   }
   render();
   setTimeout(()=>{
-    const el=document.getElementById(`stock-edit-${src}-${key}`);
-    if(el){const inp=el.querySelector('input');if(inp)inp.focus();}
+    const inp=document.getElementById(`new-barcode-${src}-${key}`);
+    if(inp)inp.focus();
   },50);
 };
 
@@ -4844,7 +4842,7 @@ function updateTopbarCart(){
   const show=isCustomer||isWaiter;
   cartEl.style.display=show?'block':'none';
   const waiterBtn=document.getElementById('topbar-waiter-btn');
-  if(waiterBtn)waiterBtn.style.display=isCustomer?'block':'none';
+  if(waiterBtn)waiterBtn.style.display=(isCustomer&&!isMenuRoute)?'block':'none';
   if(show){
     const ct=isWaiter?waiterCartCount():cartCount();
     countEl.textContent=ct;
