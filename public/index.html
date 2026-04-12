@@ -2328,10 +2328,14 @@ window.toggleStockEdit=(key,src)=>{
     if(!('barcodes' in C._stockEditData[k])){
       const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
       const item=dbObj[key]||{};
-      const bs=[];
-      if(item.barcode&&!bs.includes(item.barcode))bs.push(item.barcode);
-      if(item.barcodes)item.barcodes.forEach(b=>{if(b&&!bs.includes(b))bs.push(b);});
-      C._stockEditData[k].barcodes=bs;
+      // Preferir barcodes[] si existe; solo usar barcode legacy si no hay barcodes[]
+      let bs=[];
+      if(item.barcodes&&item.barcodes.length>0){
+        bs=[...item.barcodes];
+      } else if(item.barcode){
+        bs=[item.barcode];
+      }
+      C._stockEditData[k].barcodes=[...new Set(bs.filter(Boolean))];
     }
   }
   render();
@@ -2356,9 +2360,9 @@ window.stockDirectSave=async(key,src)=>{
   const updates={};
   if('alertAt' in data) updates.alertAt=data.alertAt===''||data.alertAt==null?null:Number(data.alertAt);
   if('barcodes' in data){
-    const bcs=data.barcodes.filter(b=>b&&b.trim());
+    const bcs=[...new Set(data.barcodes.filter(b=>b&&b.trim()))];
     updates.barcodes=bcs;
-    updates.barcode=bcs[0]||null;
+    updates.barcode=deleteField(); // eliminar campo legacy para no duplicar
   }
   if(Object.keys(updates).length>0){
     await update(ref(db,`${dbPath}/${key}`),updates);
@@ -4076,10 +4080,11 @@ function renderMenuOnly(mc){
   const hasCaf=allCafItems.length>0;
   const section=C.customerMenuSection||'platos';
 
-  // Auto-seleccionar primera categoría
-  if(section==='platos'&&!C.customerCat){
-    const first=cats.find(c=>!c.isPromo&&allDishes.some(d=>d.cat===c._key));
-    if(first)C.customerCat=first._key;
+  // Auto-seleccionar primera categoría siempre
+  if(section==='platos'){
+    const firstCat=cats.find(c=>!c.isPromo&&allDishes.some(d=>d.cat===c._key));
+    if(!C.customerCat||C.customerCat==='todos'||!cats.find(c=>c._key===C.customerCat))
+      if(firstCat)C.customerCat=firstCat._key;
   }
 
   let h='<div class="content"><div style="max-width:600px;margin:0 auto">';
@@ -4097,7 +4102,8 @@ function renderMenuOnly(mc){
 
   if(section==='cafeteria'){
     const cafCats=getCafCats().filter(c=>allCafItems.some(d=>d.cat===c._key));
-    if(!C.cafCat&&cafCats.length)C.cafCat=cafCats[0]._key;
+    if(!C.cafCat||C.cafCat==='todos'||!cafCats.find(c=>c._key===C.cafCat))
+      if(cafCats.length)C.cafCat=cafCats[0]._key;
     h+=`<div class="cat-tabs">`;
     cafCats.forEach(c=>{h+=`<button class="cat-tab${C.cafCat===c._key?' active':''}" onclick="setCafCat('${c._key}')"><span class="cat-emoji">${c.icon}</span>${c.label}</button>`;});
     h+=`</div><div class="menu-grid">`;
@@ -4178,7 +4184,12 @@ function renderMenuWithCart(mc){
   const dishes=allDishes.filter(d=>!d.unavailable);
   const cats=getCats();
   const allCatIds=[...cats.map(c=>c._key)].filter(id=>dishes.some(d=>d.cat===id));
-  const filtered=(C.customerCat==='todos'||!C.customerCat)?dishes:dishes.filter(d=>d.cat===C.customerCat);
+  // Auto-seleccionar primera categoría siempre
+  if(!C.customerCat||C.customerCat==='todos'||!allCatIds.includes(C.customerCat)){
+    const firstCat=cats.find(c=>!c.isPromo&&allCatIds.includes(c._key));
+    if(firstCat)C.customerCat=firstCat._key;
+  }
+  const filtered=dishes.filter(d=>d.cat===C.customerCat);
   const tabLabel=id=>{
     const cat=cats.find(c=>c._key===id);if(!cat)return id;
     const cnt=dishes.filter(d=>d.cat===id).length;
@@ -4365,13 +4376,17 @@ function renderCafeteriaMenu(mc, menuH, ct, isIndividual){
   const items=allItems.filter(d=>!d.unavailable);
   const cats=getCafCats();
   const allCatIds=cats.map(c=>c._key).filter(id=>items.some(d=>d.cat===id));
-  const filtered=(C.cafCat==='todos'||!C.cafCat)?items:items.filter(d=>d.cat===C.cafCat);
+  // Auto-seleccionar primera categoría siempre
+  if(!C.cafCat||C.cafCat==='todos'||!allCatIds.includes(C.cafCat)){
+    if(allCatIds.length)C.cafCat=allCatIds[0];
+  }
+  const filtered=C.cafCat?items.filter(d=>d.cat===C.cafCat):items;
 
   menuH+=`<div class="cat-tabs">`;
   allCatIds.forEach(cid=>{
     const cat=cats.find(x=>x._key===cid);
     if(!cat)return;
-    menuH+=`<button class="cat-tab${C.cafCat===cid?' active':''}" onclick="setCafMenuCat('${cid}')">${cat.icon} ${cat.label}</button>`;
+    menuH+=`<button class="cat-tab${C.cafCat===cid?' active':''}" onclick="setCafMenuCat('${cid}')"><span class="cat-emoji">${cat.icon}</span>${cat.label}</button>`;
   });
   menuH+=`</div><div class="menu-grid">`;
 
