@@ -2280,7 +2280,7 @@ function renderStockTab(){
         h+=itemRow(d._key,d.name,d.stock||0,'u',d.alertAt,d._src,'',d);
         // Reemplazar el botón de acción con editar
         // Mini-form expandible
-        const _allBarcodes=(()=>{const bs=[];if(d.barcode)bs.push(d.barcode);if(d.barcodes)bs.push(...d.barcodes);return bs;})();
+        const _allBarcodes=(()=>{const k=`${sec}-${d._key}`;if(C._stockEditData&&C._stockEditData[k]&&'barcodes' in C._stockEditData[k])return C._stockEditData[k].barcodes;const bs=[];if(d.barcode)bs.push(d.barcode);if(d.barcodes)d.barcodes.forEach(b=>{if(!bs.includes(b))bs.push(b);});return bs;})();
         h+=`<div style="grid-column:1/-1;display:${isOpen?'block':'none'};padding:10px 14px;background:#f8f7f4;border-bottom:0.5px solid var(--border)" id="stock-edit-${sec}-${d._key}">
           <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">
             <div class="form-group" style="margin:0;flex:1;min-width:120px">
@@ -2336,10 +2336,10 @@ window.stockDirectSave=async(key,src)=>{
   const dbPath=src==='dishes'?'dishes':src==='cafeteria'?'cafeteriaItems':'kioskItems';
   const updates={};
   if('alertAt' in data) updates.alertAt=data.alertAt===''||data.alertAt==null?null:Number(data.alertAt);
-  // Save barcodes array (migrate old single barcode to array)
   if('barcodes' in data){
-    updates.barcodes=data.barcodes;
-    updates.barcode=data.barcodes[0]||null; // keep legacy field in sync
+    const bcs=data.barcodes.filter(b=>b&&b.trim());
+    updates.barcodes=bcs;
+    updates.barcode=bcs[0]||null;
   }
   if(Object.keys(updates).length>0){
     await update(ref(db,`${dbPath}/${key}`),updates);
@@ -2349,37 +2349,40 @@ window.stockDirectSave=async(key,src)=>{
   render();
 };
 
+// Get current barcodes from edit state or DB
+function _getBarcodes(key,src){
+  const k=`${src}-${key}`;
+  if(C._stockEditData&&C._stockEditData[k]&&'barcodes' in C._stockEditData[k]) return C._stockEditData[k].barcodes;
+  const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
+  const item=dbObj[key]||{};
+  const bs=[];
+  if(item.barcode)bs.push(item.barcode);
+  if(item.barcodes)item.barcodes.forEach(b=>{if(!bs.includes(b))bs.push(b);});
+  return bs;
+}
+
 window.stockDirectAddBarcode=(key,src)=>{
   const inp=document.getElementById(`new-barcode-${src}-${key}`);
   const val=(inp?inp.value:'').trim();
   if(!val)return;
-  const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
-  const item=dbObj[key];if(!item)return;
-  // Build current barcodes list
   const k=`${src}-${key}`;
-  if(!C._stockEditData) C._stockEditData={};
-  if(!C._stockEditData[k]) C._stockEditData[k]={};
-  const existing=(C._stockEditData[k].barcodes)||(() => {
-    const bs=[];if(item.barcode)bs.push(item.barcode);if(item.barcodes)bs.push(...item.barcodes);return bs;
-  })();
-  if(!existing.includes(val)) existing.push(val);
-  C._stockEditData[k].barcodes=existing;
-  if(inp)inp.value='';
+  if(!C._stockEditData)C._stockEditData={};
+  if(!C._stockEditData[k])C._stockEditData[k]={};
+  const current=_getBarcodes(key,src);
+  if(!current.includes(val))current.push(val);
+  C._stockEditData[k].barcodes=[...current];
+  // Re-render solo el form sin perder foco
   render();
-  setTimeout(()=>{const el=document.getElementById(`stock-edit-${src}-${key}`);if(el){const inp2=el.querySelector(`#new-barcode-${src}-${key}`);if(inp2)inp2.focus();}},50);
+  setTimeout(()=>{const i=document.getElementById(`new-barcode-${src}-${key}`);if(i){i.value='';i.focus();}},30);
 };
 
 window.stockDirectRemoveBarcode=(key,src,idx)=>{
-  const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
-  const item=dbObj[key];if(!item)return;
   const k=`${src}-${key}`;
-  if(!C._stockEditData) C._stockEditData={};
-  if(!C._stockEditData[k]) C._stockEditData[k]={};
-  const existing=(C._stockEditData[k].barcodes)||(() => {
-    const bs=[];if(item.barcode)bs.push(item.barcode);if(item.barcodes)bs.push(...item.barcodes);return bs;
-  })();
-  existing.splice(idx,1);
-  C._stockEditData[k].barcodes=existing;
+  if(!C._stockEditData)C._stockEditData={};
+  if(!C._stockEditData[k])C._stockEditData[k]={};
+  const current=[..._getBarcodes(key,src)];
+  current.splice(idx,1);
+  C._stockEditData[k].barcodes=current;
   render();
 };
 // ── BARCODE SCANNER ───────────────────────────────
