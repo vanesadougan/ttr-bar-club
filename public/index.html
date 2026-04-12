@@ -697,22 +697,23 @@ window.adminTab=t=>{C.adminTab=t;render();};
 // ── ADMIN: GESTIÓN DE MOZAS ───────────────────────
 function renderWaitersAdminTab(){
   const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-  const fw=C.editingWaiter||C.newWaiter||{name:''};
+  const fw=C.editingWaiter||C.newWaiter||{name:'',pin:''};
   let formH='<div class="card"><div class="card-title">'+(C.editingWaiter?'✏️ Editar moza/mozo':'+ Agregar moza/mozo')+'</div>';
   formH+='<div class="form-group"><label>Nombre</label><input placeholder="Ej: María, Juan..." value="'+(fw.name||'')+'" oninput="uWaiter(\'name\',this.value)"></div>';
+  formH+='<div class="form-group"><label>PIN <span style="font-size:11px;font-weight:400;color:var(--muted)">(4 dígitos)</span></label><input type="tel" maxlength="4" placeholder="Ej: 1234" value="'+(fw.pin||'')+'" oninput="uWaiter(\'pin\',this.value.replace(/\\D/g,\'\').slice(0,4))"></div>';
   formH+='<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="'+(C.editingWaiter?'saveEditWaiter()':'addWaiter()') +'">'+(C.editingWaiter?'Guardar':'Agregar')+'</button>'+(C.editingWaiter?'<button class="btn btn-ghost" onclick="cancelEditWaiter()">Cancelar</button>':'')+'</div></div>';
   let listH='<div class="card"><div class="card-title">Mozas/Mozos ('+waiters.length+')</div><div style="display:flex;flex-direction:column;gap:8px">';
   if(waiters.length===0){listH+='<div class="empty-state">No hay mozas/mozos cargados</div>';}
   waiters.forEach(w=>{
-    listH+=`<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)"><div style="width:36px;height:36px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${(w.name||'?')[0].toUpperCase()}</div><div style="flex:1;font-size:14px;font-weight:500">${w.name}</div><div class="row-btns"><button class="btn btn-ghost btn-sm" onclick="editWaiter('${w._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteWaiter('${w._key}')">✕</button></div></div>`;
+    listH+=`<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)"><div style="width:36px;height:36px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${(w.name||'?')[0].toUpperCase()}</div><div style="flex:1"><div style="font-size:14px;font-weight:500">${w.name}</div><div style="font-size:11px;color:var(--muted)">PIN: ${w.pin?'••••':'sin PIN'}</div></div><div class="row-btns"><button class="btn btn-ghost btn-sm" onclick="editWaiter('${w._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteWaiter('${w._key}')">✕</button></div></div>`;
   });
   listH+='</div></div>';
   return`<div class="admin-grid">${formH}${listH}</div>`;
 }
-window.uWaiter=(field,val)=>{const o=C.editingWaiter||(C.newWaiter=C.newWaiter||{name:''});o[field]=val;};
-window.addWaiter=()=>{const d=C.newWaiter||{};if(!d.name||!d.name.trim()){alert('Ingresá el nombre');return;}push(ref(db,'waiters'),{name:d.name.trim()});C.newWaiter={name:''};render();};
+window.uWaiter=(field,val)=>{const o=C.editingWaiter||(C.newWaiter=C.newWaiter||{name:'',pin:''});o[field]=val;};
+window.addWaiter=()=>{const d=C.newWaiter||{};if(!d.name||!d.name.trim()){alert('Ingresá el nombre');return;}if(!d.pin||String(d.pin).length!==4){alert('Ingresá un PIN de 4 dígitos');return;}push(ref(db,'waiters'),{name:d.name.trim(),pin:String(d.pin)});C.newWaiter={name:'',pin:''};render();};
 window.editWaiter=key=>{C.editingWaiter={...DB.waiters[key],_key:key};render();};
-window.saveEditWaiter=()=>{const {_key,...data}=C.editingWaiter;set(ref(db,`waiters/${_key}`),data);C.editingWaiter=null;render();};
+window.saveEditWaiter=()=>{const {_key,...data}=C.editingWaiter;if(!data.pin||String(data.pin).length!==4){alert('Ingresá un PIN de 4 dígitos');return;}set(ref(db,`waiters/${_key}`),{...data,pin:String(data.pin)});C.editingWaiter=null;render();};
 window.cancelEditWaiter=()=>{C.editingWaiter=null;render();};
 window.deleteWaiter=key=>{if(confirm('¿Eliminar esta moza/mozo?'))remove(ref(db,`waiters/${key}`));};
 
@@ -950,8 +951,7 @@ function renderWaiterMode(){
   else renderWaiterMenu(mc);
 }
 function renderWaiterSelectScreen(mc){
-  const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-  // Si firstLoad aún true, los datos pueden no haber llegado — mostrar spinner
+  const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k}));
   if(waiters.length===0){
     if(firstLoad){
       mc.innerHTML=`<div class="content"><div class="mode-screen"><div class="spinner"></div><div style="font-size:14px;color:var(--muted);margin-top:12px">Cargando...</div></div></div>`;
@@ -960,11 +960,55 @@ function renderWaiterSelectScreen(mc){
     }
     return;
   }
-  let h=`<div class="content"><div class="mesa-screen"><div style="width:100%;max-width:480px"><div class="mesa-title" style="margin-bottom:.5rem">¡Hola! 👋</div><div style="font-size:16px;color:var(--muted);margin-bottom:1.5rem;text-align:center">¿Quién está tomando pedidos?</div><div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">`;
-  waiters.forEach(w=>{h+=`<button onclick="selectWaiter('${w._key}','${w.name.replace(/'/g,"\'")}' )" style="padding:18px 14px;border-radius:12px;border:0.5px solid var(--border);background:var(--card);font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:center;gap:8px"><div style="width:44px;height:44px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700">${w.name[0].toUpperCase()}</div>${w.name}</button>`;});
-  h+=`</div></div><div style="margin-top:2rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div></div></div>`;
-  mc.innerHTML=h;
+  const pin=C._waiterPinInput||'';
+  const error=C._waiterPinError||'';
+  const dots='●'.repeat(pin.length)+'○'.repeat(4-pin.length);
+  mc.innerHTML=`<div class="content"><div class="mode-screen">
+    <div style="text-align:center;margin-bottom:2rem">
+      <div style="font-size:40px;margin-bottom:8px">🔐</div>
+      <div style="font-size:22px;font-weight:700;margin-bottom:4px">TTR Bar Club</div>
+      <div style="font-size:14px;color:var(--muted)">Ingresá tu PIN para continuar</div>
+    </div>
+    <div style="font-size:32px;letter-spacing:16px;text-align:center;margin-bottom:12px;color:var(--brand)">${dots}</div>
+    ${error?`<div style="font-size:13px;color:#b91c1c;text-align:center;margin-bottom:12px;background:#fee2e2;padding:8px 16px;border-radius:8px">${error}</div>`:'<div style="height:37px;margin-bottom:12px"></div>'}
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:280px">
+      ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>
+        k===''?'<div></div>':`<button onclick="waiterPinKey('${k}')" style="padding:18px;border-radius:12px;border:0.5px solid var(--border);background:var(--card);font-size:22px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .1s">${k}</button>`
+      ).join('')}
+    </div>
+    <div style="margin-top:2rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div>
+  </div></div>`;
 }
+window.waiterPinKey=key=>{
+  if(!C._waiterPinInput) C._waiterPinInput='';
+  if(key==='⌫'){
+    C._waiterPinInput=C._waiterPinInput.slice(0,-1);
+    C._waiterPinError='';
+    renderWaiterSelectScreen(document.getElementById('main-content'));
+    return;
+  }
+  if(C._waiterPinInput.length>=4) return;
+  C._waiterPinInput+=String(key);
+  if(C._waiterPinInput.length===4){
+    // Buscar moza con ese PIN
+    const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k}));
+    const found=waiters.find(w=>String(w.pin)===C._waiterPinInput);
+    if(found){
+      C._waiterPinInput='';
+      C._waiterPinError='';
+      C.waiterId=found._key;
+      C.waiterName=found.name;
+      C.waiterStep='mesas';
+      render();
+    } else {
+      C._waiterPinError='PIN incorrecto. Intentá de nuevo.';
+      setTimeout(()=>{C._waiterPinInput='';C._waiterPinError='';renderWaiterSelectScreen(document.getElementById('main-content'));},1000);
+      renderWaiterSelectScreen(document.getElementById('main-content'));
+    }
+    return;
+  }
+  renderWaiterSelectScreen(document.getElementById('main-content'));
+};
 window.selectWaiter=(id,name)=>{C.waiterId=id;C.waiterName=name;C.waiterStep='mesas';render();};
 
 function renderWaiterMesasScreen(mc){
