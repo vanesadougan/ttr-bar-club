@@ -1417,7 +1417,7 @@ function renderWaiterMenu(mc){
   cartH+='</div><div class="cart-footer">';
   if(cartEntries.length>0){cartH+='<div class="cart-total-row big"><span>Total</span><span>$'+total.toLocaleString()+'</span></div><button class="btn btn-primary btn-block" style="margin-top:10px" onclick="waiterPlaceOrder()">Confirmar pedido</button><button class="btn btn-ghost btn-block" style="margin-top:6px;color:var(--danger);border-color:var(--danger)" onclick="waiterLimpiarCarrito()">Limpiar carrito</button>';}
   cartH+='<button class="btn btn-outline btn-block" style="margin-top:8px" onclick="waiterNuevaMesa()">← Mis mesas</button></div>';
-  const _wct=waiterCartCount();const _wtotal=Object.entries(C.waiterCart).reduce((s,[k,v])=>{if(k.includes('|')){const id=k.split('|')[0];const d=DB.dishes[id]||DB.cafeteriaItems[id];if(!d)return s;const fp=(!!DB.cafeteriaItems[id])?Number(d.price):dishFinalPrice(d,v.qty);return s+fp*v.qty;}return s;},0);
+  const _wct=waiterCartCount();const _wtotal=waiterCartTotal();
   mc.innerHTML='<div class="content" style="padding:0;max-width:none"><div class="menu-layout"><div class="menu-col waiter-menu-col">'+menuH+'</div><div class="cart-col"><div class="cart-widget">'+cartH+'</div></div></div></div>'+(_wct>0?`<div class="mobile-cart-bar"><div class="mobile-cart-bar-left"><span class="mobile-cart-badge">${_wct}</span><span style="font-size:14px;font-weight:500">$${_wtotal.toLocaleString()}</span></div><button onclick="showWaiterCartSheet()" style="padding:10px 20px;border-radius:10px;border:none;background:#fff;color:var(--brand);font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;flex-shrink:0">Ver carrito</button></div>`:'');
   updateTopbarCart();
 }
@@ -1435,8 +1435,13 @@ window.showWaiterCartSheet=()=>{
   let itemsH='';
   let total=0;
   cartEntries.forEach(([k,v])=>{
-    if(!k.includes('|'))return;
-    const id=k.split('|')[0];
+    // mitad y mitad
+    if(k.startsWith('mitad|')){
+      total+=(v._mitadPrice||0)*v.qty;
+      itemsH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🍕</div><div class="cart-item-info"><div class="cart-item-name">${v._mitadName||'Pizza M&M'}</div></div><div class="cart-qty"><button class="cqbtn" onclick="waiterRemove('${k}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="waiterQuickAdd('${k}','dish')">+</button></div><div class="cart-item-price">$${((v._mitadPrice||0)*v.qty).toLocaleString()}</div></div>`;
+      return;
+    }
+    const id=k.includes('|')?k.split('|')[0]:k;
     const d=DB.dishes[id]||DB.cafeteriaItems[id];if(!d)return;
     const isCaf=!!DB.cafeteriaItems[id];
     const fp=isCaf?Number(d.price):dishFinalPrice(d,v.qty);
