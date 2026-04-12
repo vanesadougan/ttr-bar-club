@@ -992,7 +992,13 @@ function renderWaiterMesasScreen(mc){
   if(nMesas===0){
     h+=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted)"><div style="font-size:40px;margin-bottom:12px">🍽️</div><div style="font-size:16px;font-weight:500;margin-bottom:6px">Sin mesas en curso</div><div style="font-size:14px">Tocá "+ Nueva mesa" para tomar el primer pedido</div></div>`;
   } else {
-    Object.entries(byTable).forEach(([tableId,orders])=>{
+    Object.entries(byTable)
+      .sort(([aId],[bId])=>{
+        const aL=(DB.tables[aId]?.label||aId).toLowerCase();
+        const bL=(DB.tables[bId]?.label||bId).toLowerCase();
+        return aL.localeCompare(bL,'es',{numeric:true});
+      })
+      .forEach(([tableId,orders])=>{
       const table=DB.tables[tableId];
       const tLabel=table?table.label:tableId;
       const totalMesa=orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
@@ -3355,7 +3361,9 @@ window.toggleOrderExpand=tableId=>{
 };
 window.adminGroupCobrado=async keys=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
-  const pm=await showPaymentChoiceModal(null);
+  // Verificar si ya tienen medio de pago
+  const existingPm=keys.map(k=>DB.orders[k]?.paymentMethod).find(Boolean)||null;
+  const pm=existingPm||(await showPaymentChoiceModal(null));
   if(!pm)return;
   const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
   let total=0;
