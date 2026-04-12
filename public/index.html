@@ -1543,150 +1543,127 @@ function renderDishesTab(){
   formH+='<div style="flex:1"><label style="font-size:11px;color:var(--muted)">Alerta ≤ <span style="color:#b91c1c;font-weight:600">*obligatorio</span></label><input type="number" min="0" placeholder="Ej: 3" value="'+(f.alertAt!=null&&f.alertAt!==''?f.alertAt:'')+'" oninput="uF(\'dish\',\'alertAt\',this.value)" style="padding:4px 8px;height:30px;font-size:12px"></div>';
   formH+='</div>';
 
-  // ── Sección AVANZADO (barcode)
+  // ── Sección AVANZADO (agrupa todo lo opcional)
   const openAvanz=sec.avanzado||false;
-  formH+='<div class="form-section"><div class="form-section-header" onclick="toggleDishSection(\'avanzado\')">';
-  formH+='<span>⚙️ Avanzado'+(f.barcode?' <span style="font-size:11px;background:#f3f4f6;color:#374151;padding:1px 7px;border-radius:10px">🔍 Código cargado</span>':'')+'</span><span>'+(openAvanz?'▲':'▼')+'</span></div>';
+  const types=f.types||[];
+  const isMM=f.isMitadMitad||false;
+  const allDishIngs=Object.entries(DB.ingredients||{}).map(([k,v])=>({...v,_key:k}));
+  const recipe=f.recipe||[];
+  const _hasAdvBadges=(f.barcode?1:0)+(types.length>0||f.hasTypes?1:0)+(isMM?1:0)+(ings.length>0?1:0)+(recipe.length>0?1:0)+(isPromo?1:0);
+  formH+='<div class="form-section">';
+  formH+='<div class="form-section-header" onclick="toggleDishSection(\'avanzado\')">';
+  formH+='<span>⚙️ Avanzado'+(_hasAdvBadges>0?' <span style="font-size:11px;background:#f3f4f6;color:#374151;padding:1px 7px;border-radius:10px">'+_hasAdvBadges+' opcion'+(_hasAdvBadges!==1?'es':'')+'</span>':'')+'</span><span>'+(openAvanz?'▲':'▼')+'</span></div>';
   if(openAvanz){
-    formH+='<div class="form-section-body">';
-    formH+='<div class="form-group" style="margin-bottom:0"><label style="font-size:12px">🔍 Código de barras <span style="font-weight:400;color:var(--muted)">(opcional)</span></label><input placeholder="Escaneá o escribí el código" value="'+(f.barcode||'')+'" oninput="uF(\'dish\',\'barcode\',this.value)" style="font-family:monospace;padding:4px 8px;height:30px;font-size:12px"></div>';
-    formH+='</div>';
-  }
-  formH+='</div>';
+    formH+='<div class="form-section-body" style="padding:0">';
 
-  // ── Sección PROMO (solo si cat es promo)
-  if(isPromo){
-    const open=sec.promo!==false;
-    formH+='<div class="form-section"><div class="form-section-header" onclick="toggleDishSection(\'promo\')">';
-    formH+='<span>🔥 Promo del día</span><span>'+(open?'▲':'▼')+'</span></div>';
-    if(open){
-      formH+='<div class="form-section-body">';
-      const is2x1=f.is2x1;
-      formH+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><label class="toggle-switch"><input type="checkbox" '+(is2x1?'checked':'')+' onchange="uF(\'dish\',\'is2x1\',this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500;color:#92400e">Promoción 2x1</span></div>';
-      if(is2x1){
-        const p=Number(f.price)||0;
-        formH+='<div class="discount-preview"><span style="color:var(--muted)">Al pedir 2:</span><span style="text-decoration:line-through;color:var(--muted)">$'+(p*2).toLocaleString()+'</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">2x1</span><strong style="color:var(--accent)">$'+p.toLocaleString()+'</strong></div>';
-      } else {
-        formH+='<div class="form-group" style="margin-bottom:6px"><label style="color:#92400e">Descuento (%)</label><input type="number" min="0" max="99" placeholder="Ej: 20" value="'+(f.promoDiscount||'')+'" oninput="uF(\'dish\',\'promoDiscount\',this.value)" style="border-color:#fed7aa"></div>';
-        const finalPrice=f.promoDiscount>0&&f.price?Math.round(Number(f.price)*(1-Number(f.promoDiscount)/100)):null;
-        formH+=finalPrice
-          ?'<div class="discount-preview" id="discount-preview"><span style="color:var(--muted)">Normal:</span><span style="text-decoration:line-through;color:var(--muted)">$'+Number(f.price).toLocaleString()+'</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">-'+f.promoDiscount+'%</span><strong style="color:var(--accent)">$'+finalPrice.toLocaleString()+'</strong></div>'
-          :'<div class="discount-preview" id="discount-preview" style="font-size:12px;color:#92400e">Ingresá precio y descuento.</div>';
+    // Barcode
+    formH+='<div style="padding:10px 14px;border-bottom:0.5px solid var(--border)">';
+    formH+='<div class="form-group" style="margin-bottom:0"><label style="font-size:12px">🔍 Código de barras <span style="font-weight:400;color:var(--muted)">(opcional)</span></label>';
+    formH+='<input placeholder="Escaneá o escribí el código" value="'+(f.barcode||'')+'" oninput="uF(\'dish\',\'barcode\',this.value)" style="font-family:monospace;padding:4px 8px;height:30px;font-size:12px"></div></div>';
+
+    // Promo
+    if(isPromo){
+      const openPromo=sec.promo!==false;
+      formH+='<div style="padding:10px 14px;border-bottom:0.5px solid var(--border)">';
+      formH+='<div class="form-section-header" onclick="toggleDishSection(\'promo\')" style="padding:0;margin-bottom:'+(openPromo?'10':'0')+'px"><span>🔥 Promo del día</span><span>'+(openPromo?'▲':'▼')+'</span></div>';
+      if(openPromo){
+        const is2x1=f.is2x1;
+        formH+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><label class="toggle-switch"><input type="checkbox" '+(is2x1?'checked':'')+' onchange="uF(\'dish\',\'is2x1\',this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px;font-weight:500;color:#92400e">Promoción 2x1</span></div>';
+        if(is2x1){
+          const p=Number(f.price)||0;
+          formH+='<div class="discount-preview"><span style="color:var(--muted)">Al pedir 2:</span><span style="text-decoration:line-through;color:var(--muted)">$'+(p*2).toLocaleString()+'</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">2x1</span><strong style="color:var(--accent)">$'+p.toLocaleString()+'</strong></div>';
+        } else {
+          formH+='<div class="form-group" style="margin-bottom:6px"><label style="color:#92400e">Descuento (%)</label><input type="number" min="0" max="99" placeholder="Ej: 20" value="'+(f.promoDiscount||'')+'" oninput="uF(\'dish\',\'promoDiscount\',this.value)" style="border-color:#fed7aa"></div>';
+          const finalPrice=f.promoDiscount>0&&f.price?Math.round(Number(f.price)*(1-Number(f.promoDiscount)/100)):null;
+          formH+=finalPrice?'<div class="discount-preview" id="discount-preview"><span style="color:var(--muted)">Normal:</span><span style="text-decoration:line-through;color:var(--muted)">$'+Number(f.price).toLocaleString()+'</span><span>→</span><span style="font-size:11px;font-weight:600;color:#c2410c;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">-'+f.promoDiscount+'%</span><strong style="color:var(--accent)">$'+finalPrice.toLocaleString()+'</strong></div>':'<div class="discount-preview" id="discount-preview" style="font-size:12px;color:#92400e">Ingresá precio y descuento.</div>';
+        }
       }
       formH+='</div>';
     }
-    formH+='</div>';
-  }
 
-  // ── Sección TIPOS
-  const types=f.types||[];
-  const openTipos=sec.tipos||false;
-  formH+='<div class="form-section"><div class="form-section-header" onclick="toggleDishSection(\'tipos\')">';
-  formH+='<span>↕ Tipos / variantes'+(types.length>0?' <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 7px;border-radius:10px">'+types.length+'</span>':'')+'</span><span>'+(openTipos?'▲':'▼')+'</span></div>';
-  if(openTipos){
-    formH+='<div class="form-section-body">';
-    if(!f.hasTypes){
-      formH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">El comensal debe elegir uno antes de agregar</span><label class="toggle-switch"><input type="checkbox" onchange="toggleHasTypes(this.checked)"><span class="toggle-slider"></span></label></div>';
-    } else {
-      formH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Activo — comensal debe elegir uno</span><label class="toggle-switch"><input type="checkbox" checked onchange="toggleHasTypes(this.checked)"><span class="toggle-slider"></span></label></div>';
-      // Type list with price fields
-      if(types.length===0){
-        formH+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Sin tipos aún</div>';
+    // Tipos
+    const openTipos=sec.tipos||false;
+    formH+='<div style="padding:10px 14px;border-bottom:0.5px solid var(--border)">';
+    formH+='<div class="form-section-header" onclick="toggleDishSection(\'tipos\')" style="padding:0;margin-bottom:'+(openTipos?'10':'0')+'px">';
+    formH+='<span>↕ Tipos / variantes'+(types.length>0?' <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 7px;border-radius:10px">'+types.length+'</span>':'')+'</span><span>'+(openTipos?'▲':'▼')+'</span></div>';
+    if(openTipos){
+      if(!f.hasTypes){
+        formH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">El comensal debe elegir uno antes de agregar</span><label class="toggle-switch"><input type="checkbox" onchange="toggleHasTypes(this.checked)"><span class="toggle-slider"></span></label></div>';
       } else {
-        formH+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">';
-        types.forEach((t,i)=>{
-          const tname=typeof t==='string'?t:t.name;
-          const pm=typeof t==='object'?t.priceMode:'base';
-          const pval=typeof t==='object'?(pm==='total'?t.priceVal:t.priceExtra)||'':'';
-          formH+='<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)">';
-          formH+='<span style="flex:1;font-size:13px;font-weight:500">'+tname+'</span>';
-          formH+='<select onchange="updateTypePrice('+i+',\'mode\',this.value)" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border);border-radius:5px;font-family:inherit;background:var(--card)">';
-          formH+='<option value="base"'+(pm==='base'?' selected':'')+'>Precio base</option>';
-          formH+='<option value="extra"'+(pm==='extra'?' selected':'')+'>+ Extra</option>';
-          formH+='<option value="total"'+(pm==='total'?' selected':'')+'>Precio total</option>';
-          formH+='</select>';
-          if(pm!=='base') formH+='<input type="number" min="0" placeholder="$" value="'+pval+'" oninput="updateTypePrice('+i+',\'val\',this.value)" style="width:70px;font-size:12px;padding:3px 6px;border:0.5px solid var(--border);border-radius:5px;font-family:inherit">';
-          formH+='<button onclick="removeType('+i+')" style="width:20px;height:20px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:12px;cursor:pointer;line-height:1">×</button>';
+        formH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Activo — comensal debe elegir uno</span><label class="toggle-switch"><input type="checkbox" checked onchange="toggleHasTypes(this.checked)"><span class="toggle-slider"></span></label></div>';
+        if(types.length===0){formH+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Sin tipos aún</div>';}
+        else{
+          formH+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">';
+          types.forEach((t,i)=>{
+            const tname=typeof t==='string'?t:t.name;const pm=typeof t==='object'?t.priceMode:'base';const pval=typeof t==='object'?(pm==='total'?t.priceVal:t.priceExtra)||'':'';
+            formH+='<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)"><span style="flex:1;font-size:13px;font-weight:500">'+tname+'</span>';
+            formH+='<select onchange="updateTypePrice('+i+',\'mode\',this.value)" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border);border-radius:5px;font-family:inherit;background:var(--card)"><option value="base"'+(pm==='base'?' selected':'')+'>Precio base</option><option value="extra"'+(pm==='extra'?' selected':'')+'>+ Extra</option><option value="total"'+(pm==='total'?' selected':'')+'>Precio total</option></select>';
+            if(pm!=='base')formH+='<input type="number" min="0" placeholder="$" value="'+pval+'" oninput="updateTypePrice('+i+',\'val\',this.value)" style="width:70px;font-size:12px;padding:3px 6px;border:0.5px solid var(--border);border-radius:5px;font-family:inherit">';
+            formH+='<button onclick="removeType('+i+')" style="width:20px;height:20px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:12px;cursor:pointer;line-height:1">×</button></div>';
+          });
           formH+='</div>';
-        });
-        formH+='</div>';
-      }
-      formH+='<div class="ing-add-row"><input id="type-input" placeholder="Ej: Pollo, Carne..." value="'+(C.newTypeInput||'')+'"><button class="btn btn-primary btn-sm" onclick="addType()">+ Agregar</button></div>';
-    }
-    formH+='</div>';
-  }
-  formH+='</div>';
-
-  // ── Sección MITAD Y MITAD
-  const openMitad=sec.mitad||false;
-  const isMM=f.isMitadMitad||false;
-  formH+='<div class="form-section"><div class="form-section-header" onclick="toggleDishSection(\'mitad\')">';
-  formH+='<span>🍕 Mitad y Mitad'+(isMM?' <span style="font-size:11px;background:#fce7f3;color:#be185d;padding:1px 7px;border-radius:10px">Activo</span>':'')+'</span><span>'+(openMitad?'▲':'▼')+'</span></div>';
-  if(openMitad){
-    formH+='<div class="form-section-body">';
-    formH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">El cliente elige 2 mitades de una categoría</span><label class="toggle-switch"><input type="checkbox" '+(isMM?'checked':'')+' onchange="uF(\'dish\',\'isMitadMitad\',this.checked);render()"><span class="toggle-slider"></span></label></div>';
-    if(isMM){
-      const allCats=getCats();
-      formH+='<div class="form-group" style="margin-bottom:0"><label>Categoría de opciones</label><select onchange="uF(\'dish\',\'mitadMitadCat\',this.value)">';
-      formH+='<option value="">— Elegí una categoría —</option>';
-      allCats.forEach(c=>{formH+=`<option value="${c._key}"${f.mitadMitadCat===c._key?' selected':''}>${c.icon} ${c.label}</option>`;});
-      formH+='</select></div>';
-      if(f.mitadMitadCat){
-        const catDishes=Object.values(DB.dishes).filter(d=>d.cat===f.mitadMitadCat&&!d.unavailable);
-        formH+=`<div style="font-size:12px;color:var(--muted);margin-top:6px">📋 ${catDishes.length} plato${catDishes.length!==1?'s':''} en esta categoría: ${catDishes.map(d=>d.name).join(', ')}</div>`;
+        }
+        formH+='<div class="ing-add-row"><input id="type-input" placeholder="Ej: Pollo, Carne..." value="'+(C.newTypeInput||'')+'"><button class="btn btn-primary btn-sm" onclick="addType()">+ Agregar</button></div>';
       }
     }
     formH+='</div>';
-  }
-  formH+='</div>';
 
-  // ── Sección INGREDIENTES personalizables
-  const openIngs=sec.ings||false;
-  formH+='<div class="form-section"><div class="form-section-header" onclick="toggleDishSection(\'ings\')">';
-  formH+='<span>🧩 Personalización'+(ings.length>0?' <span style="font-size:11px;background:#ede9fe;color:#5b21b6;padding:1px 7px;border-radius:10px">'+ings.length+' ing.</span>':'')+'</span><span>'+(openIngs?'▲':'▼')+'</span></div>';
-  if(openIngs){
-    formH+='<div class="form-section-body">';
-    if(!f.customizable){
-      formH+='<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;color:var(--muted)">Comensal puede destildar ingredientes</span><label class="toggle-switch"><input type="checkbox" onchange="toggleCustomizable(this.checked)"><span class="toggle-slider"></span></label></div>';
-    } else {
-      formH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Activo</span><label class="toggle-switch"><input type="checkbox" checked onchange="toggleCustomizable(this.checked)"><span class="toggle-slider"></span></label></div>';
-      formH+='<div class="ing-list">'+ings.map((ing,i)=>'<div class="ing-chip">'+ing+'<button class="ing-chip-remove" onclick="removeIngredient('+i+')">×</button></div>').join('')+(ings.length===0?'<span style="font-size:12px;color:var(--muted)">Sin ingredientes</span>':'')+'</div>';
-      formH+='<div class="ing-add-row"><input id="ing-input" placeholder="Ej: Cebolla, Tomate..." value="'+C.newIngInput+'"><button class="btn btn-primary btn-sm" onclick="addIngredient()">+ Agregar</button></div>';
-    }
-    formH+='</div>';
-  }
-  formH+='</div>';
-
-  // ── Sección RECETA
-  const allDishIngs=Object.entries(DB.ingredients||{}).map(([k,v])=>({...v,_key:k}));
-  const recipe=f.recipe||[];
-  const openReceta=sec.receta||false;
-  if(allDishIngs.length>0){
-    formH+='<div class="form-section"><div class="form-section-header" onclick="toggleDishSection(\'receta\')">';
-    formH+='<span>🧾 Receta'+(recipe.length>0?' <span style="font-size:11px;background:#d1fae5;color:#065f46;padding:1px 7px;border-radius:10px">'+recipe.length+' ing.</span>':'')+'</span><span>'+(openReceta?'▲':'▼')+'</span></div>';
-    if(openReceta){
-      formH+='<div class="form-section-body">';
-      formH+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Ingredientes descontados al entregar</div>';
-      if(recipe.length>0){
-        formH+='<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">';
-        recipe.forEach((r,ri)=>{
-          const ing=DB.ingredients[r.ingredientId];
-          if(!ing)return;
-          formH+='<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;background:var(--bg);border-radius:6px;border:0.5px solid var(--border)">'+
-            '<span style="flex:1;font-size:12px;font-weight:500">'+ing.name+'</span>'+
-            '<input type="number" min="0.1" step="0.1" value="'+r.qty+'" oninput="updateRecipeQty('+ri+',this.value,\'dish\')" style="width:60px;padding:3px 6px;border:0.5px solid var(--border);border-radius:5px;font-family:inherit;font-size:12px">'+
-            '<span style="font-size:11px;color:var(--muted);min-width:16px">'+ing.unit+'</span>'+
-            '<button onclick="removeFromRecipe('+ri+',\'dish\')" style="width:22px;height:22px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;cursor:pointer;font-size:12px;font-family:inherit">✕</button>'+
-            '</div>';
-        });
-        formH+='</div>';
+    // Mitad y Mitad
+    const openMitad=sec.mitad||false;
+    formH+='<div style="padding:10px 14px;border-bottom:0.5px solid var(--border)">';
+    formH+='<div class="form-section-header" onclick="toggleDishSection(\'mitad\')" style="padding:0;margin-bottom:'+(openMitad?'10':'0')+'px">';
+    formH+='<span>🍕 Mitad y Mitad'+(isMM?' <span style="font-size:11px;background:#fce7f3;color:#be185d;padding:1px 7px;border-radius:10px">Activo</span>':'')+'</span><span>'+(openMitad?'▲':'▼')+'</span></div>';
+    if(openMitad){
+      formH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">El cliente elige 2 mitades de una categoría</span><label class="toggle-switch"><input type="checkbox" '+(isMM?'checked':'')+' onchange="uF(\'dish\',\'isMitadMitad\',this.checked);render()"><span class="toggle-slider"></span></label></div>';
+      if(isMM){
+        const allCats=getCats();
+        formH+='<div class="form-group" style="margin-bottom:0"><label>Categoría de opciones</label><select onchange="uF(\'dish\',\'mitadMitadCat\',this.value)"><option value="">— Elegí una categoría —</option>';
+        allCats.forEach(c=>{formH+='<option value="'+c._key+'"'+(f.mitadMitadCat===c._key?' selected':'')+'>'+c.icon+' '+c.label+'</option>';});
+        formH+='</select></div>';
+        if(f.mitadMitadCat){const catDishes=Object.values(DB.dishes).filter(d=>d.cat===f.mitadMitadCat&&!d.unavailable);formH+='<div style="font-size:12px;color:var(--muted);margin-top:6px">📋 '+catDishes.length+' plato'+(catDishes.length!==1?'s':'')+' en esta categoría: '+catDishes.map(d=>d.name).join(', ')+'</div>';}
       }
-      formH+='<select onchange="addToRecipe(this.value,\'dish\');this.value=\'\'" style="width:100%;padding:6px 10px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;background:var(--bg)"><option value="">+ Agregar ingrediente...</option>';
-      allDishIngs.filter(ing=>!recipe.some(r=>r.ingredientId===ing._key)).forEach(ing=>{formH+='<option value="'+ing._key+'">'+ing.name+' ('+( ing.stock||0)+' '+ing.unit+')</option>';});
-      formH+='</select></div>';
     }
     formH+='</div>';
+
+    // Personalización
+    const openIngs=sec.ings||false;
+    formH+='<div style="padding:10px 14px;border-bottom:0.5px solid var(--border)">';
+    formH+='<div class="form-section-header" onclick="toggleDishSection(\'ings\')" style="padding:0;margin-bottom:'+(openIngs?'10':'0')+'px">';
+    formH+='<span>🧩 Personalización'+(ings.length>0?' <span style="font-size:11px;background:#ede9fe;color:#5b21b6;padding:1px 7px;border-radius:10px">'+ings.length+' ing.</span>':'')+'</span><span>'+(openIngs?'▲':'▼')+'</span></div>';
+    if(openIngs){
+      if(!f.customizable){formH+='<div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;color:var(--muted)">Comensal puede destildar ingredientes</span><label class="toggle-switch"><input type="checkbox" onchange="toggleCustomizable(this.checked)"><span class="toggle-slider"></span></label></div>';}
+      else{
+        formH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Activo</span><label class="toggle-switch"><input type="checkbox" checked onchange="toggleCustomizable(this.checked)"><span class="toggle-slider"></span></label></div>';
+        formH+='<div class="ing-list">'+ings.map((ing,i)=>'<div class="ing-chip">'+ing+'<button class="ing-chip-remove" onclick="removeIngredient('+i+')">×</button></div>').join('')+(ings.length===0?'<span style="font-size:12px;color:var(--muted)">Sin ingredientes</span>':'')+'</div>';
+        formH+='<div class="ing-add-row"><input id="ing-input" placeholder="Ej: Cebolla, Tomate..." value="'+C.newIngInput+'"><button class="btn btn-primary btn-sm" onclick="addIngredient()">+ Agregar</button></div>';
+      }
+    }
+    formH+='</div>';
+
+    // Receta
+    if(allDishIngs.length>0){
+      const openReceta=sec.receta||false;
+      formH+='<div style="padding:10px 14px">';
+      formH+='<div class="form-section-header" onclick="toggleDishSection(\'receta\')" style="padding:0;margin-bottom:'+(openReceta?'10':'0')+'px">';
+      formH+='<span>🧾 Receta'+(recipe.length>0?' <span style="font-size:11px;background:#d1fae5;color:#065f46;padding:1px 7px;border-radius:10px">'+recipe.length+' ing.</span>':'')+'</span><span>'+(openReceta?'▲':'▼')+'</span></div>';
+      if(openReceta){
+        formH+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Ingredientes descontados al entregar</div>';
+        if(recipe.length>0){
+          formH+='<div style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">';
+          recipe.forEach((r,ri)=>{const ing=DB.ingredients[r.ingredientId];if(!ing)return;formH+='<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;background:var(--bg);border-radius:6px;border:0.5px solid var(--border)"><span style="flex:1;font-size:12px;font-weight:500">'+ing.name+'</span><input type="number" min="0.1" step="0.1" value="'+r.qty+'" oninput="updateRecipeQty('+ri+',this.value,\'dish\')" style="width:60px;padding:3px 6px;border:0.5px solid var(--border);border-radius:5px;font-family:inherit;font-size:12px"><span style="font-size:11px;color:var(--muted);min-width:16px">'+ing.unit+'</span><button onclick="removeFromRecipe('+ri+',\'dish\')" style="width:22px;height:22px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;cursor:pointer;font-size:12px;font-family:inherit">✕</button></div>';});
+          formH+='</div>';
+        }
+        formH+='<select onchange="addToRecipe(this.value,\'dish\');this.value=\'\'" style="width:100%;padding:6px 10px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;background:var(--bg)"><option value="">+ Agregar ingrediente...</option>';
+        allDishIngs.filter(ing=>!recipe.some(r=>r.ingredientId===ing._key)).forEach(ing=>{formH+='<option value="'+ing._key+'">'+ing.name+' ('+(ing.stock||0)+' '+ing.unit+')</option>';});
+        formH+='</select>';
+      }
+      formH+='</div>';
+    }
+
+    formH+='</div>'; // end form-section-body
   }
+  formH+='</div>'; // end form-section Avanzado
+
 
   formH+='</div>'; // end padding div
 
