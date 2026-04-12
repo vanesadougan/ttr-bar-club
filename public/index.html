@@ -1007,18 +1007,12 @@ function renderWaiterMesasScreen(mc){
       const preparingCt=orders.filter(o=>o.status==='preparing').length;
       const delivCt=orders.filter(o=>o.status==='delivered').length;
       const isIndiv=orders.some(o=>o.orderMode==='individual');
-      const mozasEnMesa=[...new Set(orders.map(o=>o.takenBy).filter(Boolean))];
-
       h+=`<div class="card" style="margin-bottom:.875rem">`;
 
       // ── Mesa title row ──
       h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">`;
       h+=`<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">`;
       h+=`<div style="display:inline-flex;align-items:center;padding:4px 10px;border-radius:8px;background:var(--brand);color:#fff;font-size:13px;font-weight:700;flex-shrink:0;white-space:nowrap">${tLabel}</div>`;
-      mozasEnMesa.forEach(m=>{
-        const esYo=m===C.waiterName;
-        h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:${esYo?'#dbeafe':'#f3f4f6'};color:${esYo?'#1e40af':'#374151'}">👩 ${m}${esYo?' (vos)':''}</span>`;
-      });
       h+=`<div style="display:flex;gap:5px;flex-wrap:wrap">`;
       if(pendingCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#fef3c7;color:#92400e">⏳ ${pendingCt} pend.</span>`;
       if(preparingCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#fff7ed;color:#c2410c">🔥 ${preparingCt} en prep.</span>`;
@@ -2653,7 +2647,7 @@ function renderOrdersTab(){
 
     // Mozas únicas
     const mozas=[...new Set(tOrders.map(o=>o.takenBy).filter(Boolean))];
-    const mozaChips=mozas.map(m=>`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:5px;font-weight:500">👩 ${m}</span>`).join('');
+    const mozaChips='';
 
     // ── Card de mesa ──
     h+=`<div style="border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card)">`;
@@ -2745,7 +2739,7 @@ function renderOrdersTab(){
             <span style="font-size:12px;font-weight:600">$${oTotal.toLocaleString()}</span>`;
           if(o.status==='pending'){
             h+=`<button onclick="markDelivered('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:none;background:var(--brand);color:#fff;cursor:pointer;font-family:inherit">Entregado</button>`;
-            h+=`<button onclick="adminMarkPreparing('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:0.5px solid #f59e0b;color:#c2410c;background:#fff7ed;cursor:pointer;font-family:inherit">🔥</button>`;
+            
             h+=`<button onclick="adminEditOrder('${o._key}')" style="padding:3px 8px;font-size:11px;border-radius:5px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️</button>`;
           }
           if(o.status==='preparing'){
