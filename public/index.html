@@ -290,7 +290,7 @@ let C = {
   newIng:{name:'',unit:'u',stock:'',alertAt:''}, editingIng:null,
   manualOrderSearch:'',
   editingDish:null, editingTable:null,
-  newDish:{name:'',desc:'',price:'',cat:'entrada',emoji:'🍽️',customizable:false,ingredients:[],promoDiscount:0,is2x1:false,recipe:[]},
+  newDish:{name:'',desc:'',price:'',cat:'entrada',emoji:'🍽️',customizable:false,ingredients:[],promoDiscount:0,is2x1:false,isMitadMitad:false,mitadMitadCat:'',recipe:[]},
   newCafItem:{name:'',desc:'',price:'',cat:'',emoji:'☕',customizable:false,ingredients:[],stock:null,recipe:[]},
   newIngInput:'', newTypeInput:'', typePickerDishId:null, showPaymentPicker:false, newTable:{label:'',capacity:''},
   newCat:{label:'',icon:'🍽️',isPromo:false,noRating:false}, editingCat:null,
@@ -1215,7 +1215,9 @@ function renderWaiterNameInput(mc){
 }
 window.waiterConfirmName=()=>{const inp=document.getElementById('waiter-name-inp');const name=(inp?inp.value:'').trim();if(!name){alert('Ingresá el nombre');return;}C.waiterPersonName=name;C.waiterStep='menu';render();};
 function waiterCartCount(){return Object.values(C.waiterCart).reduce((s,v)=>s+v.qty,0);}
-function waiterCartTotal(){return Object.entries(C.waiterCart).reduce((s,[key,v])=>{const id=key.includes('|')?key.split('|')[0]:key;const d=DB.dishes[id]||DB.cafeteriaItems[id];if(!d)return s;return s+(DB.cafeteriaItems[id]?Number(d.price):dishFinalPrice(d,v.qty,v.selectedType||null))*v.qty;},0);}
+function waiterCartTotal(){return Object.entries(C.waiterCart).reduce((s,[key,v])=>{
+  if(key.startsWith('mitad|'))return s+(v._mitadPrice||0)*v.qty;
+  const id=key.includes('|')?key.split('|')[0]:key;const d=DB.dishes[id]||DB.cafeteriaItems[id];if(!d)return s;return s+(DB.cafeteriaItems[id]?Number(d.price):dishFinalPrice(d,v.qty,v.selectedType||null))*v.qty;},0);}
 function buildWaiterMenuH(){
   const section=C.waiterMenuSection||'platos';
   const table=DB.tables[C.waiterTableId];
@@ -1259,7 +1261,39 @@ function buildWaiterMenuH(){
     const cats=getCats();const catIds=cats.map(c=>c._key).filter(id=>allDishes.some(d=>d.cat===id));
     menuH+='<div class="cat-tabs">';catIds.forEach(cid=>{const cat=cats.find(c=>c._key===cid);menuH+='<button class="cat-tab'+(C.waiterCat===cid?' active':'')+(cat&&cat.isPromo?' promo-tab':'')+'" onclick="setWaiterCat(\''+cid+'\')">'+(cat?'<span class="cat-emoji">'+cat.icon+'</span>'+cat.label:'<span class="cat-emoji">🍽</span>'+cid)+'</button>';});menuH+='</div>';
   // Modal picker — después del cat-tabs, igual que comensal
-  if(C.waiterCustDishId){
+  if(C.mitadDishId){
+    const _mm=DB.dishes[C.mitadDishId];
+    if(_mm&&_mm.mitadMitadCat){
+      const _opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>d.cat===_mm.mitadMitadCat&&!d.unavailable).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+      const _s=C.mitadStep||1;
+      const _m1=C.mitad1?_opts.find(d=>d._key===C.mitad1):null;
+      const _m2=C.mitad2?_opts.find(d=>d._key===C.mitad2):null;
+      const _price=_m1&&_m2?Math.max(Number(_m1.price),Number(_m2.price)):null;
+      menuH+=`<div class="cust-modal">
+        <div style="font-size:16px;font-weight:600;margin-bottom:4px">🍕 ${_mm.name}</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Elegí las dos mitades — se cobra la más cara</div>
+        <div style="display:flex;gap:8px;margin-bottom:12px">
+          <div style="flex:1;padding:8px 12px;border-radius:8px;border:1.5px solid ${_m1?'var(--accent)':'var(--border)'};background:${_m1?'#fff5f7':'var(--bg)'};font-size:13px;text-align:center">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:2px">1° mitad</div>
+            <div style="font-weight:600">${_m1?_m1.name:'—'}</div>
+          </div>
+          <div style="flex:1;padding:8px 12px;border-radius:8px;border:1.5px solid ${_m2?'var(--accent)':'var(--border)'};background:${_m2?'#fff5f7':'var(--bg)'};font-size:13px;text-align:center">
+            <div style="font-size:10px;color:var(--muted);margin-bottom:2px">2° mitad</div>
+            <div style="font-weight:600">${_m2?_m2.name:'—'}</div>
+          </div>
+        </div>
+        <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">Elegí la ${_s===1?'primera':'segunda'} mitad:</div>
+        <div style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;margin-bottom:12px">
+          ${_opts.map(d=>{const _sel=(_s===1&&C.mitad1===d._key)||(_s===2&&C.mitad2===d._key);return `<button onclick="waiterMitadPick('${d._key}')" style="padding:10px 14px;border-radius:8px;border:1.5px solid ${_sel?'var(--accent)':'var(--border)'};background:${_sel?'#fff5f7':'var(--card)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;display:flex;justify-content:space-between;align-items:center"><span>${d.name}</span><span style="color:var(--accent)">$${Number(d.price).toLocaleString()}</span></button>`;}).join('')}
+        </div>
+        ${_price!==null?`<div style="text-align:center;font-size:15px;font-weight:700;color:var(--accent);margin-bottom:10px">Total: $${_price.toLocaleString()}</div>`:''}
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" style="flex:1" ${_m1&&_m2?'':'disabled'} onclick="waiterConfirmMitad()">Agregar al pedido</button>
+          <button class="btn btn-ghost" onclick="waiterCancelMitad()">Cancelar</button>
+        </div>
+      </div>`;
+    }
+  } else if(C.waiterCustDishId){
     const _d=DB.dishes[C.waiterCustDishId]||DB.cafeteriaItems[C.waiterCustDishId];
     if(_d){
       const _isCaf=!!DB.cafeteriaItems[C.waiterCustDishId];
@@ -1315,7 +1349,14 @@ function renderWaiterMenu(mc){
   const cartEntries=Object.entries(C.waiterCart).filter(([,v])=>v.qty>0);
   let cartH='<div class="cart-header"><span>'+(C.waiterOrderMode==='individual'?C.waiterPersonName:'Mesa')+'</span>'+(ct>0?'<span class="cart-tag">'+ct+' ítem'+(ct>1?'s':'')+'</span>':'')+'</div><div class="cart-body">';
   if(cartEntries.length===0)cartH+='<div class="cart-empty">Todavía no agregaste ningún plato.</div>';
-  else cartEntries.forEach(([k,v])=>{const id=k.includes('|')?k.split('|')[0]:k;const d=DB.dishes[id]||DB.cafeteriaItems[id];if(!d)return;const isCaf=!!DB.cafeteriaItems[id];const fp=isCaf?Number(d.price):dishFinalPrice(d,v.qty);const icon=isCaf?(d.emoji||'☕'):(getCats().find(c=>c._key===d.cat)||{}).icon||'🍽';const typeTag=v.selectedType?'<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">'+v.selectedType+'</span>':'';const exclNote=v.excluded&&v.excluded.length?'<div class="excl-note">sin: '+v.excluded.join(', ')+'</div>':'';cartH+='<div class="cart-item"><div style="font-size:16px;flex-shrink:0;color:var(--muted)">'+icon+'</div><div class="cart-item-info"><div class="cart-item-name">'+d.name+' '+typeTag+'</div>'+exclNote+'</div><div class="cart-qty"><button class="cqbtn" onclick="waiterRemove(\''+k+'\')">−</button><span class="cqval">'+v.qty+'</span><button class="cqbtn" onclick="waiterQuickAdd(\''+k+'\',\''+(isCaf?'caf':'dish')+'\')">+</button></div><div class="cart-item-price">$'+(fp*v.qty).toLocaleString()+'</div></div>';});
+  else cartEntries.forEach(([k,v])=>{
+    // Mitad y mitad
+    if(k.startsWith('mitad|')){
+      cartH+='<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🍕</div><div class="cart-item-info"><div class="cart-item-name">'+(v._mitadName||'Pizza M&M')+'</div></div><div class="cart-qty"><button class="cqbtn" onclick="waiterRemove(\''+k+'\')">−</button><span class="cqval">'+v.qty+'</span><button class="cqbtn" onclick="waiterQuickAdd(\''+k+'\',\'dish\')">+</button></div><div class="cart-item-price">$'+((v._mitadPrice||0)*v.qty).toLocaleString()+'</div></div>';
+      return;
+    }
+    const id=k.includes('|')?k.split('|')[0]:k;const d=DB.dishes[id]||DB.cafeteriaItems[id];if(!d)return;const isCaf=!!DB.cafeteriaItems[id];const fp=isCaf?Number(d.price):dishFinalPrice(d,v.qty);const icon=isCaf?(d.emoji||'☕'):(getCats().find(c=>c._key===d.cat)||{}).icon||'🍽';const typeTag=v.selectedType?'<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">'+v.selectedType+'</span>':'';const exclNote=v.excluded&&v.excluded.length?'<div class="excl-note">sin: '+v.excluded.join(', ')+'</div>':'';cartH+='<div class="cart-item"><div style="font-size:16px;flex-shrink:0;color:var(--muted)">'+icon+'</div><div class="cart-item-info"><div class="cart-item-name">'+d.name+' '+typeTag+'</div>'+exclNote+'</div><div class="cart-qty"><button class="cqbtn" onclick="waiterRemove(\''+k+'\')">−</button><span class="cqval">'+v.qty+'</span><button class="cqbtn" onclick="waiterQuickAdd(\''+k+'\',\''+(isCaf?'caf':'dish')+'\')">+</button></div><div class="cart-item-price">$'+(fp*v.qty).toLocaleString()+'</div></div>';
+  });
   cartH+='</div><div class="cart-footer">';
   if(cartEntries.length>0){cartH+='<div class="cart-total-row big"><span>Total</span><span>$'+total.toLocaleString()+'</span></div><button class="btn btn-primary btn-block" style="margin-top:10px" onclick="waiterPlaceOrder()">Confirmar pedido</button><button class="btn btn-ghost btn-block" style="margin-top:6px;color:var(--danger);border-color:var(--danger)" onclick="waiterLimpiarCarrito()">Limpiar carrito</button>';}
   cartH+='<button class="btn btn-outline btn-block" style="margin-top:8px" onclick="waiterNuevaMesa()">← Mis mesas</button></div>';
@@ -1375,15 +1416,37 @@ window.waiterMarkCobrado=async tableId=>{
 window.waiterAddDish=(dishId,src)=>{
   const d=src==='caf'?DB.cafeteriaItems[dishId]:DB.dishes[dishId];
   if(!d)return;
+  // Mitad y mitad
+  if(d.isMitadMitad&&d.mitadMitadCat){
+    C.mitadDishId=dishId;C.mitad1=null;C.mitad2=null;C.mitadStep=1;
+    refreshWaiterMenuCol();return;
+  }
   const hasTypes=src!=='caf'&&d.hasTypes&&(d.types||[]).length>0;
   const hasCustom=d.customizable&&(d.ingredients||[]).length>0;
   if(!hasTypes&&!hasCustom){
-    // Agregar directamente sin picker
     if(!C.waiterCart[dishId])C.waiterCart[dishId]={qty:0,selectedType:null,excluded:[]};
     C.waiterCart[dishId].qty++;render();return;
   }
   C.waiterCustDishId=dishId;C.waiterPickType=null;C.waiterPickExcl=[];refreshWaiterMenuCol();
 };
+window.waiterMitadPick=id=>{
+  if(C.mitadStep===1){C.mitad1=id;C.mitadStep=2;}
+  else{C.mitad2=id;}
+  refreshWaiterMenuCol();
+};
+window.waiterConfirmMitad=()=>{
+  const mm=DB.dishes[C.mitadDishId];if(!mm)return;
+  const d1=DB.dishes[C.mitad1];const d2=DB.dishes[C.mitad2];
+  if(!d1||!d2){alert('Elegí las dos mitades');return;}
+  const price=Math.max(Number(d1.price),Number(d2.price));
+  const name=`${mm.name} — ${d1.name} / ${d2.name}`;
+  const key=`mitad|${C.mitadDishId}|${C.mitad1}|${C.mitad2}`;
+  if(!C.waiterCart[key])C.waiterCart[key]={qty:0,selectedType:null,excluded:[],_mitadName:name,_mitadPrice:price};
+  C.waiterCart[key].qty++;
+  C.mitadDishId=null;C.mitad1=null;C.mitad2=null;C.mitadStep=1;
+  render();
+};
+window.waiterCancelMitad=()=>{C.mitadDishId=null;C.mitad1=null;C.mitad2=null;C.mitadStep=1;refreshWaiterMenuCol();};
 window.waiterPickType=t=>{C.waiterPickType=t;refreshWaiterMenuCol();};
 window.waiterToggleExcl=ing=>{
   if(!C.waiterPickExcl)C.waiterPickExcl=[];
@@ -1409,6 +1472,10 @@ window.waiterRemove=key=>{if(C.waiterCart[key]){if(C.waiterCart[key].qty>1)C.wai
 window.waiterPlaceOrder=async()=>{
   if(waiterCartCount()===0)return;
   const items=Object.entries(C.waiterCart).map(([key,v])=>{
+    // Mitad y mitad — key: mitad|dishId|m1Id|m2Id
+    if(key.startsWith('mitad|')){
+      return{name:v._mitadName||key,qty:v.qty,price:v._mitadPrice||0,finalPrice:v._mitadPrice||0,excluded:[],selectedType:null,isCafeteria:false,emoji:'🍕'};
+    }
     const id=key.includes('|')?key.split('|')[0]:key;
     const dP=DB.dishes[id];const dC=DB.cafeteriaItems[id];const d=dP||dC;
     if(!d)return null;
@@ -1533,6 +1600,29 @@ function renderDishesTab(){
         formH+='</div>';
       }
       formH+='<div class="ing-add-row"><input id="type-input" placeholder="Ej: Pollo, Carne..." value="'+(C.newTypeInput||'')+'"><button class="btn btn-primary btn-sm" onclick="addType()">+ Agregar</button></div>';
+    }
+    formH+='</div>';
+  }
+  formH+='</div>';
+
+  // ── Sección MITAD Y MITAD
+  const openMitad=sec.mitad||false;
+  const isMM=f.isMitadMitad||false;
+  formH+='<div class="form-section"><div class="form-section-header" onclick="toggleDishSection(\'mitad\')">';
+  formH+='<span>🍕 Mitad y Mitad'+(isMM?' <span style="font-size:11px;background:#fce7f3;color:#be185d;padding:1px 7px;border-radius:10px">Activo</span>':'')+'</span><span>'+(openMitad?'▲':'▼')+'</span></div>';
+  if(openMitad){
+    formH+='<div class="form-section-body">';
+    formH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">El cliente elige 2 mitades de una categoría</span><label class="toggle-switch"><input type="checkbox" '+(isMM?'checked':'')+' onchange="uF(\'dish\',\'isMitadMitad\',this.checked);render()"><span class="toggle-slider"></span></label></div>';
+    if(isMM){
+      const allCats=getCats();
+      formH+='<div class="form-group" style="margin-bottom:0"><label>Categoría de opciones</label><select onchange="uF(\'dish\',\'mitadMitadCat\',this.value)">';
+      formH+='<option value="">— Elegí una categoría —</option>';
+      allCats.forEach(c=>{formH+=`<option value="${c._key}"${f.mitadMitadCat===c._key?' selected':''}>${c.icon} ${c.label}</option>`;});
+      formH+='</select></div>';
+      if(f.mitadMitadCat){
+        const catDishes=Object.values(DB.dishes).filter(d=>d.cat===f.mitadMitadCat&&!d.unavailable);
+        formH+=`<div style="font-size:12px;color:var(--muted);margin-top:6px">📋 ${catDishes.length} plato${catDishes.length!==1?'s':''} en esta categoría: ${catDishes.map(d=>d.name).join(', ')}</div>`;
+      }
     }
     formH+='</div>';
   }
