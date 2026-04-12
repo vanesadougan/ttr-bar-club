@@ -1060,21 +1060,34 @@ function renderWaiterMesasScreen(mc){
           h+=`</div>`;
         });
       } else {
-        const iMap={};
-        orders.forEach(o=>(o.items||[]).forEach(item=>{
-          const k=item.name+(item.selectedType?'|'+item.selectedType:'');
-          if(!iMap[k])iMap[k]={name:item.name,type:item.selectedType||null,qty:0,statuses:{},excl:item.excluded||[]};
-          iMap[k].qty+=item.qty;iMap[k].statuses[o.status]=(iMap[k].statuses[o.status]||0)+item.qty;
-        }));
-        Object.values(iMap).forEach(item=>{
-          const pd=item.statuses['pending']||0,dd=item.statuses['delivered']||0;
-          h+=`<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px">`;
-          h+=`<span style="flex:1;font-size:13px">${item.qty}× ${item.name}${item.type?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${item.type}</span>`:''}</span>`;
-          h+=`<div style="display:flex;gap:3px;align-items:center">`;
-          if(item.excl&&item.excl.length>0)h+=`<button onclick="alert('Sin: ${item.excl.join(', ')}')" title="Sin: ${item.excl.join(', ')}" style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:#ede9fe;color:#5b21b6;border:none;cursor:pointer">P</button>`;
-          if(pd>0)h+=`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e">⏳${pd}</span>`;
-          if(dd>0)h+=`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;background:#d1fae5;color:#065f46">✓${dd}</span>`;
-          h+=`</div></div>`;
+        // Agrupar por moza cuando hay varias
+        const mozasOrden=[...new Set(orders.map(o=>o.takenBy||'Sin moza'))];
+        const porMoza={};
+        orders.forEach(o=>{const m=o.takenBy||'Sin moza';if(!porMoza[m])porMoza[m]=[];porMoza[m].push(o);});
+        const multiMoza=mozasOrden.length>1;
+
+        mozasOrden.forEach(moza=>{
+          const mOrders=porMoza[moza];
+          const iMap={};
+          mOrders.forEach(o=>(o.items||[]).forEach(item=>{
+            const k=item.name+(item.selectedType?'|'+item.selectedType:'');
+            if(!iMap[k])iMap[k]={name:item.name,type:item.selectedType||null,qty:0,statuses:{},excl:item.excluded||[]};
+            iMap[k].qty+=item.qty;iMap[k].statuses[o.status]=(iMap[k].statuses[o.status]||0)+item.qty;
+          }));
+          if(multiMoza){
+            const esYo=moza===C.waiterName;
+            h+=`<div style="font-size:11px;font-weight:600;padding:2px 8px;margin-bottom:4px;border-radius:5px;display:inline-block;background:${esYo?'#dbeafe':'#f3f4f6'};color:${esYo?'#1e40af':'#374151'}">👩 ${moza}${esYo?' (vos)':''}</div>`;
+          }
+          Object.values(iMap).forEach(item=>{
+            const pd=item.statuses['pending']||0,dd=item.statuses['delivered']||0;
+            h+=`<div style="display:flex;align-items:center;gap:8px;padding:4px 8px;border-radius:6px">`;
+            h+=`<span style="flex:1;font-size:13px">${item.qty}× ${item.name}${item.type?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${item.type}</span>`:''}</span>`;
+            h+=`<div style="display:flex;gap:3px;align-items:center">`;
+            if(item.excl&&item.excl.length>0)h+=`<button onclick="alert('Sin: ${item.excl.join(', ')}')" title="Sin: ${item.excl.join(', ')}" style="font-size:10px;font-weight:700;padding:1px 6px;border-radius:4px;background:#ede9fe;color:#5b21b6;border:none;cursor:pointer">P</button>`;
+            if(pd>0)h+=`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e">⏳${pd}</span>`;
+            if(dd>0)h+=`<span style="font-size:10px;font-weight:600;padding:1px 5px;border-radius:4px;background:#d1fae5;color:#065f46">✓${dd}</span>`;
+            h+=`</div></div>`;
+          });
         });
       }
 
@@ -2727,6 +2740,7 @@ function renderOrdersTab(){
           h+=`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span class="status ${_stInfo.css}" style="font-size:10px">${_stInfo.label}</span>
             <span style="font-size:11px;color:var(--muted)">${hora}</span>
+            ${o.takenBy?`<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:5px;background:#dbeafe;color:#1e40af">👩 ${o.takenBy}</span>`:''}
             <span style="flex:1"></span>
             <span style="font-size:12px;font-weight:600">$${oTotal.toLocaleString()}</span>`;
           if(o.status==='pending'){
