@@ -2953,7 +2953,7 @@ function renderOrdersTab(){
   ${kioskoH}
   ${pendingAlerts.length>0?`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:1rem">
     ${pendingAlerts.map(([k,a])=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:#fef3c7;border:0.5px solid #fcd34d;border-radius:10px">
-      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">🛎</span><div><div style="font-weight:500;font-size:14px">${a.tableLabel} llama al mozo</div>${a.message?`<div style="font-size:13px;color:#92400e;margin-top:2px;font-style:italic">"${a.message}"</div>`:''}<div style="font-size:12px;color:#92400e;margin-top:2px">${a.time}</div></div></div>
+      <div style="display:flex;align-items:center;gap:8px"><span style="font-size:18px">🛎</span><div><div style="font-weight:500;font-size:14px">${a.tableLabel}${a.personName?` · <span style="color:var(--brand)">${a.personName}</span>`:''} llama al mozo</div>${a.message?`<div style="font-size:13px;color:#92400e;margin-top:2px;font-style:italic">"${a.message}"</div>`:''}<div style="font-size:12px;color:#92400e;margin-top:2px">${a.time}</div></div></div>
       <button onclick="dismissAlert('${k}')" style="padding:5px 12px;border-radius:6px;border:0.5px solid #92400e;background:transparent;color:#92400e;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">Atendido ✓</button>
     </div>`).join('')}
   </div>`:''}
@@ -4549,19 +4549,20 @@ window.initCustomerCat=()=>{
 };
 window.callWaiter=()=>{showWaiterModal();};
 window.showWaiterModal=()=>{
-  // Remove existing modal if any
   document.getElementById('waiter-modal')?.remove();
   const overlay=document.createElement('div');
   overlay.id='waiter-modal';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:1rem';
-  overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
-    <div style="font-size:22px;text-align:center;margin-bottom:6px">🛎</div>
+  // position:fixed no afecta el layout de la página
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9999;display:flex;align-items:flex-end;justify-content:center;padding:0';
+  overlay.innerHTML=`<div style="background:var(--card);border-radius:16px 16px 0 0;padding:1.5rem 1.5rem calc(1.5rem + env(safe-area-inset-bottom));width:100%;max-width:480px;box-shadow:0 -4px 24px rgba(0,0,0,0.15)">
+    <div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px"></div>
+    <div style="font-size:22px;text-align:center;margin-bottom:4px">🛎</div>
     <div style="font-size:16px;font-weight:600;text-align:center;margin-bottom:4px">Llamar al mozo</div>
-    <div style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:16px">¿Necesitás algo en particular?</div>
-    <textarea id="waiter-msg" placeholder="Ej: Traeme la cuenta, necesito servilletas... (opcional)" style="width:100%;min-height:80px;padding:10px;border:0.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;resize:none;box-sizing:border-box;outline:none"></textarea>
+    <div style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:14px">¿Necesitás algo en particular?</div>
+    <textarea id="waiter-msg" placeholder="Ej: Traeme la cuenta, necesito servilletas... (opcional)" style="width:100%;min-height:72px;padding:10px;border:0.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;resize:none;box-sizing:border-box;outline:none;background:var(--bg)"></textarea>
     <div style="display:flex;gap:8px;margin-top:12px">
-      <button onclick="document.getElementById('waiter-modal').remove()" style="flex:1;padding:12px;border-radius:10px;border:0.5px solid var(--border);background:transparent;font-family:inherit;font-size:14px;cursor:pointer;color:var(--muted)">Cancelar</button>
-      <button onclick="confirmCallWaiter()" style="flex:2;padding:12px;border-radius:10px;border:none;background:var(--brand);color:#fff;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">Llamar al mozo</button>
+      <button onclick="document.getElementById('waiter-modal').remove()" style="flex:1;padding:13px;border-radius:10px;border:0.5px solid var(--border);background:transparent;font-family:inherit;font-size:14px;cursor:pointer;color:var(--muted)">Cancelar</button>
+      <button onclick="confirmCallWaiter()" style="flex:2;padding:13px;border-radius:10px;border:none;background:var(--brand);color:#fff;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">Llamar al mozo</button>
     </div>
   </div>`;
   document.body.appendChild(overlay);
@@ -4574,12 +4575,14 @@ window.confirmCallWaiter=()=>{
   const label=tableObj?tableObj.label:'Mesa';
   const n=new Date();
   const time=n.getHours().toString().padStart(2,'0')+':'+n.getMinutes().toString().padStart(2,'0');
-  push(ref(db,'alerts'),{tableId:C.customerTableId,tableLabel:label,time,status:'pending',createdAt:Date.now(),...(msg?{message:msg}:{})});
+  const personName=C.orderMode==='individual'&&C.customerName?C.customerName:null;
+  push(ref(db,'alerts'),{tableId:C.customerTableId,tableLabel:label,time,status:'pending',createdAt:Date.now(),...(personName?{personName}:{}),...(msg?{message:msg}:{})});
   document.getElementById('waiter-modal')?.remove();
-  // Visual feedback on all waiter buttons
+  // Visual feedback
   document.querySelectorAll('button[onclick="callWaiter()"]').forEach(btn=>{
-    btn.textContent='✅ Mozo avisado';btn.style.background='#d1fae5';btn.style.borderColor='#10b981';btn.style.color='#065f46';btn.disabled=true;
-    setTimeout(()=>{btn.textContent='🛎 Llamar al mozo';btn.style.background='#fef3c7';btn.style.borderColor='#f59e0b';btn.style.color='#92400e';btn.disabled=false;},4000);
+    const orig=btn.innerHTML;
+    btn.innerHTML='✅ Mozo avisado';btn.style.background='#d1fae5';btn.style.borderColor='#10b981';btn.style.color='#065f46';btn.disabled=true;
+    setTimeout(()=>{btn.innerHTML=orig;btn.style.background='#fef3c7';btn.style.borderColor='#f59e0b';btn.style.color='#92400e';btn.disabled=false;},4000);
   });
 };
 window.cancelCart=()=>{
