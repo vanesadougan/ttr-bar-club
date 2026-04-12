@@ -567,6 +567,7 @@ function render(){
     const _prevStep=C._prevCustomerStep;
     renderCustomer();
     if(C.customerStep!==_prevStep) window.scrollTo(0,0);
+    else scrollActiveCat();
     C._prevCustomerStep=C.customerStep;
     return;
   }
@@ -1372,8 +1373,9 @@ function buildWaiterMenuH(){
   return menuH;
 }
 function refreshWaiterMenuCol(){
+  const _sl=document.querySelector('.cat-tabs')?.scrollLeft||0;
   const col=document.querySelector('.waiter-menu-col');
-  if(col){col.innerHTML=buildWaiterMenuH();return;}
+  if(col){col.innerHTML=buildWaiterMenuH();requestAnimationFrame(()=>{const el=document.querySelector('.cat-tabs');if(el)el.scrollLeft=_sl;});return;}
   const mc=document.getElementById('main-content');
   if(mc)renderWaiterMenu(mc);
 }
@@ -1403,9 +1405,9 @@ function renderWaiterMenu(mc){
 }
 // Waiter nav helpers
 window.setWaiterStep=s=>{C.waiterStep=s;render();};
-window.setWaiterSection=s=>{C.waiterMenuSection=s;if(s==='platos')C.waiterCat=null;else C.waiterCafCat=null;C._catScrollReset=true;render();};
-window.setWaiterCat=id=>{C.waiterCat=id;render();};
-window.setWaiterCafCat=id=>{C.waiterCafCat=id;render();};
+window.setWaiterSection=s=>{C.waiterMenuSection=s;if(s==='platos')C.waiterCat=null;else C.waiterCafCat=null;C._catScrollReset=true;render();scrollActiveCat();};
+window.setWaiterCat=id=>{C.waiterCat=id;render();scrollActiveCat();};
+window.setWaiterCafCat=id=>{C.waiterCafCat=id;render();scrollActiveCat();};
 window.waiterNuevaMesa=()=>{C.waiterTableId=null;C.waiterCart={};C.waiterCat=null;C.waiterCafCat=null;C.waiterStep='mesas';render();};
 window.waiterLimpiarCarrito=()=>{C.waiterCart={};render();};
 window.waiterOpenPayPicker=tableId=>{C.waiterPayMesa=tableId;C.waiterPayMethod=null;render();};
@@ -4336,11 +4338,30 @@ function renderMenuWithCart(mc){
   updateTopbarCart();
 }
 
-window.openCust=id=>{C.custDishId=id;renderMenuWithCart(document.getElementById('main-content'));};
-window.cancelCust=()=>{C.custDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
-window.openTypePicker=id=>{C.typePickerDishId=id;C.custDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
+// Preserva el scroll del cat-tabs al re-renderizar el menú
+function refreshMenuWithScroll(){
+  const _sl=document.querySelector('.cat-tabs')?.scrollLeft||0;
+  renderMenuWithCart(document.getElementById('main-content'));
+  requestAnimationFrame(()=>{const el=document.querySelector('.cat-tabs');if(el)el.scrollLeft=_sl;});
+}
+function refreshMenuRenderWithScroll(){
+  const _sl=document.querySelector('.cat-tabs')?.scrollLeft||0;
+  render();
+  requestAnimationFrame(()=>{const el=document.querySelector('.cat-tabs');if(el)el.scrollLeft=_sl;});
+}
+function scrollActiveCat(){
+  requestAnimationFrame(()=>{
+    const active=document.querySelector('.cat-tabs .cat-tab.active');
+    if(active)active.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+  });
+}
 
-window.custOpenMitad=id=>{C.custMitadDishId=id;C.custMitad1=null;C.custMitad2=null;C.custMitadStep=1;renderMenuWithCart(document.getElementById('main-content'));};
+
+window.openCust=id=>{C.custDishId=id;refreshMenuWithScroll();};
+window.cancelCust=()=>{C.custDishId=null;refreshMenuWithScroll();};
+window.openTypePicker=id=>{C.typePickerDishId=id;C.custDishId=null;refreshMenuWithScroll();};
+
+window.custOpenMitad=id=>{C.custMitadDishId=id;C.custMitad1=null;C.custMitad2=null;C.custMitadStep=1;refreshMenuWithScroll();};
 window.custMitadPick=id=>{
   if(C.custMitadStep===1){C.custMitad1=id;C.custMitadStep=2;}
   else{C.custMitad2=id;}
@@ -4358,7 +4379,7 @@ window.custConfirmMitad=dishId=>{
   C.custMitadDishId=null;C.custMitad1=null;C.custMitad2=null;C.custMitadStep=1;
   renderMenuWithCart(document.getElementById('main-content'));
 };
-window.custCancelMitad=()=>{C.custMitadDishId=null;C.custMitad1=null;C.custMitad2=null;C.custMitadStep=1;renderMenuWithCart(document.getElementById('main-content'));};
+window.custCancelMitad=()=>{C.custMitadDishId=null;C.custMitad1=null;C.custMitad2=null;C.custMitadStep=1;refreshMenuWithScroll();};
 window.pickType=idx=>{
   const d=DB.dishes[C.typePickerDishId];
   if(!d)return;
@@ -4380,13 +4401,13 @@ window.selectType=(dishId,typeName)=>{
   renderMenuWithCart(document.getElementById('main-content'));
 };
 window.toggleIng=(dishId,ing)=>{if(!C.cart[dishId])C.cart[dishId]={qty:0,excluded:new Set()};if(!C.cart[dishId].excluded)C.cart[dishId].excluded=new Set();if(C.cart[dishId].excluded.has(ing))C.cart[dishId].excluded.delete(ing);else C.cart[dishId].excluded.add(ing);renderMenuWithCart(document.getElementById('main-content'));};
-window.confirmCust=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;C.custDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
-window.quickAdd=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;renderMenuWithCart(document.getElementById('main-content'));};
-window.removeFromCart=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;else delete C.cart[id];}renderMenuWithCart(document.getElementById('main-content'));};
-window.custAddMitad=key=>{if(C.cart[key])C.cart[key].qty++;renderMenuWithCart(document.getElementById('main-content'));};
-window.setCat=c=>{C.customerCat=c;C.custDishId=null;const _s=document.querySelector('.cat-tabs');const _sl=_s?_s.scrollLeft:0;render();const _s2=document.querySelector('.cat-tabs');if(_s2)_s2.scrollLeft=_sl;};
-window.setCafCat=c=>{C.cafCat=c;const _s=document.querySelector('.cat-tabs');const _sl=_s?_s.scrollLeft:0;render();const _s2=document.querySelector('.cat-tabs');if(_s2)_s2.scrollLeft=_sl;};
-window.setMenuSection=section=>{C.customerMenuSection=section;C.cafCat='todos';C.custDishId=null;C._catScrollReset=true;render();};
+window.confirmCust=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;C.custDishId=null;refreshMenuWithScroll();};
+window.quickAdd=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;refreshMenuWithScroll();};
+window.removeFromCart=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;else delete C.cart[id];}refreshMenuWithScroll();};
+window.custAddMitad=key=>{if(C.cart[key])C.cart[key].qty++;refreshMenuWithScroll();};
+window.setCat=c=>{C.customerCat=c;C.custDishId=null;render();scrollActiveCat();};
+window.setCafCat=c=>{C.cafCat=c;render();scrollActiveCat();};
+window.setMenuSection=section=>{C.customerMenuSection=section;C.cafCat='todos';C.custDishId=null;C._catScrollReset=true;render();scrollActiveCat();};
 window.initCustomerCat=()=>{
   const cats=getCats();
   const allDishes=Object.values(DB.dishes);
@@ -4481,12 +4502,14 @@ function renderKioskoMenuCust(mc, menuH, ct, isIndividual){
   });
   if(items.length===0)menuH+=`<div class="empty-state" style="grid-column:1/-1">Sin items disponibles en kiosko</div>`;
   menuH+=`</div>`;
-  renderCartPanel(mc, menuH, ct, isIndividual, []);
+  renderCartPanel(mc, menuH, cartCount(), isIndividual, []);
 }
-window.quickAddKiosk=id=>{const k='kiosk|'+id;if(!C.cart[k])C.cart[k]={qty:0,_kioskKey:id};C.cart[k].qty++;renderMenuWithCart(document.getElementById('main-content'));};
-window.removeFromCartKiosk=id=>{const k='kiosk|'+id;if(C.cart[k]){if(C.cart[k].qty>1)C.cart[k].qty--;else delete C.cart[k];}renderMenuWithCart(document.getElementById('main-content'));};
+window.quickAddKiosk=id=>{const k='kiosk|'+id;if(!C.cart[k])C.cart[k]={qty:0,_kioskKey:id};C.cart[k].qty++;refreshMenuWithScroll();};
+window.removeFromCartKiosk=id=>{const k='kiosk|'+id;if(C.cart[k]){if(C.cart[k].qty>1)C.cart[k].qty--;else delete C.cart[k];}refreshMenuWithScroll();};
 
 function renderCartPanel(mc, menuH, ct, isIndividual, cats){
+  // Recalcular ct siempre para que refleje el estado actual del carrito
+  ct=cartCount();
   // Carrito unificado
   const cartEntries=Object.entries(C.cart).filter(([,v])=>v.qty>0);
   const total=cartTotal();
@@ -4529,12 +4552,12 @@ function renderCartPanel(mc, menuH, ct, isIndividual, cats){
   mc.innerHTML=`<div class="content" style="padding:0;max-width:none"><div class="menu-layout"><div class="menu-col">${menuH}<div style="text-align:center;padding:1.5rem 0 .5rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div></div><div class="cart-col"><div class="cart-widget">${cartH}</div></div></div></div>`;
 }
 
-window.setCafMenuCat=c=>{C.cafCat=c;C.cafCustId=null;const _s=document.querySelector('.cat-tabs');const _sl=_s?_s.scrollLeft:0;render();const _s2=document.querySelector('.cat-tabs');if(_s2)_s2.scrollLeft=_sl;};
-window.quickAddCaf=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;render();};
-window.removeFromCartCaf=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;else delete C.cart[id];}render();};
+window.setCafMenuCat=c=>{C.cafCat=c;C.cafCustId=null;render();scrollActiveCat();};
+window.quickAddCaf=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;refreshMenuRenderWithScroll();};
+window.removeFromCartCaf=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;else delete C.cart[id];}refreshMenuRenderWithScroll();};
 window.openCafCust=id=>{C.cafCustId=id;render();};
 window.cancelCafCust=()=>{C.cafCustId=null;render();};
-window.confirmCafCust=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;C.cafCustId=null;render();};
+window.confirmCafCust=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;C.cafCustId=null;refreshMenuRenderWithScroll();};
 window.toggleCafIng=(id,ing)=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};const ex=C.cart[id].excluded;if(ex.has(ing))ex.delete(ing);else ex.add(ing);renderMenuWithCart(document.getElementById('main-content'));};
 
 window.placeOrder=()=>{
