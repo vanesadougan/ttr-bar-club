@@ -4480,7 +4480,7 @@ function renderCartPanel(mc, menuH, ct, isIndividual, cats){
   else if(C.billRequested)cartH+=`<div style="margin-top:8px;padding:10px 14px;border-radius:8px;background:#f0fdf4;border:0.5px solid #86efac;color:#166534;font-size:13px;text-align:center">✓ Cuenta solicitada</div>`;
   cartH+=`<button onclick="callWaiter()" style="margin-top:8px;width:100%;padding:10px;border-radius:8px;border:0.5px solid #f59e0b;background:#fef3c7;color:#92400e;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">🛎 Llamar al mozo</button>`;
   cartH+=`</div>`;
-  mc.innerHTML=`<div class="content"><div class="menu-layout"><div class="menu-col">${menuH}</div><div class="cart-col"><div class="cart-widget">${cartH}</div></div></div></div>`;
+  mc.innerHTML=`<div class="content"><div class="menu-layout"><div class="menu-col">${menuH}<div style="text-align:center;padding:1.5rem 0 .5rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div></div><div class="cart-col"><div class="cart-widget">${cartH}</div></div></div></div>`;
 }
 
 window.setCafMenuCat=c=>{C.cafCat=c;C.cafCustId=null;const _s=document.querySelector('.cat-tabs');const _sl=_s?_s.scrollLeft:0;render();const _s2=document.querySelector('.cat-tabs');if(_s2)_s2.scrollLeft=_sl;};
@@ -4541,6 +4541,7 @@ function renderConfirmScreen(mc){
   }
 
   h+=`<div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:12px"><button class="btn btn-primary" onclick="backToMenu()">Seguir pidiendo</button>${!C.billRequested?`<button class="btn btn-outline" onclick="goToBill()">Solicitar la cuenta</button>`:`<div style="padding:10px 14px;border-radius:8px;background:#f0fdf4;border:0.5px solid #86efac;color:#166534;font-size:13px">✓ Cuenta solicitada</div>`}</div><button onclick="callWaiter()" style="margin-top:10px;width:100%;max-width:320px;padding:10px;border-radius:8px;border:0.5px solid #f59e0b;background:#fef3c7;color:#92400e;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">🛎 Llamar al mozo</button></div></div>`;
+  h+=`<div style="text-align:center;padding:1.5rem 0 .5rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div>`;
   mc.innerHTML=h;
 }
 window.backToMenu=()=>{C.cart={};C.custDishId=null;C.typePickerDishId=null;C.customerStep='menu';render();};
@@ -4607,6 +4608,7 @@ function renderPaymentScreen(mc){
     <button class="btn btn-primary btn-block" style="margin-top:1.5rem;padding:14px;font-size:15px;max-width:400px;${!selPay?'opacity:0.55':''}" onclick="confirmBill()">Continuar →</button>
     <button class="btn btn-ghost btn-block" style="margin-top:8px;max-width:400px" onclick="C.customerStep='menu';C.billRequested=false;render()">← Volver al menú</button>
   </div></div>`;
+  h+=`<div style="text-align:center;padding:1.5rem 0 .5rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div>`;
   mc.innerHTML=h;
 }
 
@@ -4647,6 +4649,7 @@ function renderBillScreen(mc){
   h+=`<button class="btn btn-primary btn-block" style="margin-top:1.25rem" onclick="submitBillValidated()">Enviar encuesta</button>`;
   if(hasItems)h+=`<div style="text-align:center;margin-top:8px"><button class="btn btn-ghost btn-sm" onclick="submitBill()">Omitir encuesta</button></div>`;
   h+=`</div></div>`;
+  h+=`<div style="text-align:center;padding:1.5rem 0 .5rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div>`;
   mc.innerHTML=h;
 }
 window.rateDish=(name,stars)=>{C.survey.ratings[name]=stars;renderBillScreen(document.getElementById('main-content'));};
