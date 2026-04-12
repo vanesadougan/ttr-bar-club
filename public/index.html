@@ -2092,7 +2092,7 @@ function renderStockTab(){
   const directStockDishes=[
     ...Object.entries(DB.dishes).filter(([,d])=>(d.stock!=null||directStockCats.has(d.cat))&&(!d.recipe||d.recipe.length===0)).map(([k,d])=>({...d,_key:k,_src:'dishes',stock:d.stock??0})),
     ...Object.entries(DB.cafeteriaItems||{}).filter(([,d])=>d.stock!=null&&(!d.recipe||d.recipe.length===0)).map(([k,d])=>({...d,_key:k,_src:'cafeteria'})),
-    ...Object.entries(DB.kioskItems||{}).filter(([,d])=>d.stock!=null).map(([k,d])=>({...d,_key:k,_src:'kiosko'}))
+    ...Object.entries(DB.kioskItems||{}).map(([k,d])=>({...d,_key:k,_src:'kiosko',stock:d.stock!=null?d.stock:0}))
   ];
 
   // ── Scanner de código de barras (modo carga masiva) ──
