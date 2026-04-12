@@ -1693,15 +1693,35 @@ function renderDishesTab(){
         formH+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><span style="font-size:12px;color:var(--muted)">Activo — comensal debe elegir uno</span><label class="toggle-switch"><input type="checkbox" checked onchange="toggleHasTypes(this.checked)"><span class="toggle-slider"></span></label></div>';
         if(types.length===0){formH+='<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Sin tipos aún</div>';}
         else{
-          formH+='<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">';
+          formH+='<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:8px">';
           types.forEach((t,i)=>{
             const tname=typeof t==='string'?t:t.name;const pm=typeof t==='object'?t.priceMode:'base';const pval=typeof t==='object'?(pm==='total'?t.priceVal:t.priceExtra)||'':'';
             const tstock=typeof t==='object'&&t.stock!=null?t.stock:'';
-            formH+='<div style="display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)"><span style="flex:1;font-size:13px;font-weight:500">'+tname+'</span>';
+            const tbarcodes=typeof t==='object'&&t.barcodes&&t.barcodes.length>0?t.barcodes:(typeof t==='object'&&t.barcode?[t.barcode]:[]);
+            const bcOpen=(C._typeBcOpen||{})[i];
+            formH+='<div style="background:var(--bg);border-radius:8px;border:0.5px solid var(--border);overflow:hidden">';
+            // Main row
+            formH+='<div style="display:flex;align-items:center;gap:6px;padding:6px 10px"><span style="flex:1;font-size:13px;font-weight:500">'+tname+'</span>';
             formH+='<select onchange="updateTypePrice('+i+',\'mode\',this.value)" style="font-size:11px;padding:3px 6px;border:0.5px solid var(--border);border-radius:5px;font-family:inherit;background:var(--card)"><option value="base"'+(pm==='base'?' selected':'')+'>Precio base</option><option value="extra"'+(pm==='extra'?' selected':'')+'>+ Extra</option><option value="total"'+(pm==='total'?' selected':'')+'>Precio total</option></select>';
             if(pm!=='base')formH+='<input type="number" min="0" placeholder="$" value="'+pval+'" oninput="updateTypePrice('+i+',\'val\',this.value)" style="width:70px;font-size:12px;padding:3px 6px;border:0.5px solid var(--border);border-radius:5px;font-family:inherit">';
             formH+='<input type="number" min="0" placeholder="Stock" title="Stock de este tipo" value="'+tstock+'" oninput="updateTypeStock('+i+',this.value)" style="width:60px;font-size:12px;padding:3px 6px;border:0.5px solid var(--border);border-radius:5px;font-family:inherit">';
+            formH+='<button onclick="toggleTypeBc('+i+')" title="Códigos de barra" style="width:26px;height:26px;border-radius:5px;border:0.5px solid var(--border);background:'+(bcOpen?'var(--brand)':'var(--card)')+';color:'+(bcOpen?'#fff':'var(--muted)')+';font-size:13px;cursor:pointer;line-height:1">🔍</button>';
             formH+='<button onclick="removeType('+i+')" style="width:20px;height:20px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:12px;cursor:pointer;line-height:1">×</button></div>';
+            // Barcode sub-panel
+            if(bcOpen){
+              formH+='<div style="padding:8px 10px;border-top:0.5px solid var(--border);background:var(--card)">';
+              formH+='<div style="font-size:11px;color:var(--muted);margin-bottom:6px">🔍 Códigos de barras — '+tname+'</div>';
+              if(tbarcodes.length>0){
+                formH+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">';
+                tbarcodes.forEach((bc,bi)=>{formH+='<div style="display:flex;align-items:center;gap:4px;background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:3px 8px;font-family:monospace;font-size:12px">'+bc+'<button onclick="removeTypeBarcode('+i+','+bi+')" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:12px;line-height:1;margin-left:2px">✕</button></div>';});
+                formH+='</div>';
+              } else {
+                formH+='<div style="font-size:12px;color:var(--muted);margin-bottom:6px">Sin códigos</div>';
+              }
+              formH+='<div style="display:flex;gap:6px"><input id="type-bc-'+i+'" placeholder="Escaneá o escribí un código" style="flex:1;padding:4px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:monospace;font-size:12px" onkeydown="if(event.key===\'Enter\'){addTypeBarcode('+i+');event.preventDefault();}"><button onclick="addTypeBarcode('+i+')" style="padding:4px 10px;border-radius:6px;border:0.5px solid var(--brand);color:var(--brand);background:transparent;font-size:12px;cursor:pointer;font-family:inherit">+ Agregar</button></div>';
+              formH+='</div>';
+            }
+            formH+='</div>';
           });
           formH+='</div>';
         }
@@ -2319,11 +2339,29 @@ function renderStockTab(){
   const UNITS=['u','kg','g','l','ml'];
 
   const directStockCats=new Set(getCats().filter(c=>c.directStock).map(c=>c._key));
-  const directStockDishes=[
-    ...Object.entries(DB.dishes).filter(([,d])=>(d.stock!=null||directStockCats.has(d.cat))&&(!d.recipe||d.recipe.length===0)).map(([k,d])=>({...d,_key:k,_src:'dishes',stock:d.stock??0})),
-    ...Object.entries(DB.cafeteriaItems||{}).filter(([,d])=>d.stock!=null&&(!d.recipe||d.recipe.length===0)).map(([k,d])=>({...d,_key:k,_src:'cafeteria'})),
-    ...Object.entries(DB.kioskItems||{}).map(([k,d])=>({...d,_key:k,_src:'kiosko',stock:d.stock!=null?d.stock:0}))
-  ];
+  const directStockDishes=[];
+  Object.entries(DB.dishes).filter(([,d])=>(d.stock!=null||directStockCats.has(d.cat))&&(!d.recipe||d.recipe.length===0)).forEach(([k,d])=>{
+    // Si tiene tipos con stock individual, expandir en filas por tipo
+    const typesWithStock=(d.types||[]).filter(t=>typeof t==='object'&&t.stock!=null);
+    if(typesWithStock.length>0){
+      typesWithStock.forEach(t=>{
+        directStockDishes.push({
+          ...d, _key:k, _src:'dishes',
+          _isTypeRow:true, _typeName:t.name,
+          name:`${d.name} — ${t.name}`,
+          stock:t.stock??0,
+          alertAt:t.alertAt??null,
+          barcodes:t.barcodes||[],
+          barcode:t.barcode||null,
+          _typeObj:t,
+        });
+      });
+    } else {
+      directStockDishes.push({...d,_key:k,_src:'dishes',stock:d.stock??0});
+    }
+  });
+  Object.entries(DB.cafeteriaItems||{}).filter(([,d])=>d.stock!=null&&(!d.recipe||d.recipe.length===0)).forEach(([k,d])=>directStockDishes.push({...d,_key:k,_src:'cafeteria'}));
+  Object.entries(DB.kioskItems||{}).forEach(([k,d])=>directStockDishes.push({...d,_key:k,_src:'kiosko',stock:d.stock!=null?d.stock:0}));
 
   // ── Scanner de código de barras (modo carga masiva) ──
   let h=`<div style="max-width:900px">`;
@@ -2506,32 +2544,59 @@ function renderStockTab(){
       if(bySection[sec].length===0)return;
       h+=`<div style="padding:6px 14px;background:#fafaf9;border-bottom:0.5px solid var(--border);font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${sectionLabel[sec]}</div>`;
       bySection[sec].forEach(d=>{
-        const isOpen=(C._stockEdit||{})[`${sec}-${d._key}`];
-        const _allBarcodes=(C._stockEditData&&C._stockEditData[`${sec}-${d._key}`]?.barcodes)||[];
+        // Key única por fila — para tipo usa dishKey+typeName
+        const editKey=d._isTypeRow?`${d._key}__${d._typeName}`:d._key;
+        const storeKey=`${sec}-${editKey}`;
+        const isOpen=(C._stockEdit||{})[storeKey];
+        const _allBarcodes=(C._stockEditData&&C._stockEditData[storeKey]?.barcodes)||[];
         h+=`<div style="border-bottom:0.5px solid var(--border)">`;
-        h+=itemRow(d._key,d.name,d.stock||0,'u',d.alertAt,d._src,'',d);
-        // Mini-form expandible — dentro del mismo contenedor
+        h+=itemRow(editKey,d.name,d.stock||0,'u',d.alertAt,d._isTypeRow?'__type__':d._src,'',d);
         if(isOpen){
-          h+=`<div style="padding:10px 14px;background:#f8f7f4;">
-          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">
-            <div class="form-group" style="margin:0;flex:1;min-width:120px">
-              <label style="font-size:11px">Alerta ≤</label>
-              <input type="number" min="0" placeholder="Ej: 3" value="${d.alertAt!=null?d.alertAt:''}"
-                oninput="stockDirectUpdate('${d._key}','${sec}','alertAt',this.value)"
-                style="padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;width:100%">
+          if(d._isTypeRow){
+            // Editor para fila de tipo — guarda directamente en el tipo
+            const dish=DB.dishes[d._key];
+            const typeIdx=(dish?.types||[]).findIndex(t=>(typeof t==='string'?t:t.name)===d._typeName);
+            h+=`<div style="padding:10px 14px;background:#f8f7f4;">
+            <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">
+              <div class="form-group" style="margin:0;flex:1;min-width:120px">
+                <label style="font-size:11px">Stock</label>
+                <input type="number" min="0" placeholder="0" value="${d.stock!=null?d.stock:''}"
+                  oninput="updateTypeStockDirect('${d._key}',${typeIdx},this.value)"
+                  style="padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;width:100%">
+              </div>
             </div>
-          </div>
-          <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">🔍 Códigos de barras</div>
-          ${_allBarcodes.length>0?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${_allBarcodes.map((bc,bi)=>`<div style="display:flex;align-items:center;gap:4px;background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:3px 8px;font-family:monospace;font-size:12px">${bc}<button onclick="stockDirectRemoveBarcode('${d._key}','${sec}',${bi})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:12px;line-height:1;margin-left:2px">✕</button></div>`).join('')}</div>`:'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Sin códigos asignados</div>'}
-          <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
-            <input id="new-barcode-${sec}-${d._key}" placeholder="Escaneá o escribí un código nuevo"
-              style="flex:1;padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:monospace;font-size:13px"
-              onkeydown="if(event.key==='Enter'){stockDirectAddBarcode('${d._key}','${sec}');event.preventDefault();}">
-            <button onclick="stockDirectAddBarcode('${d._key}','${sec}')" style="padding:5px 12px;border-radius:6px;border:0.5px solid var(--brand);color:var(--brand);background:transparent;font-size:13px;cursor:pointer;font-family:inherit">+ Agregar</button>
-          </div>
-          <button onclick="stockDirectSave('${d._key}','${sec}')" style="padding:6px 14px;border-radius:6px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
-          ${(()=>{const dish=DB.dishes[d._key];const typesWithStock=(dish&&dish.types||[]).filter(t=>typeof t==='object'&&t.stock!=null);if(typesWithStock.length===0)return '';let th='<div style="margin-top:14px;border-top:0.5px solid var(--border);padding-top:10px"><div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:8px">📦 Stock por tipo</div><div style="display:flex;flex-direction:column;gap:6px">';typesWithStock.forEach((t,i)=>{const realIdx=(dish.types||[]).findIndex(x=>(typeof x==='string'?x:x.name)===t.name);th+=`<div style="display:flex;align-items:center;gap:8px"><span style="flex:1;font-size:13px">${t.name}</span><input type="number" min="0" value="${t.stock}" oninput="updateTypeStockDirect('${d._key}',${realIdx},this.value)" style="width:70px;padding:4px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px"><span style="font-size:11px;color:${t.stock===0?'#b91c1c':t.stock<=3?'#92400e':'#065f46'}">${t.stock===0?'Sin stock':t.stock<=3?'⚠️ Bajo':'✓'}</span></div>`;});th+='</div></div>';return th;})()}
-        </div>`;
+            <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">🔍 Códigos de barras</div>
+            ${_allBarcodes.length>0?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${_allBarcodes.map((bc,bi)=>`<div style="display:flex;align-items:center;gap:4px;background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:3px 8px;font-family:monospace;font-size:12px">${bc}<button onclick="typeRowRemoveBarcode('${d._key}',${typeIdx},${bi})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:12px;line-height:1;margin-left:2px">✕</button></div>`).join('')}</div>`:'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Sin códigos asignados</div>'}
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
+              <input id="new-bc-type-${d._key}-${typeIdx}" placeholder="Escaneá o escribí un código nuevo"
+                style="flex:1;padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:monospace;font-size:13px"
+                onkeydown="if(event.key==='Enter'){typeRowAddBarcode('${d._key}',${typeIdx},'${storeKey}');event.preventDefault();}">
+              <button onclick="typeRowAddBarcode('${d._key}',${typeIdx},'${storeKey}')" style="padding:5px 12px;border-radius:6px;border:0.5px solid var(--brand);color:var(--brand);background:transparent;font-size:13px;cursor:pointer;font-family:inherit">+ Agregar</button>
+            </div>
+            <button onclick="typeRowSave('${d._key}',${typeIdx},'${storeKey}')" style="padding:6px 14px;border-radius:6px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
+          </div>`;
+          } else {
+            // Editor normal para plato/cafetería/kiosko
+            h+=`<div style="padding:10px 14px;background:#f8f7f4;">
+            <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">
+              <div class="form-group" style="margin:0;flex:1;min-width:120px">
+                <label style="font-size:11px">Alerta ≤</label>
+                <input type="number" min="0" placeholder="Ej: 3" value="${d.alertAt!=null?d.alertAt:''}"
+                  oninput="stockDirectUpdate('${d._key}','${sec}','alertAt',this.value)"
+                  style="padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;width:100%">
+              </div>
+            </div>
+            <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">🔍 Códigos de barras</div>
+            ${_allBarcodes.length>0?`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">${_allBarcodes.map((bc,bi)=>`<div style="display:flex;align-items:center;gap:4px;background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:3px 8px;font-family:monospace;font-size:12px">${bc}<button onclick="stockDirectRemoveBarcode('${d._key}','${sec}',${bi})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:12px;line-height:1;margin-left:2px">✕</button></div>`).join('')}</div>`:'<div style="font-size:12px;color:var(--muted);margin-bottom:8px">Sin códigos asignados</div>'}
+            <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px">
+              <input id="new-barcode-${sec}-${d._key}" placeholder="Escaneá o escribí un código nuevo"
+                style="flex:1;padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:monospace;font-size:13px"
+                onkeydown="if(event.key==='Enter'){stockDirectAddBarcode('${d._key}','${sec}');event.preventDefault();}">
+              <button onclick="stockDirectAddBarcode('${d._key}','${sec}')" style="padding:5px 12px;border-radius:6px;border:0.5px solid var(--brand);color:var(--brand);background:transparent;font-size:13px;cursor:pointer;font-family:inherit">+ Agregar</button>
+            </div>
+            <button onclick="stockDirectSave('${d._key}','${sec}')" style="padding:6px 14px;border-radius:6px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
+          </div>`;
+          }
         }
         h+=`</div>`;
       });
@@ -2546,28 +2611,81 @@ function renderStockTab(){
 // ── INGREDIENT ACTIONS ────────────────────────────
 window.toggleStockEdit=(key,src)=>{
   if(!C._stockEdit) C._stockEdit={};
-  const k=`${src}-${key}`;
-  const opening=!C._stockEdit[k];
-  C._stockEdit[k]=opening;
-  // Al abrir: inicializar estado de barcodes y alertAt desde DB
+  // key puede ser dishKey o dishKey__typeName para filas de tipo
+  const storeKey=src==='__type__'?`dishes-${key}`:`${src}-${key}`;
+  const opening=!C._stockEdit[storeKey];
+  C._stockEdit[storeKey]=opening;
   if(opening){
     if(!C._stockEditData) C._stockEditData={};
-    if(!C._stockEditData[k]) C._stockEditData[k]={};
-    const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
-    const item=dbObj[key]||{};
-    if(!('alertAt' in C._stockEditData[k]))C._stockEditData[k].alertAt=item.alertAt!=null?item.alertAt:'';
-    if(!('barcodes' in C._stockEditData[k])){
-      let bs=[];
-      if(item.barcodes&&item.barcodes.length>0)bs=[...item.barcodes];
-      else if(item.barcode)bs=[item.barcode];
-      C._stockEditData[k].barcodes=[...new Set(bs.filter(Boolean))];
+    if(!C._stockEditData[storeKey]) C._stockEditData[storeKey]={};
+    // Inicializar barcodes desde DB
+    if(key.includes('__')){
+      // Fila de tipo
+      const [dishId,typeName]=key.split('__');
+      const dish=DB.dishes[dishId]||{};
+      const t=(dish.types||[]).find(t2=>(typeof t2==='string'?t2:t2.name)===typeName);
+      if(t&&typeof t==='object'){
+        const bs=t.barcodes?[...t.barcodes]:(t.barcode?[t.barcode]:[]);
+        C._stockEditData[storeKey].barcodes=[...new Set(bs.filter(Boolean))];
+      } else {
+        C._stockEditData[storeKey].barcodes=[];
+      }
+    } else {
+      const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
+      const item=dbObj[key]||{};
+      if(!('alertAt' in C._stockEditData[storeKey]))C._stockEditData[storeKey].alertAt=item.alertAt!=null?item.alertAt:'';
+      if(!('barcodes' in C._stockEditData[storeKey])){
+        let bs=[];
+        if(item.barcodes&&item.barcodes.length>0)bs=[...item.barcodes];
+        else if(item.barcode)bs=[item.barcode];
+        C._stockEditData[storeKey].barcodes=[...new Set(bs.filter(Boolean))];
+      }
     }
   }
   render();
   setTimeout(()=>{
-    const inp=document.getElementById(`new-barcode-${src}-${key}`);
+    const inp=document.getElementById(`new-barcode-${src}-${key}`)
+      ||document.getElementById(`new-bc-type-${key.split('__')[0]}-${key.includes('__')?'x':''}`);
     if(inp)inp.focus();
   },50);
+};
+// Type row barcode actions
+window.typeRowAddBarcode=async(dishId,typeIdx,storeKey)=>{
+  const inp=document.getElementById(`new-bc-type-${dishId}-${typeIdx}`);
+  if(!inp||!inp.value.trim())return;
+  const bc=inp.value.trim();
+  const dish=DB.dishes[dishId];if(!dish||!dish.types||!dish.types[typeIdx])return;
+  const updatedTypes=[...dish.types];
+  if(typeof updatedTypes[typeIdx]==='string')updatedTypes[typeIdx]={name:updatedTypes[typeIdx],priceMode:'base'};
+  const t=updatedTypes[typeIdx];
+  const bcs=t.barcodes?[...t.barcodes]:(t.barcode?[t.barcode]:[]);
+  if(!bcs.includes(bc))bcs.push(bc);
+  updatedTypes[typeIdx]={...t,barcodes:bcs,barcode:null};
+  await update(ref(db,`dishes/${dishId}`),{types:updatedTypes});
+  // Update local state
+  if(C._stockEditData&&C._stockEditData[storeKey]){
+    C._stockEditData[storeKey].barcodes=bcs;
+  }
+  inp.value='';render();
+  setTimeout(()=>{const i2=document.getElementById(`new-bc-type-${dishId}-${typeIdx}`);if(i2)i2.focus();},50);
+};
+window.typeRowRemoveBarcode=async(dishId,typeIdx,bcIdx)=>{
+  const dish=DB.dishes[dishId];if(!dish||!dish.types||!dish.types[typeIdx])return;
+  const updatedTypes=[...dish.types];
+  const t=updatedTypes[typeIdx];
+  const bcs=[...(t.barcodes||[])];
+  bcs.splice(bcIdx,1);
+  updatedTypes[typeIdx]={...t,barcodes:bcs};
+  await update(ref(db,`dishes/${dishId}`),{types:updatedTypes});
+  render();
+};
+window.typeRowSave=async(dishId,typeIdx,storeKey)=>{
+  const dish=DB.dishes[dishId];if(!dish||!dish.types||!dish.types[typeIdx])return;
+  // Stock already saved live via updateTypeStockDirect
+  // Just close the editor
+  if(C._stockEdit)C._stockEdit[storeKey]=false;
+  if(C._stockEditData)delete C._stockEditData[storeKey];
+  render();
 };
 
 window.stockDirectUpdate=(key,src,field,val)=>{
@@ -2643,10 +2761,23 @@ window.stockBatchScan=(code)=>{
   const q=(code||'').trim();
   if(!q) return;
   // Buscar en todos los orígenes
-  let found=null, foundSrc=null;
+  let found=null, foundSrc=null, foundTypeName=null;
   const ingMatch=Object.entries(DB.ingredients||{}).find(([,i])=>i.barcode===q||(i.barcodes&&i.barcodes.includes(q)));
   if(ingMatch){found={...ingMatch[1],_key:ingMatch[0]};foundSrc='ing';}
   if(!found){const m=Object.entries(DB.dishes||{}).find(([,d])=>d.barcode===q||(d.barcodes&&d.barcodes.includes(q)));if(m){found={...m[1],_key:m[0]};foundSrc='dishes';}}
+  // Buscar en barcodes de tipos de platos
+  if(!found){
+    for(const [dishId,d] of Object.entries(DB.dishes||{})){
+      if(!d.types)continue;
+      for(const t of d.types){
+        if(typeof t!=='object')continue;
+        const tbc=t.barcodes||[];
+        if(t.barcode)tbc.push(t.barcode);
+        if(tbc.includes(q)){found={...d,_key:dishId};foundSrc='dishes';foundTypeName=t.name;break;}
+      }
+      if(found)break;
+    }
+  }
   if(!found){const m=Object.entries(DB.cafeteriaItems||{}).find(([,d])=>d.barcode===q||(d.barcodes&&d.barcodes.includes(q)));if(m){found={...m[1],_key:m[0]};foundSrc='cafeteria';}}
   if(!found){const m=Object.entries(DB.kioskItems||{}).find(([,d])=>d.barcode===q||(d.barcodes&&d.barcodes.includes(q)));if(m){found={...m[1],_key:m[0]};foundSrc='kiosko';}}
 
@@ -2656,18 +2787,22 @@ window.stockBatchScan=(code)=>{
   }
   if(!C._barcodeBatch) C._barcodeBatch=[];
 
-  // Si ya está en la lista, sumar 1
-  const existing=C._barcodeBatch.find(i=>i.key===found._key&&i.src===foundSrc);
+  // Si ya está en la lista (mismo plato + mismo tipo), sumar 1
+  const existing=C._barcodeBatch.find(i=>i.key===found._key&&i.src===foundSrc&&(i.typeName||null)===(foundTypeName||null));
   if(existing){
     existing.delta+=1;
   } else {
+    const displayName=foundTypeName?`${found.name} — ${foundTypeName}`:found.name;
     C._barcodeBatch.push({
       key: found._key,
       src: foundSrc,
-      name: found.name,
+      name: displayName,
+      typeName: foundTypeName||null,
       barcode: q,
       unit: found.unit||'u',
-      currentStock: found.stock||0,
+      currentStock: foundTypeName
+        ? (()=>{const t=(found.types||[]).find(t2=>(typeof t2==='string'?t2:t2.name)===foundTypeName);return t&&typeof t==='object'&&t.stock!=null?t.stock:0;})()
+        : found.stock||0,
       delta: 1
     });
   }
@@ -2702,16 +2837,22 @@ window.stockBatchClear=()=>{
 window.stockBatchApply=async()=>{
   const batch=C._barcodeBatch||[];
   if(!batch.length)return;
-  const updates={};
-  batch.forEach(item=>{
+  for(const item of batch){
     const dbPath=item.src==='ing'?'ingredients':item.src==='dishes'?'dishes':item.src==='cafeteria'?'cafeteriaItems':'kioskItems';
     const newStock=Math.max(0,(item.currentStock||0)+Number(item.delta||0));
-    updates[`${dbPath}/${item.key}/stock`]=newStock;
-  });
-  // Actualizar todo de una sola vez
-  const {update:fbUpdate,ref:fbRef}={update,ref};
-  for(const [path,val] of Object.entries(updates)){
-    await update(ref(db,path.split('/').slice(0,-1).join('/')),{stock:val});
+    if(item.typeName&&item.src==='dishes'){
+      // Actualizar stock del tipo específico
+      const dish=DB.dishes[item.key];
+      if(dish&&dish.types){
+        const updatedTypes=dish.types.map(t=>{
+          if(typeof t==='string'||t.name!==item.typeName)return t;
+          return{...t,stock:newStock};
+        });
+        await update(ref(db,`dishes/${item.key}`),{types:updatedTypes});
+      }
+    } else {
+      await update(ref(db,`${dbPath}/${item.key}`),{stock:newStock});
+    }
   }
   C._barcodeBatch=[];
   render();
@@ -2776,6 +2917,16 @@ window.applyStockAdj=async(key,src)=>{
     const ing=DB.ingredients[key];if(!ing)return;
     const newStock=mode==='set'?Math.max(0,val):Math.max(0,(ing.stock||0)+val);
     await update(ref(db,`ingredients/${key}`),{stock:newStock});
+  } else if(src==='__type__'&&key.includes('__')){
+    // Fila de tipo — key = dishId__typeName
+    const [dishId,typeName]=key.split('__');
+    const dish=DB.dishes[dishId];if(!dish||!dish.types)return;
+    const updatedTypes=dish.types.map(t=>{
+      if((typeof t==='string'?t:t.name)!==typeName)return t;
+      const cur=typeof t==='object'&&t.stock!=null?t.stock:0;
+      return{...(typeof t==='object'?t:{name:t,priceMode:'base'}),stock:mode==='set'?Math.max(0,val):Math.max(0,cur+val)};
+    });
+    await update(ref(db,`dishes/${dishId}`),{types:updatedTypes});
   } else {
     const dbPath=src==='cafeteria'?'cafeteriaItems':src==='kiosko'?'kioskItems':'dishes';
     const d=src==='cafeteria'?DB.cafeteriaItems[key]:src==='kiosko'?DB.kioskItems[key]:DB.dishes[key];
@@ -3558,6 +3709,21 @@ window.updateTypeStockDirect=async(dishId,typeIdx,val)=>{
   if(typeof updatedTypes[typeIdx]==='string')updatedTypes[typeIdx]={name:updatedTypes[typeIdx],priceMode:'base'};
   updatedTypes[typeIdx]={...updatedTypes[typeIdx],stock:val===''||val==null?null:Math.max(0,Number(val))};
   await update(ref(db,`dishes/${dishId}`),{types:updatedTypes});
+};
+window.toggleTypeBc=idx=>{if(!C._typeBcOpen)C._typeBcOpen={};C._typeBcOpen[idx]=!C._typeBcOpen[idx];render();};
+window.addTypeBarcode=idx=>{
+  const inp=document.getElementById('type-bc-'+idx);if(!inp||!inp.value.trim())return;
+  const f=C.editingDish||C.newDish;if(!f.types||!f.types[idx])return;
+  if(typeof f.types[idx]==='string')f.types[idx]={name:f.types[idx],priceMode:'base'};
+  if(!f.types[idx].barcodes)f.types[idx].barcodes=[];
+  const bc=inp.value.trim();
+  if(!f.types[idx].barcodes.includes(bc))f.types[idx].barcodes.push(bc);
+  inp.value='';render();
+};
+window.removeTypeBarcode=(typeIdx,bcIdx)=>{
+  const f=C.editingDish||C.newDish;if(!f.types||!f.types[typeIdx])return;
+  if(f.types[typeIdx].barcodes)f.types[typeIdx].barcodes.splice(bcIdx,1);
+  render();
 };
 window.addIngredient=()=>{const inp=document.getElementById('ing-input');const val=(inp?inp.value:C.newIngInput).trim();if(!val)return;const f=C.editingDish||C.newDish;if(!f.ingredients)f.ingredients=[];val.split(',').map(v=>v.trim()).filter(Boolean).forEach(v=>{if(!f.ingredients.includes(v))f.ingredients.push(v);});C.newIngInput='';render();};
 window.removeIngredient=idx=>{const f=C.editingDish||C.newDish;f.ingredients.splice(idx,1);render();};
