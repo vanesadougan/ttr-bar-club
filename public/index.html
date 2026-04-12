@@ -563,7 +563,13 @@ function render(){
   // If customer route, skip auth entirely
   if(isMenuRoute){ if(menuShowWelcome){ renderMenuWelcome(document.getElementById('main-content')); } else { renderMenuOnly(document.getElementById('main-content')); } return; }
   if(isCocinaRoute){ renderCocina(document.getElementById('main-content')); return; }
-  if(isCustomerRoute){ renderCustomer(); return; }
+  if(isCustomerRoute){
+    const _prevStep=C._prevCustomerStep;
+    renderCustomer();
+    if(C.customerStep!==_prevStep) window.scrollTo(0,0);
+    C._prevCustomerStep=C.customerStep;
+    return;
+  }
   // Admin requires login
   if(C.mode==='admin' && !currentUser){ renderLogin(); return; }
   const tabAdmin=document.getElementById('tab-admin');
