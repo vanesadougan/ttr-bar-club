@@ -4209,6 +4209,7 @@ function cartTotal(){
   return Object.entries(C.cart).reduce((s,[id,v])=>{
     if(id.startsWith('mitad|'))return s+(v._mitadPrice||0)*v.qty;
     if(id.startsWith('kiosk|')){const d=DB.kioskItems[v._kioskKey];return s+(d?Number(d.price)*v.qty:0);}
+    if(id.startsWith('restk|')){const d=DB.dishes[v._kioskKey];return s+(d?dishFinalPrice(d,1)*v.qty:0);}
     const d=DB.dishes[id]||DB.cafeteriaItems[id];
     if(!d)return s;
     return s+(d.isCafeteria?Number(d.price)*v.qty:dishFinalPrice(d,v.qty)*v.qty);
@@ -4616,32 +4617,71 @@ function renderCafeteriaMenu(mc, menuH, ct, isIndividual){
 
 function renderKioskoMenuCust(mc, menuH, ct, isIndividual){
   const kioskCats=getKioskCats();
-  const allItems=Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k})).filter(d=>d.stock==null||d.stock>0);
-  const catsWithItems=kioskCats.filter(c=>allItems.some(d=>d.cat===c._key));
-  // Auto-select first cat always
-  if(!C.kioskCat||!catsWithItems.find(c=>c._key===C.kioskCat))
-    C.kioskCat=catsWithItems.length>0?catsWithItems[0]._key:null;
 
-  // Cat tabs
-  if(catsWithItems.length>0){
+  // Items de kiosko con stock
+  const kioskItems=Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k,_src:'kiosk'})).filter(d=>d.stock==null||d.stock>0);
+
+  // Platos de restaurant con directStock (ej: Bebidas) — se muestran como extra
+  const directStockCats=new Set(getCats().filter(c=>c.directStock).map(c=>c._key));
+  const restaurantExtras=Object.entries(DB.dishes||{})
+    .map(([k,v])=>({...v,_key:k,_src:'dish'}))
+    .filter(d=>!d.unavailable&&directStockCats.has(d.cat)&&(d.stock==null||d.stock>0));
+
+  const allItems=[...kioskItems,...restaurantExtras];
+
+  // Categorías de kiosko que tienen items
+  const catsWithItems=kioskCats.filter(c=>allItems.some(d=>d._src==='kiosk'&&d.cat===c._key));
+
+  // Categorías de restaurant extra que aparecen en kiosko
+  const extraRestCats=[...new Set(restaurantExtras.map(d=>d.cat))].map(catId=>{
+    const cat=DB.categories?.[catId];
+    return cat?{_key:catId,label:cat.label,icon:cat.icon||'🍽',_isRest:true}:null;
+  }).filter(Boolean);
+
+  // Total de tabs = kiosk cats + rest extra cats
+  const allTabs=[...catsWithItems,...extraRestCats];
+
+  // Si no hay tab con categorías, mostrar todo sin tabs
+  const hasTabs=allTabs.length>0;
+
+  // Auto-select first tab
+  if(hasTabs&&(!C.kioskCat||!allTabs.find(c=>c._key===C.kioskCat)))
+    C.kioskCat=allTabs[0]._key;
+
+  if(hasTabs){
     menuH+=`<div class="cat-tabs">`;
-    catsWithItems.forEach(c=>{menuH+=`<button class="cat-tab${C.kioskCat===c._key?' active':''}" onclick="setKioskCat('${c._key}')"><span class="cat-emoji">${c.icon}</span>${c.label}</button>`;});
+    allTabs.forEach(c=>{menuH+=`<button class="cat-tab${C.kioskCat===c._key?' active':''}" onclick="setKioskCat('${c._key}')"><span class="cat-emoji">${c.icon}</span>${c.label}</button>`;});
     menuH+=`</div>`;
   }
 
-  const items=(C.kioskCat&&catsWithItems.length>0?allItems.filter(d=>d.cat===C.kioskCat):allItems).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
+  // Filtrar items según tab seleccionada
+  let items;
+  if(hasTabs&&C.kioskCat){
+    const isRestCat=extraRestCats.find(c=>c._key===C.kioskCat);
+    if(isRestCat){
+      items=restaurantExtras.filter(d=>d.cat===C.kioskCat);
+    } else {
+      items=kioskItems.filter(d=>d.cat===C.kioskCat);
+    }
+  } else {
+    items=allItems;
+  }
+  items=items.sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
+
   menuH+=`<div class="menu-grid" id="kiosk-menu-grid">`;
   items.forEach(d=>{
-    const cartKey='kiosk|'+d._key;
+    const isRest=d._src==='dish';
+    const cartKey=isRest?`restk|${d._key}`:`kiosk|${d._key}`;
     const entry=C.cart[cartKey];const q=entry?entry.qty:0;
     const sc=d.stock!=null?`<div style="font-size:11px;color:var(--muted)">📦 ${d.stock} disponibles</div>`:'';
+    const fp=isRest?dishFinalPrice(d,1):Number(d.price);
     menuH+=`<div class="menu-card">
       <div class="menu-card-name">🏪 ${d.name}</div>
       ${d.desc?`<div class="menu-card-desc">${d.desc}</div>`:''}
       ${sc}
       <div class="menu-card-footer">
-        <span class="menu-card-price">$${Number(d.price).toLocaleString()}</span>
-        ${q===0?`<button class="add-btn" onclick="quickAddKiosk('${d._key}')">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeFromCartKiosk('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="quickAddKiosk('${d._key}')">+</button></div>`}
+        <span class="menu-card-price">$${fp.toLocaleString()}</span>
+        ${q===0?`<button class="add-btn" onclick="quickAddKioskItem('${d._key}','${d._src}')">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeKioskItem('${d._key}','${d._src}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="quickAddKioskItem('${d._key}','${d._src}')">+</button></div>`}
       </div>
     </div>`;
   });
@@ -4661,8 +4701,18 @@ function refreshKioskoMenu(){
 window.setKioskSubTab=tab=>{C.kioskSubTab=tab;render();};
 window.toggleKioskCatOpen=id=>{if(!C._kioskCatOpen)C._kioskCatOpen={};C._kioskCatOpen[id]=C._kioskCatOpen[id]===false?true:false;render();};
 window.setKioskCat=c=>{C.kioskCat=c;C._catScrollReset=false;refreshKioskoMenu();scrollActiveCat();};
-window.quickAddKiosk=id=>{const k='kiosk|'+id;if(!C.cart[k])C.cart[k]={qty:0,_kioskKey:id};C.cart[k].qty++;refreshKioskoMenu();};
-window.removeFromCartKiosk=id=>{const k='kiosk|'+id;if(C.cart[k]){if(C.cart[k].qty>1)C.cart[k].qty--;else delete C.cart[k];}refreshKioskoMenu();};
+window.quickAddKioskItem=(id,src)=>{
+  const k=(src==='dish'?'restk|':'kiosk|')+id;
+  if(!C.cart[k])C.cart[k]={qty:0,_kioskKey:id,_src:src};
+  C.cart[k].qty++;refreshKioskoMenu();
+};
+window.removeKioskItem=(id,src)=>{
+  const k=(src==='dish'?'restk|':'kiosk|')+id;
+  if(C.cart[k]){if(C.cart[k].qty>1)C.cart[k].qty--;else delete C.cart[k];}refreshKioskoMenu();
+};
+// Legacy — keep for existing refs
+window.quickAddKiosk=id=>quickAddKioskItem(id,'kiosk');
+window.removeFromCartKiosk=id=>removeKioskItem(id,'kiosk');
 
 function renderCartPanel(mc, menuH, ct, isIndividual, cats){
   // Recalcular ct siempre para que refleje el estado actual del carrito
@@ -4674,9 +4724,11 @@ function renderCartPanel(mc, menuH, ct, isIndividual, cats){
   if(cartEntries.length===0)cartH+=`<div class="cart-empty">Todavía no agregaste ningún plato.</div>`;
   else cartEntries.forEach(([id,v])=>{
     // Kiosko
-    if(id.startsWith('kiosk|')){
-      const kd=DB.kioskItems[v._kioskKey];if(!kd)return;
-      cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🏪</div><div class="cart-item-info"><div class="cart-item-name">${kd.name}</div></div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCartKiosk('${v._kioskKey}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="quickAddKiosk('${v._kioskKey}')">+</button></div><div class="cart-item-price">$${(Number(kd.price)*v.qty).toLocaleString()}</div></div>`;
+    if(id.startsWith('kiosk|')||id.startsWith('restk|')){
+      const isRest=id.startsWith('restk|');
+      const kd=isRest?DB.dishes[v._kioskKey]:DB.kioskItems[v._kioskKey];if(!kd)return;
+      const kp=isRest?dishFinalPrice(kd,1):Number(kd.price);
+      cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🏪</div><div class="cart-item-info"><div class="cart-item-name">${kd.name}</div></div><div class="cart-qty"><button class="cqbtn" onclick="removeKioskItem('${v._kioskKey}','${v._src||'kiosk'}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="quickAddKioskItem('${v._kioskKey}','${v._src||'kiosk'}')">+</button></div><div class="cart-item-price">$${(kp*v.qty).toLocaleString()}</div></div>`;
       return;
     }
     // Mitad y mitad
@@ -4720,7 +4772,7 @@ window.toggleCafIng=(id,ing)=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set
 window.placeOrder=()=>{
   if(cartCount()===0)return;
   const items=Object.entries(C.cart).map(([id,v])=>{
-    if(id.startsWith('kiosk|')){const kd=DB.kioskItems[v._kioskKey];if(!kd)return null;return{name:kd.name,qty:v.qty,price:Number(kd.price),finalPrice:Number(kd.price),excluded:[],selectedType:null,isCafeteria:false,isKiosko:true,emoji:'🏪'};}
+    if(id.startsWith('kiosk|')||id.startsWith('restk|')){const isRest=id.startsWith('restk|');const kd=isRest?DB.dishes[v._kioskKey]:DB.kioskItems[v._kioskKey];if(!kd)return null;const kp=isRest?dishFinalPrice(kd,1):Number(kd.price);return{name:kd.name,qty:v.qty,price:kp,finalPrice:kp,excluded:[],selectedType:null,isCafeteria:false,isKiosko:true,emoji:'🏪'};}
     if(id.startsWith('mitad|'))return{name:v._mitadName||id,qty:v.qty,price:v._mitadPrice||0,finalPrice:v._mitadPrice||0,excluded:[],selectedType:null,isCafeteria:false,emoji:'🍕'};
     const dPlato=DB.dishes[id];
     const dCaf=DB.cafeteriaItems[id];
