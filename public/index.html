@@ -1392,7 +1392,7 @@ function renderWaiterMenu(mc){
   cartH+='</div><div class="cart-footer">';
   if(cartEntries.length>0){cartH+='<div class="cart-total-row big"><span>Total</span><span>$'+total.toLocaleString()+'</span></div><button class="btn btn-primary btn-block" style="margin-top:10px" onclick="waiterPlaceOrder()">Confirmar pedido</button><button class="btn btn-ghost btn-block" style="margin-top:6px;color:var(--danger);border-color:var(--danger)" onclick="waiterLimpiarCarrito()">Limpiar carrito</button>';}
   cartH+='<button class="btn btn-outline btn-block" style="margin-top:8px" onclick="waiterNuevaMesa()">← Mis mesas</button></div>';
-  mc.innerHTML='<div class="content"><div class="menu-layout"><div class="menu-col waiter-menu-col">'+menuH+'</div><div class="cart-col"><div class="cart-widget">'+cartH+'</div></div></div></div>';
+  mc.innerHTML='<div class="content" style="padding:0;max-width:none"><div class="menu-layout"><div class="menu-col waiter-menu-col">'+menuH+'</div><div class="cart-col"><div class="cart-widget">'+cartH+'</div></div></div></div>';
   updateTopbarCart();
 }
 // Waiter nav helpers
@@ -4480,7 +4480,7 @@ function renderCartPanel(mc, menuH, ct, isIndividual, cats){
   else if(C.billRequested)cartH+=`<div style="margin-top:8px;padding:10px 14px;border-radius:8px;background:#f0fdf4;border:0.5px solid #86efac;color:#166534;font-size:13px;text-align:center">✓ Cuenta solicitada</div>`;
   cartH+=`<button onclick="callWaiter()" style="margin-top:8px;width:100%;padding:10px;border-radius:8px;border:0.5px solid #f59e0b;background:#fef3c7;color:#92400e;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">🛎 Llamar al mozo</button>`;
   cartH+=`</div>`;
-  mc.innerHTML=`<div class="content"><div class="menu-layout"><div class="menu-col">${menuH}<div style="text-align:center;padding:1.5rem 0 .5rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div></div><div class="cart-col"><div class="cart-widget">${cartH}</div></div></div></div>`;
+  mc.innerHTML=`<div class="content" style="padding:0;max-width:none"><div class="menu-layout"><div class="menu-col">${menuH}<div style="text-align:center;padding:1.5rem 0 .5rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div></div><div class="cart-col"><div class="cart-widget">${cartH}</div></div></div></div>`;
 }
 
 window.setCafMenuCat=c=>{C.cafCat=c;C.cafCustId=null;const _s=document.querySelector('.cat-tabs');const _sl=_s?_s.scrollLeft:0;render();const _s2=document.querySelector('.cat-tabs');if(_s2)_s2.scrollLeft=_sl;};
@@ -4532,7 +4532,7 @@ function renderConfirmScreen(mc){
 
   // Botón resumen
   if(allItems.length>0){
-    h+=`<button onclick="C._showResumen=!C._showResumen;renderConfirmScreen(document.getElementById('main-content'))" style="margin-top:10px;width:100%;max-width:320px;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">📋 ${showResumen?'Ocultar':'Ver'} resumen de mis consumos</button>`;
+    h+=`<button onclick="toggleResumen()" style="margin-top:10px;width:100%;max-width:320px;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">📋 ${showResumen?'Ocultar consumos':'Ver mis consumos'}</button>`;
     if(showResumen){
       h+=`<div class="order-review" style="margin-top:8px;width:100%;max-width:320px"><div style="font-weight:600;font-size:13px;margin-bottom:8px">Todos mis consumos</div>`;
       allItems.forEach(i=>{h+=`<div class="review-row"><span>${i.qty}× ${i.name}${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:''}</span><span>$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;});
@@ -4544,7 +4544,9 @@ function renderConfirmScreen(mc){
   h+=`<div style="text-align:center;padding:1.5rem 0 .5rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div>`;
   mc.innerHTML=h;
 }
-window.backToMenu=()=>{C.cart={};C.custDishId=null;C.typePickerDishId=null;C.customerStep='menu';render();};
+window.backToMenu=()=>{C.cart={};C.custDishId=null;C.typePickerDishId=null;C._showResumen=false;C.customerStep='menu';render();};
+window.toggleResumen=()=>{C._showResumen=!C._showResumen;renderConfirmScreen(document.getElementById('main-content'));};
+window.backFromPayment=()=>{C.customerStep='menu';C.billRequested=false;render();};
 
 window.goToBill=()=>{
   C.survey={items:[],ratings:{},paymentMethod:null};
@@ -4606,7 +4608,7 @@ function renderPaymentScreen(mc){
       ${payMethods.map(pm=>`<button onclick="selectPayment('${pm.id}')" style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:10px;border:${selPay===pm.id?'2px solid var(--accent)':'0.5px solid var(--border)'};background:${selPay===pm.id?'#fff5f7':'var(--card)'};cursor:pointer;font-size:15px;font-family:inherit;text-align:left;transition:all 0.15s;width:100%"><span style="font-size:22px">${pm.icon}</span><span style="${selPay===pm.id?'font-weight:600;color:var(--accent)':'font-weight:500'}">${pm.label}</span>${selPay===pm.id?'<span style="margin-left:auto;color:var(--accent);font-size:18px">✓</span>':''}</button>`).join('')}
     </div>
     <button class="btn btn-primary btn-block" style="margin-top:1.5rem;padding:14px;font-size:15px;max-width:400px;${!selPay?'opacity:0.55':''}" onclick="confirmBill()">Continuar →</button>
-    <button class="btn btn-ghost btn-block" style="margin-top:8px;max-width:400px" onclick="C.customerStep='menu';C.billRequested=false;render()">← Volver al menú</button>
+    <button class="btn btn-ghost btn-block" style="margin-top:8px;max-width:400px" onclick="backFromPayment()">← Volver al menú</button>
   </div></div>`;
   h+=`<div style="text-align:center;padding:1.5rem 0 .5rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div>`;
   mc.innerHTML=h;
