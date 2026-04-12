@@ -550,7 +550,8 @@ onAuthStateChanged(auth, user => {
 // ─── RENDER ───────────────────────────────────────
 function render(){
   // Save cat-tabs scroll position before re-render
-  const _catScroll=document.querySelector('.cat-tabs')?.scrollLeft||0;
+  const _catScroll=C._catScrollReset?0:(document.querySelector('.cat-tabs')?.scrollLeft||0);
+  C._catScrollReset=false;
   updateClock();
   updateTopbarCart();
   // If customer route, skip auth entirely
@@ -1372,7 +1373,7 @@ function renderWaiterMenu(mc){
 }
 // Waiter nav helpers
 window.setWaiterStep=s=>{C.waiterStep=s;render();};
-window.setWaiterSection=s=>{C.waiterMenuSection=s;if(s==='platos')C.waiterCat=null;else C.waiterCafCat=null;render();};
+window.setWaiterSection=s=>{C.waiterMenuSection=s;if(s==='platos')C.waiterCat=null;else C.waiterCafCat=null;C._catScrollReset=true;render();};
 window.setWaiterCat=id=>{C.waiterCat=id;render();};
 window.setWaiterCafCat=id=>{C.waiterCafCat=id;render();};
 window.waiterNuevaMesa=()=>{C.waiterTableId=null;C.waiterCart={};C.waiterCat=null;C.waiterCafCat=null;C.waiterStep='mesas';render();};
@@ -2285,7 +2286,7 @@ function renderStockTab(){
         h+=itemRow(d._key,d.name,d.stock||0,'u',d.alertAt,d._src,'',d);
         // Reemplazar el botón de acción con editar
         // Mini-form expandible
-        const _allBarcodes=(()=>{const k=`${sec}-${d._key}`;if(C._stockEditData&&C._stockEditData[k]&&'barcodes' in C._stockEditData[k])return C._stockEditData[k].barcodes;const bs=[];if(d.barcode)bs.push(d.barcode);if(d.barcodes)d.barcodes.forEach(b=>{if(!bs.includes(b))bs.push(b);});return bs;})();
+        const _allBarcodes=(C._stockEditData&&C._stockEditData[`${sec}-${d._key}`]?.barcodes)||[];
         h+=`<div style="grid-column:1/-1;display:${isOpen?'block':'none'};padding:10px 14px;background:#f8f7f4;border-bottom:0.5px solid var(--border)" id="stock-edit-${sec}-${d._key}">
           <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">
             <div class="form-group" style="margin:0;flex:1;min-width:120px">
@@ -2318,9 +2319,22 @@ function renderStockTab(){
 window.toggleStockEdit=(key,src)=>{
   if(!C._stockEdit) C._stockEdit={};
   const k=`${src}-${key}`;
-  C._stockEdit[k]=!C._stockEdit[k];
+  const opening=!C._stockEdit[k];
+  C._stockEdit[k]=opening;
+  // Al abrir: inicializar estado de barcodes desde DB para evitar lecturas parciales
+  if(opening){
+    if(!C._stockEditData) C._stockEditData={};
+    if(!C._stockEditData[k]) C._stockEditData[k]={};
+    if(!('barcodes' in C._stockEditData[k])){
+      const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
+      const item=dbObj[key]||{};
+      const bs=[];
+      if(item.barcode&&!bs.includes(item.barcode))bs.push(item.barcode);
+      if(item.barcodes)item.barcodes.forEach(b=>{if(b&&!bs.includes(b))bs.push(b);});
+      C._stockEditData[k].barcodes=bs;
+    }
+  }
   render();
-  // Enfocar primer input del mini-form
   setTimeout(()=>{
     const el=document.getElementById(`stock-edit-${src}-${key}`);
     if(el){const inp=el.querySelector('input');if(inp)inp.focus();}
@@ -2354,15 +2368,17 @@ window.stockDirectSave=async(key,src)=>{
   render();
 };
 
-// Get current barcodes from edit state or DB
 function _getBarcodes(key,src){
   const k=`${src}-${key}`;
-  if(C._stockEditData&&C._stockEditData[k]&&'barcodes' in C._stockEditData[k]) return C._stockEditData[k].barcodes;
+  // Si ya hay estado temporal, usarlo directamente
+  if(C._stockEditData&&C._stockEditData[k]&&'barcodes' in C._stockEditData[k])
+    return [...C._stockEditData[k].barcodes];
+  // Si no, construir desde DB sin duplicados
   const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
   const item=dbObj[key]||{};
   const bs=[];
-  if(item.barcode)bs.push(item.barcode);
-  if(item.barcodes)item.barcodes.forEach(b=>{if(!bs.includes(b))bs.push(b);});
+  if(item.barcode&&!bs.includes(item.barcode))bs.push(item.barcode);
+  if(item.barcodes)item.barcodes.forEach(b=>{if(b&&!bs.includes(b))bs.push(b);});
   return bs;
 }
 
@@ -4022,6 +4038,7 @@ window.backToMesas=()=>{C.customerTableId=null;C.orderMode=null;C.customerName='
 function cartCount(){return Object.values(C.cart).reduce((s,v)=>s+v.qty,0);}
 function cartTotal(){
   return Object.entries(C.cart).reduce((s,[id,v])=>{
+    if(id.startsWith('mitad|'))return s+(v._mitadPrice||0)*v.qty;
     const d=DB.dishes[id]||DB.cafeteriaItems[id];
     if(!d)return s;
     return s+(d.isCafeteria?Number(d.price)*v.qty:dishFinalPrice(d,v.qty)*v.qty);
@@ -4119,7 +4136,7 @@ function renderMenuOnly(mc){
       }
       if(d.customizable&&(d.ingredients||[]).length>0)h+=`<div style="font-size:11px;color:#5b21b6;background:#ede9fe;border-radius:5px;padding:2px 7px;display:inline-block;margin-bottom:6px">🧩 Personalizable</div>`;
       h+=`<div class="menu-card-footer">`;
-      h+=`<div>${isP&&!d.is2x1?`<span class="menu-card-price-original">$${d.price.toLocaleString()}</span> `:''}<span class="menu-card-price">$${fp.toLocaleString()}</span></div>`;
+      h+=`<div>${d.isMitadMitad?'<span style="font-size:11px;color:var(--muted)">A definir</span>':(isP&&!d.is2x1?`<span class="menu-card-price-original">$${d.price.toLocaleString()}</span> `:'')+`<span class="menu-card-price">$${fp.toLocaleString()}</span>`}</div>`;
       h+=`</div></div>`;
     });
     h+=`</div>`;
@@ -4208,15 +4225,54 @@ function renderMenuWithCart(mc){
   menuH+=`<div class="menu-grid">`;
   filtered.forEach(d=>{
     const entry=C.cart[d._key];const q=entry?entry.qty:0;const excl=entry?entry.excluded:new Set();
-    const fp=dishFinalPrice(d,q||1);const dishCat=cats.find(c=>c._key===d.cat);
+    const fp=d.isMitadMitad?null:dishFinalPrice(d,q||1);const dishCat=cats.find(c=>c._key===d.cat);
     const isPromoCat=dishCat&&dishCat.isPromo;
     const is2x1=isPromoCat&&d.is2x1;
     const isP=isPromoCat&&(d.promoDiscount>0||is2x1);
     const promoChip=is2x1?`<span style="font-size:10px;font-weight:600;color:#c2410c;margin-left:4px;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">2x1</span>`:(d.promoDiscount>0?`<span style="font-size:10px;font-weight:600;color:#c2410c;margin-left:4px">-${d.promoDiscount}%</span>`:'');
-    // Para 2x1 con 2+ unidades mostrar precio especial; si qty<2 mostrar precio normal
-    const displayPrice=is2x1&&q>=2?dishFinalPrice(d,q):fp;
     const r=DB.ratings[d.name];const avg=r&&r.count>0?r.total/r.count:null;
-    menuH+=`<div class="menu-card${isP?' promo-card':''}">${isP?`<div style="margin-bottom:6px"><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:#fff7ed;color:#c2410c;border:0.5px solid #fed7aa">🔥 PROMO DEL DÍA</span></div>`:''}<div class="menu-card-name">${d.name}</div>${avg?`<div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">${starsHtml(avg,11)}<span style="font-size:11px;color:var(--muted);margin-left:2px">${avg.toFixed(1)}</span></div>`:''}<div class="menu-card-desc">${d.desc}</div>${is2x1?`<div style="font-size:11px;color:#92400e;background:#fff7ed;border-radius:5px;padding:2px 8px;display:inline-block;margin-bottom:6px;border:0.5px solid #fed7aa">🎁 Llevá 2, pagá 1</div>`:''} ${d.customizable&&(d.ingredients||[]).length>0?`<div style="font-size:11px;color:#5b21b6;background:#ede9fe;border-radius:5px;padding:2px 7px;display:inline-block;margin-bottom:6px">🧩 Personalizable</div>`:''}${excl&&excl.size>0?`<div class="excl-note">Sin: ${[...excl].join(', ')}</div>`:''}<div class="menu-card-footer"><div>${isP&&!is2x1?`<span class="menu-card-price-original">$${d.price.toLocaleString()}</span> `:''}<span class="menu-card-price">$${d.price.toLocaleString()}</span>${promoChip}</div>${q===0?`<button class="add-btn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${d._key}')`:(d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`)}">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeFromCart('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${d._key}')`:(d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`)}">+</button></div>`}</div></div>`;
+
+    if(d.isMitadMitad&&d.mitadMitadCat){
+      // Mitad y mitad card
+      const _isOpen=C.custMitadDishId===d._key;
+      const _mmEntries=Object.entries(C.cart).filter(([k])=>k.startsWith('mitad|'+d._key+'|'));
+      menuH+=`<div class="menu-card">`;
+      menuH+=`<div class="menu-card-name">${d.name}</div>`;
+      if(d.desc)menuH+=`<div class="menu-card-desc">${d.desc}</div>`;
+      _mmEntries.forEach(([k,v])=>{menuH+=`<div style="font-size:11px;color:var(--muted);margin-top:2px">🍕 ${v._mitadName||''}</div>`;});
+      menuH+=`<div class="menu-card-footer"><span style="font-size:11px;color:var(--muted)">A definir</span><button class="add-btn" onclick="custOpenMitad('${d._key}')">+</button></div>`;
+      if(_isOpen){
+        const _opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(dd=>dd.cat===d.mitadMitadCat&&!dd.unavailable).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+        const _s=C.custMitadStep||1;
+        const _m1=C.custMitad1?_opts.find(dd=>dd._key===C.custMitad1):null;
+        const _m2=C.custMitad2?_opts.find(dd=>dd._key===C.custMitad2):null;
+        const _price=_m1&&_m2?Math.max(Number(_m1.price),Number(_m2.price)):null;
+        menuH+=`<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border)">
+          <div style="display:flex;gap:8px;margin-bottom:10px">
+            <div style="flex:1;padding:7px 10px;border-radius:8px;border:1.5px solid ${_m1?'var(--accent)':'var(--border)'};background:${_m1?'#fff5f7':'var(--bg)'};font-size:12px;text-align:center">
+              <div style="font-size:10px;color:var(--muted)">1° mitad</div>
+              <div style="font-weight:600">${_m1?_m1.name:'—'}</div>
+            </div>
+            <div style="flex:1;padding:7px 10px;border-radius:8px;border:1.5px solid ${_m2?'var(--accent)':'var(--border)'};background:${_m2?'#fff5f7':'var(--bg)'};font-size:12px;text-align:center">
+              <div style="font-size:10px;color:var(--muted)">2° mitad</div>
+              <div style="font-weight:600">${_m2?_m2.name:'—'}</div>
+            </div>
+          </div>
+          <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">Elegí la ${_s===1?'primera':'segunda'} mitad:</div>
+          <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px">
+            ${_opts.map(dd=>{const _sel=(_s===1&&C.custMitad1===dd._key)||(_s===2&&C.custMitad2===dd._key);return `<button onclick="custMitadPick('${dd._key}')" style="padding:8px 12px;border-radius:8px;border:1.5px solid ${_sel?'var(--accent)':'var(--border)'};background:${_sel?'#fff5f7':'var(--card)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;display:flex;justify-content:space-between;align-items:center"><span>${dd.name}</span><span style="color:var(--accent)">$${Number(dd.price).toLocaleString()}</span></button>`;}).join('')}
+          </div>
+          ${_price!==null?`<div style="text-align:center;font-size:14px;font-weight:700;color:var(--accent);margin-bottom:8px">Total: $${_price.toLocaleString()}</div>`:''}
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary" style="flex:1;font-size:13px" ${_m1&&_m2?'':'disabled'} onclick="custConfirmMitad('${d._key}')">Agregar al pedido</button>
+            <button class="btn btn-ghost" style="font-size:13px" onclick="custCancelMitad()">Cancelar</button>
+          </div>
+        </div>`;
+      }
+      menuH+=`</div>`;
+    } else {
+      menuH+=`<div class="menu-card${isP?' promo-card':''}">${isP?`<div style="margin-bottom:6px"><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:#fff7ed;color:#c2410c;border:0.5px solid #fed7aa">🔥 PROMO DEL DÍA</span></div>`:''}<div class="menu-card-name">${d.name}</div>${avg?`<div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">${starsHtml(avg,11)}<span style="font-size:11px;color:var(--muted);margin-left:2px">${avg.toFixed(1)}</span></div>`:''}<div class="menu-card-desc">${d.desc}</div>${is2x1?`<div style="font-size:11px;color:#92400e;background:#fff7ed;border-radius:5px;padding:2px 8px;display:inline-block;margin-bottom:6px;border:0.5px solid #fed7aa">🎁 Llevá 2, pagá 1</div>`:''} ${d.customizable&&(d.ingredients||[]).length>0?`<div style="font-size:11px;color:#5b21b6;background:#ede9fe;border-radius:5px;padding:2px 7px;display:inline-block;margin-bottom:6px">🧩 Personalizable</div>`:''}${excl&&excl.size>0?`<div class="excl-note">Sin: ${[...excl].join(', ')}</div>`:''}<div class="menu-card-footer"><div>${isP&&!is2x1?`<span class="menu-card-price-original">$${d.price.toLocaleString()}</span> `:''}<span class="menu-card-price">$${d.price.toLocaleString()}</span>${promoChip}</div>${q===0?`<button class="add-btn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${d._key}')`:(d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`)}">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeFromCart('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${d._key}')`:(d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`)}">+</button></div>`}</div></div>`;
+    }
   });
   menuH+=`</div>`;
 
@@ -4228,6 +4284,26 @@ function renderMenuWithCart(mc){
 window.openCust=id=>{C.custDishId=id;renderMenuWithCart(document.getElementById('main-content'));};
 window.cancelCust=()=>{C.custDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
 window.openTypePicker=id=>{C.typePickerDishId=id;C.custDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
+
+window.custOpenMitad=id=>{C.custMitadDishId=id;C.custMitad1=null;C.custMitad2=null;C.custMitadStep=1;renderMenuWithCart(document.getElementById('main-content'));};
+window.custMitadPick=id=>{
+  if(C.custMitadStep===1){C.custMitad1=id;C.custMitadStep=2;}
+  else{C.custMitad2=id;}
+  renderMenuWithCart(document.getElementById('main-content'));
+};
+window.custConfirmMitad=dishId=>{
+  const mm=DB.dishes[dishId];if(!mm)return;
+  const d1=DB.dishes[C.custMitad1];const d2=DB.dishes[C.custMitad2];
+  if(!d1||!d2){alert('Elegí las dos mitades');return;}
+  const price=Math.max(Number(d1.price),Number(d2.price));
+  const name=`${mm.name} — ${d1.name} / ${d2.name}`;
+  const key=`mitad|${dishId}|${C.custMitad1}|${C.custMitad2}`;
+  if(!C.cart[key])C.cart[key]={qty:0,_mitadName:name,_mitadPrice:price};
+  C.cart[key].qty++;
+  C.custMitadDishId=null;C.custMitad1=null;C.custMitad2=null;C.custMitadStep=1;
+  renderMenuWithCart(document.getElementById('main-content'));
+};
+window.custCancelMitad=()=>{C.custMitadDishId=null;C.custMitad1=null;C.custMitad2=null;C.custMitadStep=1;renderMenuWithCart(document.getElementById('main-content'));};
 window.pickType=idx=>{
   const d=DB.dishes[C.typePickerDishId];
   if(!d)return;
@@ -4252,9 +4328,10 @@ window.toggleIng=(dishId,ing)=>{if(!C.cart[dishId])C.cart[dishId]={qty:0,exclude
 window.confirmCust=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;C.custDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
 window.quickAdd=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;renderMenuWithCart(document.getElementById('main-content'));};
 window.removeFromCart=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;else delete C.cart[id];}renderMenuWithCart(document.getElementById('main-content'));};
-window.setCat=c=>{C.customerCat=c;C.custDishId=null;render();};
-window.setCafCat=c=>{C.cafCat=c;render();};
-window.setMenuSection=section=>{C.customerMenuSection=section;C.cafCat='todos';C.custDishId=null;render();};
+window.custAddMitad=key=>{if(C.cart[key])C.cart[key].qty++;renderMenuWithCart(document.getElementById('main-content'));};
+window.setCat=c=>{C.customerCat=c;C.custDishId=null;const _s=document.querySelector('.cat-tabs');const _sl=_s?_s.scrollLeft:0;render();const _s2=document.querySelector('.cat-tabs');if(_s2)_s2.scrollLeft=_sl;};
+window.setCafCat=c=>{C.cafCat=c;const _s=document.querySelector('.cat-tabs');const _sl=_s?_s.scrollLeft:0;render();const _s2=document.querySelector('.cat-tabs');if(_s2)_s2.scrollLeft=_sl;};
+window.setMenuSection=section=>{C.customerMenuSection=section;C.cafCat='todos';C.custDishId=null;C._catScrollReset=true;render();};
 window.initCustomerCat=()=>{
   const cats=getCats();
   const allDishes=Object.values(DB.dishes);
@@ -4333,6 +4410,11 @@ function renderCartPanel(mc, menuH, ct, isIndividual, cats){
   let cartH=`<div class="cart-header"><span>${isIndividual?C.customerName:'Pedido mesa'}</span>${ct>0?`<span class="cart-tag">${ct} ítem${ct>1?'s':''}</span>`:''}</div><div class="cart-body">`;
   if(cartEntries.length===0)cartH+=`<div class="cart-empty">Todavía no agregaste ningún plato.</div>`;
   else cartEntries.forEach(([id,v])=>{
+    // Mitad y mitad
+    if(id.startsWith('mitad|')){
+      cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🍕</div><div class="cart-item-info"><div class="cart-item-name">${v._mitadName||'Pizza M&M'}</div></div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCart('${id}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="custAddMitad('${id}')">+</button></div><div class="cart-item-price">$${((v._mitadPrice||0)*v.qty).toLocaleString()}</div></div>`;
+      return;
+    }
     const d=DB.dishes[id]||DB.cafeteriaItems[id];if(!d)return;
     const isCaf=!!DB.cafeteriaItems[id];
     const fp=isCaf?Number(d.price):dishFinalPrice(d,v.qty);
@@ -4358,7 +4440,7 @@ function renderCartPanel(mc, menuH, ct, isIndividual, cats){
   mc.innerHTML=`<div class="content"><div class="menu-layout"><div class="menu-col">${menuH}</div><div class="cart-col"><div class="cart-widget">${cartH}</div></div></div></div>`;
 }
 
-window.setCafMenuCat=c=>{C.cafCat=c;C.cafCustId=null;render();};
+window.setCafMenuCat=c=>{C.cafCat=c;C.cafCustId=null;const _s=document.querySelector('.cat-tabs');const _sl=_s?_s.scrollLeft:0;render();const _s2=document.querySelector('.cat-tabs');if(_s2)_s2.scrollLeft=_sl;};
 window.quickAddCaf=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;render();};
 window.removeFromCartCaf=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;else delete C.cart[id];}render();};
 window.openCafCust=id=>{C.cafCustId=id;render();};
@@ -4369,6 +4451,7 @@ window.toggleCafIng=(id,ing)=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set
 window.placeOrder=()=>{
   if(cartCount()===0)return;
   const items=Object.entries(C.cart).map(([id,v])=>{
+    if(id.startsWith('mitad|'))return{name:v._mitadName||id,qty:v.qty,price:v._mitadPrice||0,finalPrice:v._mitadPrice||0,excluded:[],selectedType:null,isCafeteria:false,emoji:'🍕'};
     const dPlato=DB.dishes[id];
     const dCaf=DB.cafeteriaItems[id];
     const d=dPlato||dCaf;
@@ -4377,7 +4460,7 @@ window.placeOrder=()=>{
     return{name:d.name,qty:v.qty,price:d.price,finalPrice:isCaf?Number(d.price):dishFinalPrice(d,v.qty),excluded:v.excluded?[...v.excluded]:[],selectedType:v.selectedType||null,is2x1:(!isCaf&&d.is2x1)||false,isCafeteria:isCaf||false,emoji:d.emoji||null};
   }).filter(Boolean);
   push(ref(db,'orders'),{tableId:C.customerTableId,items,status:'pending',time:nowStr(),billRequested:false,orderMode:C.orderMode,personName:C.orderMode==='individual'?C.customerName:null,createdAt:Date.now()});
-  C.cart={};C.custDishId=null;C.cafCustId=null;C.customerStep='confirm';render();
+  C.cart={};C.custDishId=null;C.cafCustId=null;C.custMitadDishId=null;C.customerStep='confirm';render();
 };
 
 function renderConfirmScreen(mc){
