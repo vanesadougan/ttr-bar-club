@@ -1261,39 +1261,7 @@ function buildWaiterMenuH(){
     const cats=getCats();const catIds=cats.map(c=>c._key).filter(id=>allDishes.some(d=>d.cat===id));
     menuH+='<div class="cat-tabs">';catIds.forEach(cid=>{const cat=cats.find(c=>c._key===cid);menuH+='<button class="cat-tab'+(C.waiterCat===cid?' active':'')+(cat&&cat.isPromo?' promo-tab':'')+'" onclick="setWaiterCat(\''+cid+'\')">'+(cat?'<span class="cat-emoji">'+cat.icon+'</span>'+cat.label:'<span class="cat-emoji">🍽</span>'+cid)+'</button>';});menuH+='</div>';
   // Modal picker — después del cat-tabs, igual que comensal
-  if(C.mitadDishId){
-    const _mm=DB.dishes[C.mitadDishId];
-    if(_mm&&_mm.mitadMitadCat){
-      const _opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>d.cat===_mm.mitadMitadCat&&!d.unavailable).sort((a,b)=>a.name.localeCompare(b.name,'es'));
-      const _s=C.mitadStep||1;
-      const _m1=C.mitad1?_opts.find(d=>d._key===C.mitad1):null;
-      const _m2=C.mitad2?_opts.find(d=>d._key===C.mitad2):null;
-      const _price=_m1&&_m2?Math.max(Number(_m1.price),Number(_m2.price)):null;
-      menuH+=`<div class="cust-modal">
-        <div style="font-size:16px;font-weight:600;margin-bottom:4px">🍕 ${_mm.name}</div>
-        <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Elegí las dos mitades — se cobra la más cara</div>
-        <div style="display:flex;gap:8px;margin-bottom:12px">
-          <div style="flex:1;padding:8px 12px;border-radius:8px;border:1.5px solid ${_m1?'var(--accent)':'var(--border)'};background:${_m1?'#fff5f7':'var(--bg)'};font-size:13px;text-align:center">
-            <div style="font-size:10px;color:var(--muted);margin-bottom:2px">1° mitad</div>
-            <div style="font-weight:600">${_m1?_m1.name:'—'}</div>
-          </div>
-          <div style="flex:1;padding:8px 12px;border-radius:8px;border:1.5px solid ${_m2?'var(--accent)':'var(--border)'};background:${_m2?'#fff5f7':'var(--bg)'};font-size:13px;text-align:center">
-            <div style="font-size:10px;color:var(--muted);margin-bottom:2px">2° mitad</div>
-            <div style="font-weight:600">${_m2?_m2.name:'—'}</div>
-          </div>
-        </div>
-        <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">Elegí la ${_s===1?'primera':'segunda'} mitad:</div>
-        <div style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;margin-bottom:12px">
-          ${_opts.map(d=>{const _sel=(_s===1&&C.mitad1===d._key)||(_s===2&&C.mitad2===d._key);return `<button onclick="waiterMitadPick('${d._key}')" style="padding:10px 14px;border-radius:8px;border:1.5px solid ${_sel?'var(--accent)':'var(--border)'};background:${_sel?'#fff5f7':'var(--card)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;display:flex;justify-content:space-between;align-items:center"><span>${d.name}</span><span style="color:var(--accent)">$${Number(d.price).toLocaleString()}</span></button>`;}).join('')}
-        </div>
-        ${_price!==null?`<div style="text-align:center;font-size:15px;font-weight:700;color:var(--accent);margin-bottom:10px">Total: $${_price.toLocaleString()}</div>`:''}
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-primary" style="flex:1" ${_m1&&_m2?'':'disabled'} onclick="waiterConfirmMitad()">Agregar al pedido</button>
-          <button class="btn btn-ghost" onclick="waiterCancelMitad()">Cancelar</button>
-        </div>
-      </div>`;
-    }
-  } else if(C.waiterCustDishId){
+  if(C.waiterCustDishId){
     const _d=DB.dishes[C.waiterCustDishId]||DB.cafeteriaItems[C.waiterCustDishId];
     if(_d){
       const _isCaf=!!DB.cafeteriaItems[C.waiterCustDishId];
@@ -1319,9 +1287,39 @@ function buildWaiterMenuH(){
       const totalQty=myEntries.reduce((s,[,v])=>s+v.qty,0);
       menuH+='<div class="menu-card'+(isP?' promo-card':'')+'"><div class="menu-card-name">'+d.name+'</div><div class="menu-card-desc">'+(d.desc||'')+'</div>';
       if(d.isMitadMitad){
+        const _isOpen=C.mitadDishId===d._key;
         // Mostrar items de mitad en carrito
         myEntries.forEach(([k,v])=>{menuH+='<div style="font-size:11px;color:var(--muted);margin-top:2px">🍕 '+(v._mitadName||k)+'<div class="qty-ctrl" style="display:inline-flex;margin-left:6px"><button class="qty-btn" onclick="waiterRemove(\''+k+'\')">−</button><span class="qty-val">'+v.qty+'</span></div></div>';});
         menuH+='<div class="menu-card-footer"><span style="font-size:11px;color:var(--muted)">A definir</span><button class="add-btn" onclick="waiterAddDish(\''+d._key+'\',\'dish\')">+</button></div>';
+        // Picker inline
+        if(_isOpen&&d.mitadMitadCat){
+          const _opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(dd=>dd.cat===d.mitadMitadCat&&!dd.unavailable).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+          const _s=C.mitadStep||1;
+          const _m1=C.mitad1?_opts.find(dd=>dd._key===C.mitad1):null;
+          const _m2=C.mitad2?_opts.find(dd=>dd._key===C.mitad2):null;
+          const _price=_m1&&_m2?Math.max(Number(_m1.price),Number(_m2.price)):null;
+          menuH+=`<div style="margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border)">
+            <div style="display:flex;gap:8px;margin-bottom:10px">
+              <div style="flex:1;padding:7px 10px;border-radius:8px;border:1.5px solid ${_m1?'var(--accent)':'var(--border)'};background:${_m1?'#fff5f7':'var(--bg)'};font-size:12px;text-align:center">
+                <div style="font-size:10px;color:var(--muted)">1° mitad</div>
+                <div style="font-weight:600">${_m1?_m1.name:'—'}</div>
+              </div>
+              <div style="flex:1;padding:7px 10px;border-radius:8px;border:1.5px solid ${_m2?'var(--accent)':'var(--border)'};background:${_m2?'#fff5f7':'var(--bg)'};font-size:12px;text-align:center">
+                <div style="font-size:10px;color:var(--muted)">2° mitad</div>
+                <div style="font-weight:600">${_m2?_m2.name:'—'}</div>
+              </div>
+            </div>
+            <div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px">Elegí la ${_s===1?'primera':'segunda'} mitad:</div>
+            <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:10px">
+              ${_opts.map(dd=>{const _sel=(_s===1&&C.mitad1===dd._key)||(_s===2&&C.mitad2===dd._key);return `<button onclick="waiterMitadPick('${dd._key}')" style="padding:8px 12px;border-radius:8px;border:1.5px solid ${_sel?'var(--accent)':'var(--border)'};background:${_sel?'#fff5f7':'var(--card)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;display:flex;justify-content:space-between;align-items:center"><span>${dd.name}</span><span style="color:var(--accent)">$${Number(dd.price).toLocaleString()}</span></button>`;}).join('')}
+            </div>
+            ${_price!==null?`<div style="text-align:center;font-size:14px;font-weight:700;color:var(--accent);margin-bottom:8px">Total: $${_price.toLocaleString()}</div>`:''}
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-primary" style="flex:1;font-size:13px" ${_m1&&_m2?'':'disabled'} onclick="waiterConfirmMitad()">Agregar al pedido</button>
+              <button class="btn btn-ghost" style="font-size:13px" onclick="waiterCancelMitad()">Cancelar</button>
+            </div>
+          </div>`;
+        }
       } else if(myEntries.length>0&&(hasTypes||hasCustom)){
         myEntries.forEach(([k,v])=>{const lbl=v.selectedType?'<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">'+v.selectedType+'</span>':'';const excl=v.excluded&&v.excluded.length?'<div class="excl-note">sin: '+v.excluded.join(', ')+'</div>':'';menuH+=excl+'<div style="display:flex;align-items:center;gap:6px;margin-top:2px">'+lbl+'<div class="qty-ctrl"><button class="qty-btn" onclick="waiterRemove(\''+k+'\')">−</button><span class="qty-val">'+v.qty+'</span><button class="qty-btn" onclick="waiterQuickAdd(\''+k+'\',\'dish\')">+</button></div></div>';});
         menuH+='<div class="menu-card-footer"><span class="menu-card-price">'+(fp===null?'<span style="font-size:11px;color:var(--muted)">A definir</span>':'$'+fp.toLocaleString())+'</span><button class="add-btn" onclick="waiterAddDish(\''+d._key+'\',\'dish\')">+</button></div>';
