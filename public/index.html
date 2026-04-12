@@ -2724,7 +2724,7 @@ function renderOrdersTab(){
       </div>
       <div style="margin-bottom:10px">
         <div class="form-group" style="margin-bottom:6px"><label>Buscar producto</label>
-          <input id="kiosko-search" placeholder="Escribí para buscar..." value="${C.kioskoSearch||''}" oninput="updateKioskoSearch()" autocomplete="off">
+          <input id="kiosko-search" placeholder="Nombre o código de barras..." value="${C.kioskoSearch||''}" oninput="updateKioskoSearch()" onkeydown="if(event.key==='Enter'){kioskoSearchEnter();}" autocomplete="off">
         </div>
         <div id="kiosko-search-results" style="border:0.5px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;background:var(--card);margin-top:4px"></div>
       </div>
@@ -3457,31 +3457,64 @@ window.kioskoQty=(idx,delta)=>{
 };
 window.kioskoRemoveItem=idx=>{if(!C.kioskoOrder)return;C.kioskoOrder.items.splice(idx,1);render();};
 window.updateKioskoSearch=()=>{
-  const q=(document.getElementById('kiosko-search')?.value||'').toLowerCase().trim();
-  C.kioskoSearch=q;
+  const raw=document.getElementById('kiosko-search')?.value||'';
+  C.kioskoSearch=raw;
+  const q=raw.toLowerCase().trim();
   const res=document.getElementById('kiosko-search-results');if(!res)return;
   if(!q){res.style.display='none';return;}
-  const items=Object.entries(DB.kioskItems||{})
-    .map(([k,v])=>({...v,_key:k}))
-    .filter(d=>d.name.toLowerCase().includes(q)&&(d.stock==null||d.stock>0));
-  if(items.length===0){res.innerHTML='<div style="padding:10px;font-size:13px;color:var(--muted)">Sin resultados</div>';res.style.display='block';return;}
+
+  const results=[];
+
+  // ── Kiosko items ──
+  Object.entries(DB.kioskItems||{}).forEach(([k,v])=>{
+    const barcodes=[v.barcode,...(v.barcodes||[])].filter(Boolean);
+    const matchName=v.name.toLowerCase().includes(q);
+    const matchBarcode=barcodes.some(b=>b.toLowerCase().includes(q));
+    if((matchName||matchBarcode)&&(v.stock==null||v.stock>0))
+      results.push({_key:k,name:v.name,price:Number(v.price),stock:v.stock,_src:'kiosko',icon:'🏪'});
+  });
+
+  // ── Platos de Postres y Bebidas ──
+  const extraCats=Object.entries(DB.categories||{})
+    .filter(([,c])=>/postres?|bebidas?/i.test(c.label||''))
+    .map(([k])=>k);
+  Object.entries(DB.dishes||{}).forEach(([k,v])=>{
+    if(!extraCats.includes(v.cat)||v.unavailable)return;
+    const barcodes=[v.barcode,...(v.barcodes||[])].filter(Boolean);
+    const matchName=v.name.toLowerCase().includes(q);
+    const matchBarcode=barcodes.some(b=>b.toLowerCase().includes(q));
+    if(matchName||matchBarcode){
+      const cat=DB.categories?.[v.cat];
+      results.push({_key:k,name:v.name,price:Number(v.price),stock:v.stock,_src:'dish',icon:cat?.icon||'🍽',catLabel:cat?.label||''});
+    }
+  });
+
+  if(results.length===0){res.innerHTML='<div style="padding:10px;font-size:13px;color:var(--muted)">Sin resultados</div>';res.style.display='block';return;}
   res.style.display='block';
-  res.innerHTML=items.map(d=>{
+  res.innerHTML=results.map(d=>{
     const sc=d.stock!=null?`<span style="font-size:11px;color:var(--muted)"> · 📦 ${d.stock}</span>`:'';
-    return `<div onclick="kioskoAddItem('${d._key}')" style="padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:13px" onmouseover="this.style.background='#f8f7f4'" onmouseout="this.style.background=''">
-      <span>🏪 ${d.name}${sc}</span>
-      <span style="font-weight:600;color:var(--accent)">$${Number(d.price).toLocaleString()}</span>
+    const srcLabel=d._src==='dish'?`<span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px;margin-left:4px">${d.catLabel}</span>`:'';
+    return `<div onclick="kioskoAddItem('${d._key}','${d._src}')" style="padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:13px" onmouseover="this.style.background='#f8f7f4'" onmouseout="this.style.background=''">
+      <span>${d.icon} ${d.name}${srcLabel}${sc}</span>
+      <span style="font-weight:600;color:var(--accent)">$${d.price.toLocaleString()}</span>
     </div>`;
   }).join('');
 };
-window.kioskoAddItem=key=>{
-  const d=DB.kioskItems[key];if(!d||!C.kioskoOrder)return;
-  // Guardar el nombre antes de re-renderizar
+window.kioskoSearchEnter=()=>{
+  // Si hay un solo resultado, agregarlo directo
+  const rows=document.querySelectorAll('#kiosko-search-results [onclick]');
+  if(rows.length===1)rows[0].click();
+};
+window.kioskoAddItem=(key,src)=>{
+  src=src||'kiosko';
+  const d=src==='dish'?DB.dishes[key]:DB.kioskItems[key];
+  if(!d||!C.kioskoOrder)return;
   const nombreInp=document.getElementById('kiosko-nombre');
   if(nombreInp) C.kioskoOrder.personName=nombreInp.value;
-  const existing=C.kioskoOrder.items.find(i=>i.kioskKey===key);
+  const itemKey=src+':'+key;
+  const existing=C.kioskoOrder.items.find(i=>i._itemKey===itemKey);
   if(existing){existing.qty++;}
-  else{C.kioskoOrder.items.push({kioskKey:key,name:d.name,price:Number(d.price),qty:1});}
+  else{C.kioskoOrder.items.push({_itemKey:itemKey,kioskKey:src==='kiosko'?key:null,dishKey:src==='dish'?key:null,name:d.name,price:Number(d.price),qty:1,_src:src});}
   C.kioskoSearch='';
   const inp=document.getElementById('kiosko-search');if(inp)inp.value='';
   const res=document.getElementById('kiosko-search-results');if(res)res.style.display='none';
@@ -3499,13 +3532,22 @@ window.submitKioskoOrder=async(modo)=>{
     if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
     const pm=await showPaymentChoiceModal(null);
     if(!pm)return;
-    // Descontar stock
+    // Descontar stock (kiosko y dishes con stock)
     for(const item of ko.items){
-      const d=DB.kioskItems[item.kioskKey];
-      if(d&&d.stock!=null){
-        const newStock=Math.max(0,(d.stock||0)-item.qty);
-        await update(ref(db,`kioskItems/${item.kioskKey}`),{stock:newStock});
-        if(newStock===0)showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
+      if(item._src==='dish'){
+        const d=DB.dishes[item.dishKey];
+        if(d&&d.stock!=null){
+          const newStock=Math.max(0,(d.stock||0)-item.qty);
+          await update(ref(db,`dishes/${item.dishKey}`),{stock:newStock});
+          if(newStock===0)showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
+        }
+      } else {
+        const d=DB.kioskItems[item.kioskKey];
+        if(d&&d.stock!=null){
+          const newStock=Math.max(0,(d.stock||0)-item.qty);
+          await update(ref(db,`kioskItems/${item.kioskKey}`),{stock:newStock});
+          if(newStock===0)showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
+        }
       }
     }
     // Registrar en caja
@@ -3520,13 +3562,22 @@ window.submitKioskoOrder=async(modo)=>{
 
   } else if(modo==='deudor'){
     if(!ko.personName){alert('Ingresá el nombre del deudor (obligatorio)');if(nombreInp)nombreInp.focus();return;}
-    // Descontar stock
+    // Descontar stock (kiosko y dishes con stock)
     for(const item of ko.items){
-      const d=DB.kioskItems[item.kioskKey];
-      if(d&&d.stock!=null){
-        const newStock=Math.max(0,(d.stock||0)-item.qty);
-        await update(ref(db,`kioskItems/${item.kioskKey}`),{stock:newStock});
-        if(newStock===0)showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
+      if(item._src==='dish'){
+        const d=DB.dishes[item.dishKey];
+        if(d&&d.stock!=null){
+          const newStock=Math.max(0,(d.stock||0)-item.qty);
+          await update(ref(db,`dishes/${item.dishKey}`),{stock:newStock});
+          if(newStock===0)showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
+        }
+      } else {
+        const d=DB.kioskItems[item.kioskKey];
+        if(d&&d.stock!=null){
+          const newStock=Math.max(0,(d.stock||0)-item.qty);
+          await update(ref(db,`kioskItems/${item.kioskKey}`),{stock:newStock});
+          if(newStock===0)showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
+        }
       }
     }
     // Crear pedido en orders con status deudor
