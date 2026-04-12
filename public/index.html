@@ -4472,6 +4472,7 @@ function renderMenuWithCart(mc){
 function refreshMenuWithScroll(){
   const _sl=document.querySelector('.cat-tabs')?.scrollLeft||0;
   renderMenuWithCart(document.getElementById('main-content'));
+  updateTopbarCart();
   requestAnimationFrame(()=>{const el=document.querySelector('.cat-tabs');if(el)el.scrollLeft=_sl;});
 }
 function refreshMenuRenderWithScroll(){
@@ -4649,9 +4650,9 @@ function renderKioskoMenuCust(mc, menuH, ct, isIndividual){
   renderCartPanel(mc, menuH, cartCount(), isIndividual, []);
 }
 function refreshKioskoMenu(){
-  // Actualiza solo el grid y el carrito sin recrear todo el DOM
   const _sl=document.querySelector('.cat-tabs')?.scrollLeft||0;
   renderMenuWithCart(document.getElementById('main-content'));
+  updateTopbarCart();
   requestAnimationFrame(()=>{
     const el=document.querySelector('.cat-tabs');if(el)el.scrollLeft=_sl;
     scrollActiveCat();
