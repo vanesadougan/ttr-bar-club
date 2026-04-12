@@ -538,7 +538,10 @@ function resolveTableRoute(){
   const found = Object.entries(DB.tables).find(([k,v])=>k===pendingTableId||v.label===pendingTableId);
   if(found){
     C.customerTableId=found[0];
-    C.customerStep='modeChoice';
+    C.orderMode='individual';
+    C.customerNameInput='';
+    initCustomerCat();
+    C.customerStep='nameInput';
     pendingTableId=null; // resolved
   }
 }
