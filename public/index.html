@@ -2658,6 +2658,7 @@ function renderTablesTab(){
       <div class="card-title">${C.editingTable?'Editar mesa':'Agregar mesa'}</div>
       <div class="form-group"><label>Nombre o número</label><input placeholder="Ej: Mesa 5, Barra, Terraza VIP..." value="${f.label}" oninput="uF('table','label',this.value)"></div>
       <div class="form-group"><label>Capacidad (personas)</label><input type="number" min="1" placeholder="Ej: 4" value="${f.capacity||''}" oninput="uF('table','capacity',this.value)"></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><label class="toggle-switch"><input type="checkbox" ${f.showKiosko?'checked':''} onchange="uF('table','showKiosko',this.checked)"><span class="toggle-slider"></span></label><span style="font-size:13px">🏪 Mostrar Kiosko al comensal</span></div>
       <div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="${C.editingTable?'saveEditTable()':'addTable()'}">${C.editingTable?'Guardar':'Agregar mesa'}</button>${C.editingTable?`<button class="btn btn-ghost" onclick="cancelEditTable()">Cancelar</button>`:''}</div>
     </div>
     <div class="card">
@@ -2670,7 +2671,7 @@ function renderTablesTab(){
             <div style="width:36px;height:36px;border-radius:8px;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;flex-shrink:0">${t.label.replace(/\D/g,'').slice(0,2)||'#'}</div>
             <div style="flex:1;min-width:0">
               <div style="font-size:14px;font-weight:500">${t.label}</div>
-              <div style="font-size:12px;color:var(--muted)">${t.capacity?`${t.capacity} personas · `:''}<span style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:500;background:${occ?'#fef3c7':'#d1fae5'};color:${occ?'#92400e':'#065f46'}">${occ?'Ocupada':'Libre'}</span></div>
+              <div style="font-size:12px;color:var(--muted)">${t.capacity?`${t.capacity} personas · `:''}<span style="font-size:11px;padding:2px 8px;border-radius:6px;font-weight:500;background:${occ?'#fef3c7':'#d1fae5'};color:${occ?'#92400e':'#065f46'}">${occ?'Ocupada':'Libre'}</span>${t.showKiosko?' <span style="font-size:11px;background:#fce7f3;color:#be185d;padding:2px 7px;border-radius:6px">🏪 Kiosko</span>':''}</div>
               <div style="font-size:11px;color:#5b21b6;margin-top:2px;cursor:pointer" onclick="copyQR('${qrUrl}')">🔗 Copiar link QR</div>
             </div>
             <div class="row-btns"><button class="btn btn-ghost btn-sm" onclick="editTable('${t._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteTable('${t._key}')"${occ?' disabled':''}>✕</button></div>
@@ -4075,6 +4076,7 @@ function cartCount(){return Object.values(C.cart).reduce((s,v)=>s+v.qty,0);}
 function cartTotal(){
   return Object.entries(C.cart).reduce((s,[id,v])=>{
     if(id.startsWith('mitad|'))return s+(v._mitadPrice||0)*v.qty;
+    if(id.startsWith('kiosk|')){const d=DB.kioskItems[v._kioskKey];return s+(d?Number(d.price)*v.qty:0);}
     const d=DB.dishes[id]||DB.cafeteriaItems[id];
     if(!d)return s;
     return s+(d.isCafeteria?Number(d.price)*v.qty:dishFinalPrice(d,v.qty)*v.qty);
@@ -4188,26 +4190,36 @@ function renderMenuOnly(mc){
 function renderMenuWithCart(mc){
   const table=DB.tables[C.customerTableId];
   const isIndividual=C.orderMode==='individual';
-  const section=C.customerMenuSection||'platos'; // 'platos' o 'cafeteria'
+  const section=C.customerMenuSection||'platos'; // 'platos', 'cafeteria' o 'kiosko'
   const ct=cartCount();
 
   // ── Selector de sección ──
   const hasCafItems=Object.values(DB.cafeteriaItems||{}).some(d=>!d.unavailable);
   const hasCafCats=Object.keys(DB.cafeteriaCategories||{}).length>0;
   const showCafSwitch=hasCafCats||hasCafItems;
+  const tableData=DB.tables[C.customerTableId]||{};
+  const showKiosko=tableData.showKiosko&&Object.keys(DB.kioskItems||{}).length>0;
+  const showSwitch=showCafSwitch||showKiosko;
 
   let menuH=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:1rem;flex-wrap:wrap"><div style="font-size:14px;color:var(--muted)"><strong style="color:var(--text)">${table?table.label:''}</strong>${isIndividual?`<span class="order-type-chip ot-individual" style="margin-left:6px">👤 ${C.customerName}</span>`:`<span class="order-type-chip ot-general" style="margin-left:6px">👥 General</span>`}</div></div>`;
 
-  // Selector Restaurant / Cafetería
-  if(showCafSwitch){
+  // Selector Restaurant / Cafetería / Kiosko
+  if(showSwitch){
+    const btnStyle=(active)=>`padding:7px 14px;border-radius:8px;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;background:${active?'#fff':'transparent'};color:${active?'var(--text)':'var(--muted)'};box-shadow:${active?'0 1px 4px rgba(0,0,0,0.1)':'none'};transition:all 0.15s`;
     menuH+=`<div style="display:flex;background:#f3f4f6;border-radius:10px;padding:3px;gap:2px;margin-bottom:1rem;width:fit-content">
-      <button onclick="setMenuSection('platos')" style="padding:7px 18px;border-radius:8px;border:none;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;background:${section==='platos'?'#fff':'transparent'};color:${section==='platos'?'var(--text)':'var(--muted)'};box-shadow:${section==='platos'?'0 1px 4px rgba(0,0,0,0.1)':'none'};transition:all 0.15s">🍽 Restaurant</button>
-      <button onclick="setMenuSection('cafeteria')" style="padding:7px 18px;border-radius:8px;border:none;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;background:${section==='cafeteria'?'#fff':'transparent'};color:${section==='cafeteria'?'var(--text)':'var(--muted)'};box-shadow:${section==='cafeteria'?'0 1px 4px rgba(0,0,0,0.1)':'none'};transition:all 0.15s">☕ Cafetería</button>
+      <button onclick="setMenuSection('platos')" style="${btnStyle(section==='platos')}">🍽 Restaurant</button>
+      ${showCafSwitch?`<button onclick="setMenuSection('cafeteria')" style="${btnStyle(section==='cafeteria')}">☕ Cafetería</button>`:''}
+      ${showKiosko?`<button onclick="setMenuSection('kiosko')" style="${btnStyle(section==='kiosko')}">🏪 Kiosko</button>`:''}
     </div>`;
   }
 
   if(section==='cafeteria'){
     renderCafeteriaMenu(mc, menuH, ct, isIndividual);
+    return;
+  }
+
+  if(section==='kiosko'){
+    renderKioskoMenuCust(mc, menuH, ct, isIndividual);
     return;
   }
 
@@ -4450,6 +4462,30 @@ function renderCafeteriaMenu(mc, menuH, ct, isIndividual){
   renderCartPanel(mc, menuH, ct, isIndividual, cats);
 }
 
+function renderKioskoMenuCust(mc, menuH, ct, isIndividual){
+  const items=Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k})).filter(d=>d.stock==null||d.stock>0).sort((a,b)=>(a.name||'').localeCompare(b.name||'','es'));
+  menuH+=`<div class="menu-grid">`;
+  items.forEach(d=>{
+    const cartKey='kiosk|'+d._key;
+    const entry=C.cart[cartKey];const q=entry?entry.qty:0;
+    const sc=d.stock!=null?`<div style="font-size:11px;color:var(--muted)">📦 ${d.stock} disponibles</div>`:'';
+    menuH+=`<div class="menu-card">
+      <div class="menu-card-name">🏪 ${d.name}</div>
+      ${d.desc?`<div class="menu-card-desc">${d.desc}</div>`:''}
+      ${sc}
+      <div class="menu-card-footer">
+        <span class="menu-card-price">$${Number(d.price).toLocaleString()}</span>
+        ${q===0?`<button class="add-btn" onclick="quickAddKiosk('${d._key}')">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeFromCartKiosk('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="quickAddKiosk('${d._key}')">+</button></div>`}
+      </div>
+    </div>`;
+  });
+  if(items.length===0)menuH+=`<div class="empty-state" style="grid-column:1/-1">Sin items disponibles en kiosko</div>`;
+  menuH+=`</div>`;
+  renderCartPanel(mc, menuH, ct, isIndividual, []);
+}
+window.quickAddKiosk=id=>{const k='kiosk|'+id;if(!C.cart[k])C.cart[k]={qty:0,_kioskKey:id};C.cart[k].qty++;renderMenuWithCart(document.getElementById('main-content'));};
+window.removeFromCartKiosk=id=>{const k='kiosk|'+id;if(C.cart[k]){if(C.cart[k].qty>1)C.cart[k].qty--;else delete C.cart[k];}renderMenuWithCart(document.getElementById('main-content'));};
+
 function renderCartPanel(mc, menuH, ct, isIndividual, cats){
   // Carrito unificado
   const cartEntries=Object.entries(C.cart).filter(([,v])=>v.qty>0);
@@ -4457,6 +4493,12 @@ function renderCartPanel(mc, menuH, ct, isIndividual, cats){
   let cartH=`<div class="cart-header"><span>${isIndividual?C.customerName:'Pedido mesa'}</span>${ct>0?`<span class="cart-tag">${ct} ítem${ct>1?'s':''}</span>`:''}</div><div class="cart-body">`;
   if(cartEntries.length===0)cartH+=`<div class="cart-empty">Todavía no agregaste ningún plato.</div>`;
   else cartEntries.forEach(([id,v])=>{
+    // Kiosko
+    if(id.startsWith('kiosk|')){
+      const kd=DB.kioskItems[v._kioskKey];if(!kd)return;
+      cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🏪</div><div class="cart-item-info"><div class="cart-item-name">${kd.name}</div></div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCartKiosk('${v._kioskKey}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="quickAddKiosk('${v._kioskKey}')">+</button></div><div class="cart-item-price">$${(Number(kd.price)*v.qty).toLocaleString()}</div></div>`;
+      return;
+    }
     // Mitad y mitad
     if(id.startsWith('mitad|')){
       cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🍕</div><div class="cart-item-info"><div class="cart-item-name">${v._mitadName||'Pizza M&M'}</div></div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCart('${id}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="custAddMitad('${id}')">+</button></div><div class="cart-item-price">$${((v._mitadPrice||0)*v.qty).toLocaleString()}</div></div>`;
@@ -4498,6 +4540,7 @@ window.toggleCafIng=(id,ing)=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set
 window.placeOrder=()=>{
   if(cartCount()===0)return;
   const items=Object.entries(C.cart).map(([id,v])=>{
+    if(id.startsWith('kiosk|')){const kd=DB.kioskItems[v._kioskKey];if(!kd)return null;return{name:kd.name,qty:v.qty,price:Number(kd.price),finalPrice:Number(kd.price),excluded:[],selectedType:null,isCafeteria:false,isKiosko:true,emoji:'🏪'};}
     if(id.startsWith('mitad|'))return{name:v._mitadName||id,qty:v.qty,price:v._mitadPrice||0,finalPrice:v._mitadPrice||0,excluded:[],selectedType:null,isCafeteria:false,emoji:'🍕'};
     const dPlato=DB.dishes[id];
     const dCaf=DB.cafeteriaItems[id];
