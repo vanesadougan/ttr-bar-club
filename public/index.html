@@ -3119,6 +3119,21 @@ function renderOrdersTab(){
         </div>
         <div id="kiosko-search-results" style="border:0.5px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;background:var(--card);margin-top:4px"></div>
       </div>
+      ${(()=>{
+        if(!C._kioskoTypePicker)return '';
+        const {key,src}=C._kioskoTypePicker;
+        const dish=src==='dish'?DB.dishes[key]:null;
+        if(!dish)return '';
+        const avTypes=availableTypes(dish);
+        if(!avTypes.length)return '';
+        return `<div style="margin-bottom:12px;padding:10px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px">
+          <div style="font-size:13px;font-weight:600;color:#166534;margin-bottom:8px">Elegí el tipo — ${dish.name}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+            ${avTypes.map(t=>{const tn=typeof t==='string'?t:t.name;const ts=typeof t==='object'&&t.stock!=null?t.stock:null;const tp=typeof t==='object'&&t.priceMode!=='base'?(t.priceMode==='extra'?'+$'+(t.priceExtra||0).toLocaleString():'$'+(t.priceVal||0).toLocaleString()):null;return`<button onclick="kioskoAddItem('${key}','dish','${tn.replace(/'/g,"\\'")}')" style="padding:8px 16px;border-radius:20px;border:0.5px solid #059669;background:#fff;color:#059669;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">${tn}${tp?`<span style="font-size:11px;margin-left:4px">${tp}</span>`:''}${ts!=null?`<span style="font-size:10px;color:var(--muted);margin-left:4px">📦${ts}</span>`:''}</button>`;}).join('')}
+          </div>
+          <button onclick="C._kioskoTypePicker=null;render()" style="font-size:12px;color:var(--muted);border:none;background:none;cursor:pointer;font-family:inherit">Cancelar</button>
+        </div>`;
+      })()}
       ${(ko.items||[]).length>0?`<div style="margin-bottom:12px">
         <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Items</div>
         ${(ko.items||[]).map((item,idx)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #f3f4f6">
@@ -3942,6 +3957,15 @@ window.kioskoAddItem=(key,src,typeName)=>{
   src=src||'kiosko';
   const d=src==='dish'?DB.dishes[key]:DB.kioskItems[key];
   if(!d||!C.kioskoOrder)return;
+  // Si es un plato con tipos y no se eligió tipo, mostrar picker
+  if(src==='dish'&&d.hasTypes&&availableTypes(d).length>0&&!typeName){
+    C._kioskoTypePicker={key,src};
+    const inp=document.getElementById('kiosko-search');if(inp)inp.value='';
+    const res=document.getElementById('kiosko-search-results');if(res)res.style.display='none';
+    C.kioskoSearch='';
+    render();
+    return;
+  }
   const nombreInp=document.getElementById('kiosko-nombre');
   if(nombreInp) C.kioskoOrder.personName=nombreInp.value;
   const itemKey=src+':'+key+(typeName?':'+typeName:'');
@@ -3951,6 +3975,7 @@ window.kioskoAddItem=(key,src,typeName)=>{
   if(existing){existing.qty++;}
   else{C.kioskoOrder.items.push({_itemKey:itemKey,kioskKey:src==='kiosko'?key:null,dishKey:src==='dish'?key:null,typeName:typeName||null,name:itemName,price:itemPrice,qty:1,_src:src});}
   C.kioskoSearch='';
+  C._kioskoTypePicker=null;
   const inp=document.getElementById('kiosko-search');if(inp)inp.value='';
   const res=document.getElementById('kiosko-search-results');if(res)res.style.display='none';
   render();
