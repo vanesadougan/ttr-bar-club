@@ -291,7 +291,7 @@ let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}
 
 // Customer flow state (local only)
 let C = {
-  mode:'admin', adminTab:'orders', waiterStep:'select', waiterId:null, waiterName:'', waiterTableId:null, waiterOrderMode:null, waiterPersonName:'', waiterCart:{}, waiterCustDishId:null, waiterCafCustId:null, waiterMenuSection:'platos', waiterCat:null, waiterCafCat:null, waiterPayMesa:null, waiterPayMethod:null,
+  mode:'admin', adminTab:'orders', waiterStep:'select', waiterId:null, waiterName:'', waiterTableId:null, waiterOrderMode:null, waiterPersonName:'', waiterCart:{}, waiterCustDishId:null, waiterCafCustId:null, waiterMenuSection:'platos', waiterCat:null, waiterCafCat:null, waiterSearch:'', waiterPayMesa:null, waiterPayMethod:null,
   cajaModal:null, cajaGastoTipo:'proveedor', cajaMonto:'', cajaDesc:'', cajaInicial:'',
   customerStep:'mesa', customerTableId:null,
   orderMode:null, customerName:'', customerNameInput:'',
@@ -1253,7 +1253,7 @@ function renderWaiterMesaScreen(mc){
   h+=`</div></div></div></div>`;
   mc.innerHTML=h;
 }
-window.waiterSelectMesa=id=>{C.waiterTableId=id;C.waiterCart={};C.waiterCat=null;C.waiterCafCat=null;C.waiterMenuSection='platos';C.waiterStep='modeChoice';render();};
+window.waiterSelectMesa=id=>{C.waiterTableId=id;C.waiterCart={};C.waiterCat=null;C.waiterCafCat=null;C.waiterSearch='';C.waiterMenuSection='platos';C.waiterStep='modeChoice';render();};
 function renderWaiterModeChoice(mc){
   const table=DB.tables[C.waiterTableId];
   mc.innerHTML=`<div class="content"><div class="mode-screen"><div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem"><div style="width:32px;height:32px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">${C.waiterName[0].toUpperCase()}</div><span style="font-size:14px;color:var(--muted)">${C.waiterName} · ${table?table.label:''}</span></div><div class="mesa-title" style="font-size:22px;margin-bottom:1.5rem">¿Cómo tomamos el pedido?</div><div class="mode-cards"><button class="mode-card" onclick="waiterChooseMode('general')"><div class="mode-card-icon">👥</div><div style="font-weight:600;margin-bottom:4px">General</div><div style="font-size:12px;color:var(--muted)">Un pedido para toda la mesa</div></button><button class="mode-card" onclick="waiterChooseMode('individual')"><div class="mode-card-icon">👤</div><div style="font-weight:600;margin-bottom:4px">Individual</div><div style="font-size:12px;color:var(--muted)">Pedido por persona</div></button></div><button class="back-btn" onclick="setWaiterStep('mesa')" style="margin-top:1rem">← Cambiar mesa</button></div></div>`;
@@ -1291,9 +1291,23 @@ function buildWaiterMenuH(){
   } else {
     const allDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
     const cats=getCats();const catIds=cats.map(c=>c._key).filter(id=>allDishes.some(d=>d.cat===id));
-    menuH+='<div class="cat-tabs">';catIds.forEach(cid=>{const cat=cats.find(c=>c._key===cid);menuH+='<button class="cat-tab'+(C.waiterCat===cid?' active':'')+(cat&&cat.isPromo?' promo-tab':'')+'" onclick="setWaiterCat(\''+cid+'\')">'+(cat?'<span class="cat-emoji">'+cat.icon+'</span>'+cat.label:'<span class="cat-emoji">🍽</span>'+cid)+'</button>';});menuH+='</div>';
+    const wsq=(C.waiterSearch||'').toLowerCase().trim();
+    // Buscador
+    menuH+=`<div style="margin-bottom:.75rem;position:relative">
+      <input id="waiter-search" placeholder="🔍 Buscar plato..." value="${(C.waiterSearch||'').replace(/"/g,'&quot;')}"
+        oninput="C.waiterSearch=this.value;refreshWaiterMenuCol()"
+        style="width:100%;padding:9px 36px 9px 12px;border:1.5px solid ${wsq?'var(--brand)':'var(--border)'};border-radius:10px;font-size:14px;font-family:inherit;background:var(--bg);box-sizing:border-box;outline:none">
+      ${wsq?`<button onclick="C.waiterSearch='';refreshWaiterMenuCol()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;font-size:16px;color:var(--muted);line-height:1">✕</button>`:''}
+    </div>`;
+    // Sin búsqueda: mostrar cat-tabs + filtro por cat
+    if(!wsq){
+      menuH+='<div class="cat-tabs">';catIds.forEach(cid=>{const cat=cats.find(c=>c._key===cid);menuH+='<button class="cat-tab'+(C.waiterCat===cid?' active':'')+(cat&&cat.isPromo?' promo-tab':'')+'" onclick="setWaiterCat(\''+cid+'\')">'+(cat?'<span class="cat-emoji">'+cat.icon+'</span>'+cat.label:'<span class="cat-emoji">🍽</span>'+cid)+'</button>';});menuH+='</div>';
+    }
     menuH+='<div class="menu-grid">';
-    const filtered=C.waiterCat&&C.waiterCat!=='todos'?allDishes.filter(d=>d.cat===C.waiterCat):allDishes;
+    const filtered=wsq
+      ? allDishes.filter(d=>d.name.toLowerCase().includes(wsq)||(d.desc||'').toLowerCase().includes(wsq))
+      : (C.waiterCat&&C.waiterCat!=='todos'?allDishes.filter(d=>d.cat===C.waiterCat):allDishes);
+    if(filtered.length===0)menuH+=`<div style="grid-column:1/-1;text-align:center;padding:2rem;color:var(--muted);font-size:14px">Sin resultados para "${C.waiterSearch}"</div>`;
     filtered.forEach(d=>{
       const hasTypes=d.hasTypes&&availableTypes(d).length>0;const hasCustom=d.customizable&&(d.ingredients||[]).length>0;
       const dishCat=cats.find(c=>c._key===d.cat);const isP=dishCat&&dishCat.isPromo&&(d.promoDiscount>0||d.is2x1);
@@ -1380,7 +1394,7 @@ function buildWaiterMenuH(){
 function refreshWaiterMenuCol(){
   const _sl=document.querySelector('.cat-tabs')?.scrollLeft||0;
   const col=document.querySelector('.waiter-menu-col');
-  if(col){col.innerHTML=buildWaiterMenuH();requestAnimationFrame(()=>{const el=document.querySelector('.cat-tabs');if(el)el.scrollLeft=_sl;});
+  if(col){col.innerHTML=buildWaiterMenuH();requestAnimationFrame(()=>{const el=document.querySelector('.cat-tabs');if(el)el.scrollLeft=_sl;const si=document.getElementById('waiter-search');if(si&&C.waiterSearch){si.focus();si.setSelectionRange(si.value.length,si.value.length);}});
     // Refresh mobile bar
     renderWaiterMenu(document.getElementById('main-content'));
     if(document.getElementById('waiter-cart-sheet'))showWaiterCartSheet();
@@ -1415,7 +1429,7 @@ function renderWaiterMenu(mc){
 }
 // Waiter nav helpers
 window.setWaiterStep=s=>{C.waiterStep=s;render();};
-window.setWaiterSection=s=>{C.waiterMenuSection=s;if(s==='platos')C.waiterCat=null;else C.waiterCafCat=null;C._catScrollReset=true;render();scrollActiveCat();};
+window.setWaiterSection=s=>{C.waiterMenuSection=s;C.waiterSearch='';if(s==='platos')C.waiterCat=null;else C.waiterCafCat=null;C._catScrollReset=true;render();scrollActiveCat();};
 window.setWaiterCat=id=>{C.waiterCat=id;render();scrollActiveCat();};
 window.setWaiterCafCat=id=>{C.waiterCafCat=id;render();scrollActiveCat();};
 window.waiterNuevaMesa=()=>{C.waiterTableId=null;C.waiterCart={};C.waiterCat=null;C.waiterCafCat=null;C.waiterStep='mesas';render();};
