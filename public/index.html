@@ -4868,12 +4868,16 @@ function renderMenuWithCart(mc){
   updateTopbarCart();
 }
 
-// Preserva el scroll del cat-tabs al re-renderizar el menú
+// Preserva el scroll del cat-tabs y scroll vertical al re-renderizar el menú
 function refreshMenuWithScroll(){
   const _sl=document.querySelector('.cat-tabs')?.scrollLeft||0;
+  const _sy=window.scrollY;
   renderMenuWithCart(document.getElementById('main-content'));
   updateTopbarCart();
-  requestAnimationFrame(()=>{const el=document.querySelector('.cat-tabs');if(el)el.scrollLeft=_sl;});
+  requestAnimationFrame(()=>{
+    const el=document.querySelector('.cat-tabs');if(el)el.scrollLeft=_sl;
+    window.scrollTo({top:_sy,behavior:'instant'});
+  });
 }
 function refreshMenuRenderWithScroll(){
   const _sl=document.querySelector('.cat-tabs')?.scrollLeft||0;
@@ -4882,8 +4886,14 @@ function refreshMenuRenderWithScroll(){
 }
 function scrollActiveCat(){
   requestAnimationFrame(()=>{
-    const active=document.querySelector('.cat-tabs .cat-tab.active');
-    if(active)active.scrollIntoView({behavior:'smooth',block:'nearest',inline:'center'});
+    const tabs=document.querySelector('.cat-tabs');
+    const active=tabs&&tabs.querySelector('.cat-tab.active');
+    if(!tabs||!active)return;
+    // Scroll solo horizontal — sin tocar el scroll vertical de la página
+    const tabsRect=tabs.getBoundingClientRect();
+    const activeRect=active.getBoundingClientRect();
+    const center=active.offsetLeft-(tabs.offsetWidth/2)+(active.offsetWidth/2);
+    tabs.scrollLeft=center;
   });
 }
 
@@ -4944,7 +4954,7 @@ window.quickAdd=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart
 window.quickAddTyped=id=>{if(C.cart[id])C.cart[id].qty+=1;refreshMenuWithScroll();if(document.getElementById('cart-sheet'))showCartSheet();};
 window.removeFromCart=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;else delete C.cart[id];}refreshMenuWithScroll();if(document.getElementById('cart-sheet'))showCartSheet();};
 window.custAddMitad=key=>{if(C.cart[key])C.cart[key].qty++;refreshMenuWithScroll();};
-window.setCat=c=>{C.customerCat=c;C.custDishId=null;render();scrollActiveCat();};
+window.setCat=c=>{C.customerCat=c;C.custDishId=null;C.typePickerDishId=null;const _sy=window.scrollY;renderMenuWithCart(document.getElementById('main-content'));updateTopbarCart();requestAnimationFrame(()=>{window.scrollTo({top:_sy,behavior:'instant'});scrollActiveCat();});};
 window.setCafCat=c=>{C.cafCat=c;render();scrollActiveCat();};
 window.setMenuSection=section=>{C.customerMenuSection=section;C.cafCat='todos';if(section!=='kiosko')C.kioskCat=null;C.custDishId=null;C._catScrollReset=true;render();scrollActiveCat();};
 window.initCustomerCat=()=>{
