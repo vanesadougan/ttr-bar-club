@@ -5186,14 +5186,16 @@ window.showCartSheet=()=>{
       itemsH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🍕</div><div class="cart-item-info"><div class="cart-item-name">${v._mitadName||'Pizza M&M'}</div></div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCart('${id}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="custAddMitad('${id}')">+</button></div><div class="cart-item-price">$${((v._mitadPrice||0)*v.qty).toLocaleString()}</div></div>`;
       return;
     }
-    const d=DB.dishes[id]||DB.cafeteriaItems[id];if(!d)return;
-    const isCaf=!!DB.cafeteriaItems[id];
-    const fp=isCaf?Number(d.price):dishFinalPrice(d,v.qty);
+    const baseId=id.includes('|')?id.split('|')[0]:id;
+    const d=DB.dishes[baseId]||DB.cafeteriaItems[baseId];if(!d)return;
+    const isCaf=!!DB.cafeteriaItems[baseId];
+    const selType=v.selectedType||null;
+    const fp=isCaf?Number(d.price):dishFinalPrice(d,v.qty,selType);
     const icon=isCaf?(d.emoji||'☕'):((cats.find(c=>c._key===d.cat)||{}).icon||'🍽');
     const is2x1=!isCaf&&d.is2x1;
     const dishCat=!isCaf?cats.find(c=>c._key===d.cat):null;
     const is2x1Active=is2x1&&dishCat&&dishCat.isPromo&&v.qty>=2;
-    itemsH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">${icon}</div><div class="cart-item-info"><div class="cart-item-name">${d.name}${v.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">${v.selectedType}</span>`:''}</div>${exclNote(v.excluded)}${is2x1Active?`<div style="font-size:11px;color:#c2410c">🎁 2x1 aplicado</div>`:''}</div><div class="cart-qty"><button class="cqbtn" onclick="${isCaf?`removeFromCartCaf('${id}')`:`removeFromCart('${id}')`}">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="${isCaf?`quickAddCaf('${id}')`:`quickAdd('${id}')`}">+</button></div><div class="cart-item-price">$${(fp*v.qty).toLocaleString()}</div></div>`;
+    itemsH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">${icon}</div><div class="cart-item-info"><div class="cart-item-name">${d.name}${selType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">${selType}</span>`:''}</div>${exclNote(v.excluded)}${is2x1Active?`<div style="font-size:11px;color:#c2410c">🎁 2x1 aplicado</div>`:''}</div><div class="cart-qty"><button class="cqbtn" onclick="${isCaf?`removeFromCartCaf('${baseId}')`:`removeFromCart('${id}')`}">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="${isCaf?`quickAddCaf('${baseId}')`:`quickAddTyped('${id}')`}">+</button></div><div class="cart-item-price">$${(fp*v.qty).toLocaleString()}</div></div>`;
   });
 
   const overlay=document.createElement('div');
