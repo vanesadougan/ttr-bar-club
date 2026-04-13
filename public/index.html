@@ -1296,7 +1296,7 @@ function buildWaiterMenuH(){
     menuH+=`<div style="margin-bottom:.75rem;position:relative">
       <input id="waiter-search" placeholder="🔍 Buscar plato..." value="${(C.waiterSearch||'').replace(/"/g,'&quot;')}"
         oninput="waiterSearchInput(this.value)"
-        style="width:100%;padding:9px 36px 9px 12px;border:1.5px solid ${wsq?'var(--brand)':'var(--border)'};border-radius:10px;font-size:14px;font-family:inherit;background:var(--bg);box-sizing:border-box;outline:none">
+        style="width:100%;padding:9px 36px 9px 12px;border:1.5px solid ${wsq?'var(--brand)':'var(--border)'};border-radius:10px;font-size:16px;font-family:inherit;background:var(--bg);box-sizing:border-box;outline:none">
       ${wsq?`<button onclick="waiterSearchClear()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;font-size:16px;color:var(--muted);line-height:1">✕</button>`:''}
     </div>`;
     // Sin búsqueda: mostrar cat-tabs + filtro por cat
