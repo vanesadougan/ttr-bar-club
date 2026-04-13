@@ -4506,9 +4506,12 @@ function cartTotal(){
     if(id.startsWith('mitad|'))return s+(v._mitadPrice||0)*v.qty;
     if(id.startsWith('kiosk|')){const d=DB.kioskItems[v._kioskKey];return s+(d?Number(d.price)*v.qty:0);}
     if(id.startsWith('restk|')){const d=DB.dishes[v._kioskKey];return s+(d?dishFinalPrice(d,v.qty,v._typeName||null)*v.qty:0);}
-    const d=DB.dishes[id]||DB.cafeteriaItems[id];
+    // key puede ser dishId o dishId|tipo
+    const baseId=id.includes('|')&&!id.startsWith('mitad|')&&!id.startsWith('kiosk|')&&!id.startsWith('restk|')?id.split('|')[0]:id;
+    const d=DB.dishes[baseId]||DB.cafeteriaItems[id];
     if(!d)return s;
-    return s+(d.isCafeteria?Number(d.price)*v.qty:dishFinalPrice(d,v.qty)*v.qty);
+    const selType=v.selectedType||null;
+    return s+(DB.cafeteriaItems[id]?Number(d.price)*v.qty:dishFinalPrice(d,v.qty,selType)*v.qty);
   },0);
 }
 
@@ -4761,9 +4764,25 @@ function renderMenuWithCart(mc){
       } else if(typePickerOpen){
         menuH+=`<div style="font-size:13px;color:var(--muted);padding:8px 0">Sin stock disponible</div><button class="btn btn-ghost btn-sm" onclick="closeTypePicker()">Cerrar</button>`;
       }
+      // Para platos con tipos, buscar entries en carrito por este plato
+      const typeEntries=d.hasTypes?Object.entries(C.cart).filter(([k])=>k===d._key||k.startsWith(d._key+'|')):[];
+      const totalTypeQty=typeEntries.reduce((s,[,v])=>s+v.qty,0);
+
       menuH+=`<div class="menu-card-footer">`;
       menuH+=`<div>${isP&&!is2x1?`<span class="menu-card-price-original">$${d.price.toLocaleString()}</span> `:''}<span class="menu-card-price">$${d.price.toLocaleString()}</span>${promoChip}</div>`;
-      if(!typePickerOpen){const addOnclick=d.hasTypes&&avTypes.length>0?`openTypePicker('${d._key}')`:d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`;menuH+=q===0?`<button class="add-btn" onclick="${addOnclick}">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeFromCart('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="${addOnclick}">+</button></div>`;}
+      if(!typePickerOpen){
+        if(d.hasTypes&&avTypes.length>0){
+          // Mostrar qty total + siempre abrir picker para agregar más
+          if(totalTypeQty>0){
+            menuH+=`<div style="display:flex;align-items:center;gap:6px"><span style="font-size:13px;font-weight:600;color:var(--accent)">${totalTypeQty}</span><button class="add-btn" onclick="openTypePicker('${d._key}')">+</button></div>`;
+          } else {
+            menuH+=`<button class="add-btn" onclick="openTypePicker('${d._key}')">+</button>`;
+          }
+        } else {
+          const addOnclick=d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`;
+          menuH+=q===0?`<button class="add-btn" onclick="${addOnclick}">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeFromCart('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="${addOnclick}">+</button></div>`;
+        }
+      }
       menuH+=`</div></div>`;
     }
   });
@@ -4830,21 +4849,24 @@ window.pickTypeByName=typeName=>{
 };
 window.closeTypePicker=()=>{C.typePickerDishId=null;renderMenuWithCart(document.getElementById('main-content'));};
 window.selectType=(dishId,typeName)=>{
-  // After selecting type, if dish has ingredients open ingredient customizer, else add to cart
   const d=DB.dishes[dishId];
   C.typePickerDishId=null;
-  if(!C.cart[dishId])C.cart[dishId]={qty:0,excluded:new Set(),selectedType:null};
-  C.cart[dishId].selectedType=typeName;
+  // Key compuesta por tipo — igual que mozas
+  const cartKey=typeName?`${dishId}|${typeName}`:dishId;
+  if(!C.cart[cartKey])C.cart[cartKey]={qty:0,excluded:new Set(),selectedType:typeName||null,_dishId:dishId};
   if(d&&d.customizable&&(d.ingredients||[]).length>0){
-    C.custDishId=dishId;
+    // Abrir customizador — necesitamos que use la key compuesta
+    C.custDishId=cartKey;
   } else {
-    C.cart[dishId].qty+=1;
+    C.cart[cartKey].qty+=1;
   }
-  renderMenuWithCart(document.getElementById('main-content'));
+  refreshMenuWithScroll();
+  if(document.getElementById('cart-sheet'))showCartSheet();
 };
 window.toggleIng=(dishId,ing)=>{if(!C.cart[dishId])C.cart[dishId]={qty:0,excluded:new Set()};if(!C.cart[dishId].excluded)C.cart[dishId].excluded=new Set();if(C.cart[dishId].excluded.has(ing))C.cart[dishId].excluded.delete(ing);else C.cart[dishId].excluded.add(ing);renderMenuWithCart(document.getElementById('main-content'));};
 window.confirmCust=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;C.custDishId=null;refreshMenuWithScroll();};
 window.quickAdd=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;refreshMenuWithScroll();if(document.getElementById('cart-sheet'))showCartSheet();};
+window.quickAddTyped=id=>{if(C.cart[id])C.cart[id].qty+=1;refreshMenuWithScroll();if(document.getElementById('cart-sheet'))showCartSheet();};
 window.removeFromCart=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;else delete C.cart[id];}refreshMenuWithScroll();if(document.getElementById('cart-sheet'))showCartSheet();};
 window.custAddMitad=key=>{if(C.cart[key])C.cart[key].qty++;refreshMenuWithScroll();};
 window.setCat=c=>{C.customerCat=c;C.custDishId=null;render();scrollActiveCat();};
@@ -5109,15 +5131,17 @@ function renderCartPanel(mc, menuH, ct, isIndividual, cats){
       cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🍕</div><div class="cart-item-info"><div class="cart-item-name">${v._mitadName||'Pizza M&M'}</div></div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCart('${id}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="custAddMitad('${id}')">+</button></div><div class="cart-item-price">$${((v._mitadPrice||0)*v.qty).toLocaleString()}</div></div>`;
       return;
     }
-    const d=DB.dishes[id]||DB.cafeteriaItems[id];if(!d)return;
-    const isCaf=!!DB.cafeteriaItems[id];
-    const fp=isCaf?Number(d.price):dishFinalPrice(d,v.qty);
-    const is2x1=!isCaf&&DB.dishes[id]&&DB.dishes[id].is2x1;
+    const d=DB.dishes[id]||DB.cafeteriaItems[id]||(id.includes('|')&&!id.startsWith('mitad|')?DB.dishes[id.split('|')[0]]:null);if(!d)return;
+    const baseId=id.includes('|')&&!id.startsWith('mitad|')?id.split('|')[0]:id;
+    const isCaf=!!DB.cafeteriaItems[baseId];
+    const selType=v.selectedType||null;
+    const fp=isCaf?Number(d.price):dishFinalPrice(d,v.qty,selType);
+    const is2x1=!isCaf&&d.is2x1;
     const dishCat=!isCaf?(cats||getCats()).find(c=>c._key===d.cat):null;
     const is2x1Active=is2x1&&dishCat&&dishCat.isPromo&&v.qty>=2;
     const priceNote=is2x1Active?`<div style="font-size:11px;color:#c2410c">🎁 2x1 aplicado</div>`:'';
     const icon=isCaf?(d.emoji||'☕'):(((cats||getCats()).find(c=>c._key===d.cat)||{}).icon||'🍽');
-    cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0;color:var(--muted)">${icon}</div><div class="cart-item-info"><div class="cart-item-name">${d.name}${v.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">${v.selectedType}</span>`:''}</div>${exclNote(v.excluded)} ${priceNote}</div><div class="cart-qty"><button class="cqbtn" onclick="${isCaf?`removeFromCartCaf('${id}')`:`removeFromCart('${id}')`}">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="${isCaf?`quickAddCaf('${id}')`:`quickAdd('${id}')`}">+</button></div><div class="cart-item-price">$${(fp*v.qty).toLocaleString()}</div></div>`;
+    cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0;color:var(--muted)">${icon}</div><div class="cart-item-info"><div class="cart-item-name">${d.name}${selType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">${selType}</span>`:''}</div>${exclNote(v.excluded)} ${priceNote}</div><div class="cart-qty"><button class="cqbtn" onclick="${isCaf?`removeFromCartCaf('${baseId}')`:`removeFromCart('${id}')`}">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="${isCaf?`quickAddCaf('${baseId}')`:`quickAddTyped('${id}')`}">+</button></div><div class="cart-item-price">$${(fp*v.qty).toLocaleString()}</div></div>`;
   });
   cartH+=`</div><div class="cart-footer">`;
   if(cartEntries.length>0){
@@ -5203,12 +5227,14 @@ window.placeOrder=()=>{
   const items=Object.entries(C.cart).map(([id,v])=>{
     if(id.startsWith('kiosk|')||id.startsWith('restk|')){const isRest=id.startsWith('restk|');const kd=isRest?DB.dishes[v._kioskKey]:DB.kioskItems[v._kioskKey];if(!kd)return null;const kp=isRest&&v._typeName?dishFinalPrice(kd,v.qty,v._typeName):isRest?dishFinalPrice(kd,v.qty):Number(kd.price);const kname=v._typeName?kd.name+' — '+v._typeName:kd.name;return{name:kname,qty:v.qty,price:kp,finalPrice:kp,excluded:[],selectedType:v._typeName||null,isCafeteria:false,isKiosko:true,emoji:'🏪'};}
     if(id.startsWith('mitad|'))return{name:v._mitadName||id,qty:v.qty,price:v._mitadPrice||0,finalPrice:v._mitadPrice||0,excluded:[],selectedType:null,isCafeteria:false,emoji:'🍕'};
-    const dPlato=DB.dishes[id];
-    const dCaf=DB.cafeteriaItems[id];
+    const baseId2=id.includes('|')&&!id.startsWith('mitad|')&&!id.startsWith('kiosk|')&&!id.startsWith('restk|')?id.split('|')[0]:id;
+    const dPlato=DB.dishes[baseId2];
+    const dCaf=DB.cafeteriaItems[id]||DB.cafeteriaItems[baseId2];
     const d=dPlato||dCaf;
     if(!d)return null;
     const isCaf=!!dCaf;
-    return{name:d.name,qty:v.qty,price:d.price,finalPrice:isCaf?Number(d.price):dishFinalPrice(d,v.qty),excluded:v.excluded?[...v.excluded]:[],selectedType:v.selectedType||null,is2x1:(!isCaf&&d.is2x1)||false,isCafeteria:isCaf||false,emoji:d.emoji||null};
+    const selType=v.selectedType||null;
+    return{name:d.name,qty:v.qty,price:d.price,finalPrice:isCaf?Number(d.price):dishFinalPrice(d,v.qty,selType),excluded:v.excluded?[...v.excluded]:[],selectedType:selType,is2x1:(!isCaf&&d.is2x1)||false,isCafeteria:isCaf||false,emoji:d.emoji||null};
   }).filter(Boolean);
   push(ref(db,'orders'),{tableId:C.customerTableId,items,status:'pending',time:nowStr(),billRequested:false,orderMode:C.orderMode,personName:C.orderMode==='individual'?C.customerName:null,createdAt:Date.now()});
   deductTypeStock(items);
