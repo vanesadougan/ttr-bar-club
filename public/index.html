@@ -1295,15 +1295,15 @@ function buildWaiterMenuH(){
     // Buscador
     menuH+=`<div style="margin-bottom:.75rem;position:relative">
       <input id="waiter-search" placeholder="🔍 Buscar plato..." value="${(C.waiterSearch||'').replace(/"/g,'&quot;')}"
-        oninput="C.waiterSearch=this.value;refreshWaiterMenuCol()"
+        oninput="waiterSearchInput(this.value)"
         style="width:100%;padding:9px 36px 9px 12px;border:1.5px solid ${wsq?'var(--brand)':'var(--border)'};border-radius:10px;font-size:14px;font-family:inherit;background:var(--bg);box-sizing:border-box;outline:none">
-      ${wsq?`<button onclick="C.waiterSearch='';refreshWaiterMenuCol()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;font-size:16px;color:var(--muted);line-height:1">✕</button>`:''}
+      ${wsq?`<button onclick="waiterSearchClear()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;font-size:16px;color:var(--muted);line-height:1">✕</button>`:''}
     </div>`;
     // Sin búsqueda: mostrar cat-tabs + filtro por cat
     if(!wsq){
-      menuH+='<div class="cat-tabs">';catIds.forEach(cid=>{const cat=cats.find(c=>c._key===cid);menuH+='<button class="cat-tab'+(C.waiterCat===cid?' active':'')+(cat&&cat.isPromo?' promo-tab':'')+'" onclick="setWaiterCat(\''+cid+'\')">'+(cat?'<span class="cat-emoji">'+cat.icon+'</span>'+cat.label:'<span class="cat-emoji">🍽</span>'+cid)+'</button>';});menuH+='</div>';
+      menuH+='<div class="cat-tabs" id="waiter-cat-tabs">';catIds.forEach(cid=>{const cat=cats.find(c=>c._key===cid);menuH+='<button class="cat-tab'+(C.waiterCat===cid?' active':'')+(cat&&cat.isPromo?' promo-tab':'')+'" onclick="setWaiterCat(\''+cid+'\')">'+(cat?'<span class="cat-emoji">'+cat.icon+'</span>'+cat.label:'<span class="cat-emoji">🍽</span>'+cid)+'</button>';});menuH+='</div>';
     }
-    menuH+='<div class="menu-grid">';
+    menuH+='<div class="menu-grid" id="waiter-dish-grid">';
     const filtered=wsq
       ? allDishes.filter(d=>d.name.toLowerCase().includes(wsq)||(d.desc||'').toLowerCase().includes(wsq))
       : (C.waiterCat&&C.waiterCat!=='todos'?allDishes.filter(d=>d.cat===C.waiterCat):allDishes);
@@ -1430,7 +1430,42 @@ function renderWaiterMenu(mc){
 // Waiter nav helpers
 window.setWaiterStep=s=>{C.waiterStep=s;render();};
 window.setWaiterSection=s=>{C.waiterMenuSection=s;C.waiterSearch='';if(s==='platos')C.waiterCat=null;else C.waiterCafCat=null;C._catScrollReset=true;render();scrollActiveCat();};
-window.setWaiterCat=id=>{C.waiterCat=id;render();scrollActiveCat();};
+window.setWaiterCat=id=>{C.waiterCat=id;C.waiterSearch='';render();scrollActiveCat();};
+window.waiterSearchInput=val=>{
+  C.waiterSearch=val;
+  const wsq=val.toLowerCase().trim();
+  const allDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
+  const cats=getCats();
+  const inp=document.getElementById('waiter-search');
+  if(inp)inp.style.borderColor=wsq?'var(--brand)':'var(--border)';
+  // Show/hide cat-tabs
+  const tabsEl=document.getElementById('waiter-cat-tabs');
+  if(tabsEl)tabsEl.style.display=wsq?'none':'';
+  // Show/hide clear button (sibling of input)
+  const wrap=inp&&inp.parentNode;
+  if(wrap){let cb=wrap.querySelector('button');if(wsq&&!cb){cb=document.createElement('button');cb.onclick=()=>window.waiterSearchClear();cb.style.cssText='position:absolute;right:8px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;font-size:16px;color:var(--muted);line-height:1';cb.textContent='✕';wrap.appendChild(cb);}else if(!wsq&&cb)cb.remove();}
+  // Update grid
+  const grid=document.getElementById('waiter-dish-grid');
+  if(!grid)return;
+  const filtered=wsq
+    ? allDishes.filter(d=>d.name.toLowerCase().includes(wsq)||(d.desc||'').toLowerCase().includes(wsq))
+    : (C.waiterCat?allDishes.filter(d=>d.cat===C.waiterCat):allDishes);
+  if(filtered.length===0){grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:2rem;color:var(--muted);font-size:14px">Sin resultados para "${val}"</div>`;return;}
+  grid.innerHTML=filtered.map(d=>{
+    const cat=cats.find(c=>c._key===d.cat);
+    const catLabel=wsq&&cat?`<span style="font-size:10px;background:#f3f4f6;color:var(--muted);padding:1px 6px;border-radius:4px;margin-left:4px">${cat.icon} ${cat.label}</span>`:'';
+    const fp=dishFinalPrice(d,1);
+    const myEntries=Object.entries(C.waiterCart).filter(([k])=>k===d._key||k.startsWith(d._key+'|'));
+    const totalQty=myEntries.reduce((s,[,v])=>s+v.qty,0);
+    return `<div class="menu-card"><div class="menu-card-name">${d.name}${catLabel}</div><div class="menu-card-desc">${d.desc||''}</div><div class="menu-card-footer"><span class="menu-card-price">$${fp.toLocaleString()}</span>${totalQty===0?`<button class="add-btn" onclick="waiterAddDish('${d._key}','dish')">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="waiterRemove('${d._key}')">−</button><span class="qty-val">${totalQty}</span><button class="qty-btn" onclick="waiterAddDish('${d._key}','dish')">+</button></div>`}</div></div>`;
+  }).join('');
+};
+window.waiterSearchClear=()=>{
+  C.waiterSearch='';
+  const inp=document.getElementById('waiter-search');
+  if(inp){inp.value='';inp.focus();inp.style.borderColor='var(--border)';}
+  window.waiterSearchInput('');
+};
 window.setWaiterCafCat=id=>{C.waiterCafCat=id;render();scrollActiveCat();};
 window.waiterNuevaMesa=()=>{C.waiterTableId=null;C.waiterCart={};C.waiterCat=null;C.waiterCafCat=null;C.waiterStep='mesas';render();};
 window.waiterLimpiarCarrito=()=>{C.waiterCart={};render();};
