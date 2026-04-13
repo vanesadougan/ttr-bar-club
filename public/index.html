@@ -4663,11 +4663,10 @@ function renderMenuOnly(mc){
     allCatIds.forEach(cid=>{
       const cat=cats.find(c=>c._key===cid);
       const isP=cat&&cat.isPromo;
-      h+=`<button class="cat-tab${C.customerCat===cid?' active':''}${isP?' promo-tab':''}" onclick="setCat('${cid}')"><span class="cat-emoji">${cat?cat.icon:'🍽'}</span>${cat?cat.label:cid}</button>`;
+      h+=`<button class="cat-tab${C.customerCat===cid?' active':''}${isP?' promo-tab':''}" onclick="setMenuOnlyCat('${cid}')"><span class="cat-emoji">${cat?cat.icon:'🍽'}</span>${cat?cat.label:cid}</button>`;
     });
     h+=`</div><div class="menu-grid">`;
-    const filtered=C.customerCat?allDishes.filter(d=>d.cat===C.customerCat):allDishes;
-    filtered.forEach(d=>{
+    const filtered=C.customerCat?allDishes.filter(d=>d.cat===C.customerCat):allDishes;    filtered.forEach(d=>{
       const dishCat=cats.find(c=>c._key===d.cat);
       const isP=dishCat&&dishCat.isPromo&&(d.promoDiscount>0||d.is2x1);
       const fp=dishFinalPrice(d,1);
@@ -4955,6 +4954,7 @@ window.quickAddTyped=id=>{if(C.cart[id])C.cart[id].qty+=1;refreshMenuWithScroll(
 window.removeFromCart=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;else delete C.cart[id];}refreshMenuWithScroll();if(document.getElementById('cart-sheet'))showCartSheet();};
 window.custAddMitad=key=>{if(C.cart[key])C.cart[key].qty++;refreshMenuWithScroll();};
 window.setCat=c=>{C.customerCat=c;C.custDishId=null;C.typePickerDishId=null;const _sy=window.scrollY;renderMenuWithCart(document.getElementById('main-content'));updateTopbarCart();requestAnimationFrame(()=>{window.scrollTo({top:_sy,behavior:'instant'});scrollActiveCat();});};
+window.setMenuOnlyCat=c=>{C.customerCat=c;const _sy=window.scrollY;renderMenuOnly(document.getElementById('main-content'));requestAnimationFrame(()=>{window.scrollTo({top:_sy,behavior:'instant'});scrollActiveCat();});};
 window.setCafCat=c=>{C.cafCat=c;render();scrollActiveCat();};
 window.setMenuSection=section=>{C.customerMenuSection=section;C.cafCat='todos';if(section!=='kiosko')C.kioskCat=null;C.custDishId=null;C._catScrollReset=true;render();scrollActiveCat();};
 window.initCustomerCat=()=>{
