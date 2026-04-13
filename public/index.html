@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -3902,19 +3903,31 @@ window.updateKioskoSearch=()=>{
       results.push({_key:k,name:v.name,price:Number(v.price),stock:v.stock,_src:'kiosko',icon:'🏪'});
   });
 
-  // ── Platos de Postres y Bebidas ──
-  const extraCats=Object.entries(DB.categories||{})
-    .filter(([,c])=>/postres?|bebidas?/i.test(c.label||''))
-    .map(([k])=>k);
+  // ── Platos de categorías con directStock (Bebidas, etc.) ──
+  const directStockCatIds=new Set(Object.entries(DB.categories||{}).filter(([,c])=>c.directStock).map(([k])=>k));
   Object.entries(DB.dishes||{}).forEach(([k,v])=>{
-    if(!extraCats.includes(v.cat)||v.unavailable)return;
+    if(!directStockCatIds.has(v.cat)||v.unavailable)return;
+    const cat=DB.categories?.[v.cat];
+    // Buscar en barcodes del plato
     const barcodes=[v.barcode,...(v.barcodes||[])].filter(Boolean);
     const matchName=v.name.toLowerCase().includes(q);
     const matchBarcode=barcodes.some(b=>b.toLowerCase().includes(q));
     if(matchName||matchBarcode){
-      const cat=DB.categories?.[v.cat];
       results.push({_key:k,name:v.name,price:Number(v.price),stock:v.stock,_src:'dish',icon:cat?.icon||'🍽',catLabel:cat?.label||''});
+      return;
     }
+    // Buscar en barcodes de tipos
+    (v.types||[]).forEach(t=>{
+      if(typeof t!=='object')return;
+      const tname=t.name;
+      if(t.stock===0)return; // sin stock, no mostrar
+      const tbcs=[t.barcode,...(t.barcodes||[])].filter(Boolean);
+      const matchType=tname.toLowerCase().includes(q)||tbcs.some(b=>b.toLowerCase().includes(q));
+      if(matchType){
+        const fp=dishFinalPrice(v,1,tname);
+        results.push({_key:k,name:`${v.name} — ${tname}`,price:fp,stock:t.stock,_src:'dish',_typeName:tname,icon:cat?.icon||'🍽',catLabel:cat?.label||''});
+      }
+    });
   });
 
   if(results.length===0){res.innerHTML='<div style="padding:10px;font-size:13px;color:var(--muted)">Sin resultados</div>';res.style.display='block';return;}
@@ -3922,7 +3935,8 @@ window.updateKioskoSearch=()=>{
   res.innerHTML=results.map(d=>{
     const sc=d.stock!=null?`<span style="font-size:11px;color:var(--muted)"> · 📦 ${d.stock}</span>`:'';
     const srcLabel=d._src==='dish'?`<span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px;margin-left:4px">${d.catLabel}</span>`:'';
-    return `<div onclick="kioskoAddItem('${d._key}','${d._src}')" style="padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:13px" onmouseover="this.style.background='#f8f7f4'" onmouseout="this.style.background=''">
+    const typeParam=d._typeName?`,\`${d._typeName.replace(/`/g,"'")}\``:'';
+    return `<div onclick="kioskoAddItem('${d._key}','${d._src}'${typeParam})" style="padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border);display:flex;justify-content:space-between;align-items:center;font-size:13px" onmouseover="this.style.background='#f8f7f4'" onmouseout="this.style.background=''">
       <span>${d.icon} ${d.name}${srcLabel}${sc}</span>
       <span style="font-weight:600;color:var(--accent)">$${d.price.toLocaleString()}</span>
     </div>`;
@@ -3933,16 +3947,18 @@ window.kioskoSearchEnter=()=>{
   const rows=document.querySelectorAll('#kiosko-search-results [onclick]');
   if(rows.length===1)rows[0].click();
 };
-window.kioskoAddItem=(key,src)=>{
+window.kioskoAddItem=(key,src,typeName)=>{
   src=src||'kiosko';
   const d=src==='dish'?DB.dishes[key]:DB.kioskItems[key];
   if(!d||!C.kioskoOrder)return;
   const nombreInp=document.getElementById('kiosko-nombre');
   if(nombreInp) C.kioskoOrder.personName=nombreInp.value;
-  const itemKey=src+':'+key;
+  const itemKey=src+':'+key+(typeName?':'+typeName:'');
   const existing=C.kioskoOrder.items.find(i=>i._itemKey===itemKey);
+  const itemName=typeName?`${d.name} — ${typeName}`:d.name;
+  const itemPrice=typeName?dishFinalPrice(d,1,typeName):Number(d.price);
   if(existing){existing.qty++;}
-  else{C.kioskoOrder.items.push({_itemKey:itemKey,kioskKey:src==='kiosko'?key:null,dishKey:src==='dish'?key:null,name:d.name,price:Number(d.price),qty:1,_src:src});}
+  else{C.kioskoOrder.items.push({_itemKey:itemKey,kioskKey:src==='kiosko'?key:null,dishKey:src==='dish'?key:null,typeName:typeName||null,name:itemName,price:itemPrice,qty:1,_src:src});}
   C.kioskoSearch='';
   const inp=document.getElementById('kiosko-search');if(inp)inp.value='';
   const res=document.getElementById('kiosko-search-results');if(res)res.style.display='none';
@@ -3964,7 +3980,17 @@ window.submitKioskoOrder=async(modo)=>{
     for(const item of ko.items){
       if(item._src==='dish'){
         const d=DB.dishes[item.dishKey];
-        if(d&&d.stock!=null){
+        if(!d)continue;
+        if(item.typeName){
+          const updatedTypes=(d.types||[]).map(t=>{
+            if((typeof t==='string'?t:t.name)!==item.typeName)return t;
+            const cur=typeof t==='object'&&t.stock!=null?t.stock:0;
+            const ns=Math.max(0,cur-item.qty);
+            if(ns===0)showNotif('alert','Sin stock: '+item.name,'Quedan 0 unidades');
+            return{...(typeof t==='object'?t:{name:t,priceMode:'base'}),stock:ns};
+          });
+          await update(ref(db,`dishes/${item.dishKey}`),{types:updatedTypes});
+        } else if(d.stock!=null){
           const newStock=Math.max(0,(d.stock||0)-item.qty);
           await update(ref(db,`dishes/${item.dishKey}`),{stock:newStock});
           if(newStock===0)showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
@@ -3994,7 +4020,17 @@ window.submitKioskoOrder=async(modo)=>{
     for(const item of ko.items){
       if(item._src==='dish'){
         const d=DB.dishes[item.dishKey];
-        if(d&&d.stock!=null){
+        if(!d)continue;
+        if(item.typeName){
+          const updatedTypes=(d.types||[]).map(t=>{
+            if((typeof t==='string'?t:t.name)!==item.typeName)return t;
+            const cur=typeof t==='object'&&t.stock!=null?t.stock:0;
+            const ns=Math.max(0,cur-item.qty);
+            if(ns===0)showNotif('alert','Sin stock: '+item.name,'Quedan 0 unidades');
+            return{...(typeof t==='object'?t:{name:t,priceMode:'base'}),stock:ns};
+          });
+          await update(ref(db,`dishes/${item.dishKey}`),{types:updatedTypes});
+        } else if(d.stock!=null){
           const newStock=Math.max(0,(d.stock||0)-item.qty);
           await update(ref(db,`dishes/${item.dishKey}`),{stock:newStock});
           if(newStock===0)showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
@@ -4573,7 +4609,7 @@ function renderMenuOnly(mc){
       if(d.is2x1)h+=`<div style="font-size:11px;color:#92400e;background:#fff7ed;border-radius:5px;padding:2px 8px;display:inline-block;margin-bottom:6px;border:0.5px solid #fed7aa">🎁 Llevá 2, pagá 1</div>`;
       if(d.hasTypes&&(d.types||[]).length>0){
         h+=`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">`;
-        (d.types||[]).forEach(t=>{h+=`<span style="font-size:11px;padding:2px 8px;border-radius:12px;background:#f3f4f6;color:#374151;border:0.5px solid #e5e7eb">${t}</span>`;});
+        (d.types||[]).forEach(t=>{const tn=typeof t==='string'?t:t.name;h+=`<span style="font-size:11px;padding:2px 8px;border-radius:12px;background:#f3f4f6;color:#374151;border:0.5px solid #e5e7eb">${tn}</span>`;});
         h+=`</div>`;
       }
       if(d.customizable&&(d.ingredients||[]).length>0)h+=`<div style="font-size:11px;color:#5b21b6;background:#ede9fe;border-radius:5px;padding:2px 7px;display:inline-block;margin-bottom:6px">🧩 Personalizable</div>`;
@@ -4660,28 +4696,6 @@ function renderMenuWithCart(mc){
     }
   }
 
-  // Type picker modal
-  if(C.typePickerDishId!==null){
-    const d=DB.dishes[C.typePickerDishId];
-    const avTypes=availableTypes(d);
-    if(d&&d.hasTypes&&avTypes.length>0){
-      const dishCatIcon=(cats.find(c=>c._key===d.cat)||{}).icon||'🍽';
-      menuH+=`<div class="cust-modal">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
-          <span style="font-size:20px">${dishCatIcon}</span>
-          <div><div style="font-size:16px;font-weight:500">${d.name}</div>
-          <div style="font-size:12px;color:var(--muted)">Elegí el tipo</div></div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:1rem">
-          ${avTypes.map((t,ti)=>{const tname=typeof t==='string'?t:t.name;const tstock=typeof t==='object'&&t.stock!=null?t.stock:null;const tp=typeof t==='object'&&t.priceMode!=='base'?(t.priceMode==='extra'?'+$'+(t.priceExtra||0).toLocaleString():'$'+(t.priceVal||0).toLocaleString()):null;return`<button onclick="pickTypeByName('${tname.replace(/'/g,"\\'")}')" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);font-size:14px;font-family:inherit;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between">${tname}${tp?`<span style="font-size:12px;color:#7c3aed">${tp}</span>`:''}${tstock!=null?`<span style="font-size:11px;color:var(--muted);margin-left:4px">📦 ${tstock}</span>`:''}</button>`;}).join('')}
-        </div>
-        <button class="btn btn-ghost" style="width:100%" onclick="closeTypePicker()">Cancelar</button>
-      </div>`;
-    } else if(d&&d.hasTypes){
-      menuH+=`<div class="cust-modal"><div style="text-align:center;padding:1rem;color:var(--muted)">Sin stock disponible</div><button class="btn btn-ghost" style="width:100%" onclick="closeTypePicker()">Volver</button></div>`;
-    }
-  }
-
   menuH+=`<div class="menu-grid">`;
   filtered.forEach(d=>{
     const entry=C.cart[d._key];const q=entry?entry.qty:0;const excl=entry?entry.excluded:new Set();
@@ -4691,6 +4705,7 @@ function renderMenuWithCart(mc){
     const isP=isPromoCat&&(d.promoDiscount>0||is2x1);
     const promoChip=is2x1?`<span style="font-size:10px;font-weight:600;color:#c2410c;margin-left:4px;background:#fff7ed;border:0.5px solid #fed7aa;border-radius:4px;padding:1px 6px">2x1</span>`:(d.promoDiscount>0?`<span style="font-size:10px;font-weight:600;color:#c2410c;margin-left:4px">-${d.promoDiscount}%</span>`:'');
     const r=DB.ratings[d.name];const avg=r&&r.count>0?r.total/r.count:null;
+    const typePickerOpen=C.typePickerDishId===d._key;
 
     if(d.isMitadMitad&&d.mitadMitadCat){
       // Mitad y mitad card
@@ -4731,7 +4746,28 @@ function renderMenuWithCart(mc){
       }
       menuH+=`</div>`;
     } else {
-      menuH+=`<div class="menu-card${isP?' promo-card':''}">${isP?`<div style="margin-bottom:6px"><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:#fff7ed;color:#c2410c;border:0.5px solid #fed7aa">🔥 PROMO DEL DÍA</span></div>`:''}<div class="menu-card-name">${d.name}</div>${avg?`<div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">${starsHtml(avg,11)}<span style="font-size:11px;color:var(--muted);margin-left:2px">${avg.toFixed(1)}</span></div>`:''}<div class="menu-card-desc">${d.desc}</div>${is2x1?`<div style="font-size:11px;color:#92400e;background:#fff7ed;border-radius:5px;padding:2px 8px;display:inline-block;margin-bottom:6px;border:0.5px solid #fed7aa">🎁 Llevá 2, pagá 1</div>`:''} ${d.customizable&&(d.ingredients||[]).length>0?`<div style="font-size:11px;color:#5b21b6;background:#ede9fe;border-radius:5px;padding:2px 7px;display:inline-block;margin-bottom:6px">🧩 Personalizable</div>`:''}${excl&&excl.size>0?`<div class="excl-note">Sin: ${[...excl].join(', ')}</div>`:''}<div class="menu-card-footer"><div>${isP&&!is2x1?`<span class="menu-card-price-original">$${d.price.toLocaleString()}</span> `:''}<span class="menu-card-price">$${d.price.toLocaleString()}</span>${promoChip}</div>${q===0?`<button class="add-btn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${d._key}')`:(d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`)}">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeFromCart('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="${d.hasTypes&&(d.types||[]).length>0?`openTypePicker('${d._key}')`:(d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`)}">+</button></div>`}</div></div>`;
+      const avTypes=d.hasTypes?availableTypes(d):[];
+      menuH+=`<div class="menu-card${isP?' promo-card':''}">`;
+      if(isP)menuH+=`<div style="margin-bottom:6px"><span style="font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;background:#fff7ed;color:#c2410c;border:0.5px solid #fed7aa">🔥 PROMO DEL DÍA</span></div>`;
+      menuH+=`<div class="menu-card-name">${d.name}</div>`;
+      if(avg)menuH+=`<div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">${starsHtml(avg,11)}<span style="font-size:11px;color:var(--muted);margin-left:2px">${avg.toFixed(1)}</span></div>`;
+      if(d.desc)menuH+=`<div class="menu-card-desc">${d.desc}</div>`;
+      if(is2x1)menuH+=`<div style="font-size:11px;color:#92400e;background:#fff7ed;border-radius:5px;padding:2px 8px;display:inline-block;margin-bottom:6px;border:0.5px solid #fed7aa">🎁 Llevá 2, pagá 1</div>`;
+      if(d.customizable&&(d.ingredients||[]).length>0)menuH+=`<div style="font-size:11px;color:#5b21b6;background:#ede9fe;border-radius:5px;padding:2px 7px;display:inline-block;margin-bottom:6px">🧩 Personalizable</div>`;
+      if(excl&&excl.size>0)menuH+=`<div class="excl-note">Sin: ${[...excl].join(', ')}</div>`;
+      if(typePickerOpen&&avTypes.length>0){
+        menuH+=`<div style="display:flex;flex-direction:column;gap:6px;margin:8px 0;padding:10px;background:var(--bg);border-radius:10px;border:0.5px solid var(--border)">`;
+        menuH+=`<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:2px">Elegí el tipo:</div>`;
+        avTypes.forEach(t=>{const tname=typeof t==='string'?t:t.name;const tp=typeof t==='object'&&t.priceMode!=='base'?(t.priceMode==='extra'?'+$'+(t.priceExtra||0).toLocaleString():'$'+(t.priceVal||0).toLocaleString()):null;menuH+=`<button onclick="pickTypeByName('${tname.replace(/'/g,"\\'")}') " style="padding:9px 12px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);font-size:14px;font-family:inherit;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between"><span>${tname}</span>${tp?`<span style="font-size:12px;color:#7c3aed">${tp}</span>`:''}</button>`;});
+        menuH+=`<button class="btn btn-ghost btn-sm" onclick="closeTypePicker()" style="margin-top:2px">Cancelar</button>`;
+        menuH+=`</div>`;
+      } else if(typePickerOpen){
+        menuH+=`<div style="font-size:13px;color:var(--muted);padding:8px 0">Sin stock disponible</div><button class="btn btn-ghost btn-sm" onclick="closeTypePicker()">Cerrar</button>`;
+      }
+      menuH+=`<div class="menu-card-footer">`;
+      menuH+=`<div>${isP&&!is2x1?`<span class="menu-card-price-original">$${d.price.toLocaleString()}</span> `:''}<span class="menu-card-price">$${d.price.toLocaleString()}</span>${promoChip}</div>`;
+      if(!typePickerOpen){const addOnclick=d.hasTypes&&avTypes.length>0?`openTypePicker('${d._key}')`:d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`;menuH+=q===0?`<button class="add-btn" onclick="${addOnclick}">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeFromCart('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="${addOnclick}">+</button></div>`;}
+      menuH+=`</div></div>`;
     }
   });
   menuH+=`</div>`;
