@@ -4747,10 +4747,16 @@ function renderMenuWithCart(mc){
       if(d.customizable&&(d.ingredients||[]).length>0)menuH+=`<div style="font-size:11px;color:#5b21b6;background:#ede9fe;border-radius:5px;padding:2px 7px;display:inline-block;margin-bottom:6px">🧩 Personalizable</div>`;
       if(excl&&excl.size>0)menuH+=`<div class="excl-note">Sin: ${[...excl].join(', ')}</div>`;
       if(typePickerOpen&&avTypes.length>0){
-        menuH+=`<div style="display:flex;flex-direction:column;gap:6px;margin:8px 0;padding:10px;background:var(--bg);border-radius:10px;border:0.5px solid var(--border)">`;
-        menuH+=`<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:2px">Elegí el tipo:</div>`;
-        avTypes.forEach(t=>{const tname=typeof t==='string'?t:t.name;const tp=typeof t==='object'&&t.priceMode!=='base'?(t.priceMode==='extra'?'+$'+(t.priceExtra||0).toLocaleString():'$'+(t.priceVal||0).toLocaleString()):null;menuH+=`<button onclick="pickTypeByName('${tname.replace(/'/g,"\\'")}') " style="padding:9px 12px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);font-size:14px;font-family:inherit;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between"><span>${tname}</span>${tp?`<span style="font-size:12px;color:#7c3aed">${tp}</span>`:''}</button>`;});
-        menuH+=`<button class="btn btn-ghost btn-sm" onclick="closeTypePicker()" style="margin-top:2px">Cancelar</button>`;
+        menuH+=`<div style="margin:8px 0;padding:10px;background:var(--bg);border-radius:10px;border:0.5px solid var(--border)">`;
+        menuH+=`<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">Elegí el tipo:</div>`;
+        menuH+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">`;
+        avTypes.forEach(t=>{
+          const tname=typeof t==='string'?t:t.name;
+          const tp=typeof t==='object'&&t.priceMode!=='base'?(t.priceMode==='extra'?'+$'+(t.priceExtra||0).toLocaleString():'$'+(t.priceVal||0).toLocaleString()):null;
+          menuH+=`<button onclick="pickTypeByName('${tname.replace(/'/g,"\\'")}') " style="padding:8px 16px;border-radius:20px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${tname}${tp?`<span style="font-size:11px;opacity:.75;margin-left:4px">${tp}</span>`:''}</button>`;
+        });
+        menuH+=`</div>`;
+        menuH+=`<button class="btn btn-ghost btn-sm" onclick="closeTypePicker()">Cancelar</button>`;
         menuH+=`</div>`;
       } else if(typePickerOpen){
         menuH+=`<div style="font-size:13px;color:var(--muted);padding:8px 0">Sin stock disponible</div><button class="btn btn-ghost btn-sm" onclick="closeTypePicker()">Cerrar</button>`;
@@ -5020,20 +5026,23 @@ function renderKioskoMenuCust(mc, menuH, ct, isIndividual){
     }
     // Inline type picker
     if(typePickerOpen&&avTypes.length>0){
-      menuH+=`<div style="display:flex;flex-direction:column;gap:6px;margin:8px 0;padding:10px;background:var(--bg);border-radius:10px;border:0.5px solid var(--border)">`;
-      menuH+=`<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:2px">Elegí el tipo:</div>`;
+      menuH+=`<div style="margin:8px 0;padding:10px;background:var(--bg);border-radius:10px;border:0.5px solid var(--border)">`;
+      menuH+=`<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">Elegí el tipo:</div>`;
+      menuH+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">`;
       avTypes.forEach(t=>{
         const tname=typeof t==='string'?t:t.name;
         const tp=typeof t==='object'&&t.priceMode!=='base'?(t.priceMode==='extra'?'+$'+(t.priceExtra||0).toLocaleString():'$'+(t.priceVal||0).toLocaleString()):null;
-        menuH+=`<button onclick="pickKioskType('${d._key}','${tname.replace(/'/g,"\\'")}')" style="padding:9px 12px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);font-size:14px;font-family:inherit;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between"><span>${tname}</span>${tp?`<span style="font-size:12px;color:#7c3aed">${tp}</span>`:''}</button>`;
+        menuH+=`<button onclick="pickKioskType('${d._key}','${tname.replace(/'/g,"\\'")}')"
+         style="padding:8px 16px;border-radius:20px;border:0.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">
+         ${tname}${tp?`<span style="font-size:11px;opacity:.75;margin-left:4px">${tp}</span>`:""}</button>`;
       });
-      menuH+=`<button class="btn btn-ghost btn-sm" onclick="closeKioskTypePicker()" style="margin-top:2px">Cancelar</button>`;
+      menuH+=`</div>`;
+      menuH+=`<button class="btn btn-ghost btn-sm" onclick="closeKioskTypePicker()">Cancelar</button>`;
       menuH+=`</div>`;
     }
     menuH+=`<div class="menu-card-footer">`;
     menuH+=`<span class="menu-card-price">$${fp.toLocaleString()}</span>`;
     if(!typePickerOpen){
-      const addOnclick=isRest&&avTypes.length>0?`openKioskTypePicker('${d._key}')`:`quickAddKioskItem('${d._key}','${d._src}')`;
       menuH+=q===0
         ?`<button class="add-btn" onclick="${addOnclick}">+</button>`
         :`<div class="qty-ctrl"><button class="qty-btn" onclick="removeKioskItem('${d._key}','${d._src}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="${addOnclick}">+</button></div>`;
