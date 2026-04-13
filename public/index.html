@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1285,24 +1284,6 @@ function buildWaiterMenuH(){
     const allItems=Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
     const cats=getCafCats().filter(c=>allItems.some(d=>d.cat===c._key));
     menuH+='<div class="cat-tabs">';cats.forEach(c=>{menuH+='<button class="cat-tab'+(C.waiterCafCat===c._key?' active':'')+'" onclick="setWaiterCafCat(\''+c._key+'\')">'+'<span class="cat-emoji">'+c.icon+'</span>'+c.label+'</button>';});menuH+='</div>';
-  // Modal picker — después del cat-tabs, igual que comensal
-  if(C.waiterCustDishId){
-    const _d=DB.dishes[C.waiterCustDishId]||DB.cafeteriaItems[C.waiterCustDishId];
-    if(_d){
-      const _isCaf=!!DB.cafeteriaItems[C.waiterCustDishId];
-      const _src=_isCaf?'caf':'dish';
-      const _hasTypes=!_isCaf&&_d.hasTypes&&(_d.types||[]).length>0;
-      const _hasCustom=_d.customizable&&(_d.ingredients||[]).length>0;
-      const _selType=C.waiterPickType||null;
-      const _selExcl=new Set(C.waiterPickExcl||[]);
-      const _catIcon=!_isCaf?(getCats().find(c=>c._key===_d.cat)||{}).icon||'🍽':(_d.emoji||'☕');
-      menuH+=`<div class="cust-modal"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:20px">${_catIcon}</span><div><div style="font-size:16px;font-weight:500">${_d.name}</div><div style="font-size:12px;color:var(--muted)">${_hasTypes&&!_selType?'Elegí una variante':'Destildá lo que no querés'}</div></div></div>`;
-      if(_hasTypes){menuH+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">`;availableTypes(_d).forEach(_t=>{const _tn=typeof _t==='string'?_t:_t.name;const _tp=typeof _t==='object'&&_t.priceMode!=='base'?(_t.priceMode==='extra'?'+$'+(_t.priceExtra||0).toLocaleString():'$'+(_t.priceVal||0).toLocaleString()):null;const _ts=typeof _t==='object'&&_t.stock!=null?_t.stock:null;const _s=_selType===_tn;menuH+=`<button onclick="waiterPickType('${_tn.replace(/'/g,"\'")}')" style="padding:8px 16px;border-radius:20px;border:0.5px solid ${_s?'var(--accent)':'var(--border)'};background:${_s?'var(--accent)':'var(--card)'};color:${_s?'#fff':'var(--text)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${_tn}${_tp?'<span style="font-size:11px;opacity:.75;margin-left:4px">'+_tp+'</span>':''}${_ts!=null?'<span style="font-size:10px;color:var(--muted);margin-left:4px">📦'+_ts+'</span>':''}</button>`;});menuH+=`</div>`;}
-      if(_hasCustom&&(!_hasTypes||_selType)){menuH+=`<div class="cust-ing-list">`;(_d.ingredients||[]).forEach(_ing=>{const _ex=_selExcl.has(_ing);menuH+=`<div class="cust-ing-row${_ex?' excluded':''}" onclick="waiterToggleExcl('${_ing.replace(/'/g,"\'")}')"><div style="display:flex;align-items:center;gap:8px"><div class="cust-check ${_ex?'unchecked':'checked'}">${_ex?'':'✓'}</div><span class="${_ex?'strikethrough':''}">${_ing}</span></div>${_ex?'<span style="font-size:11px;color:#b45309">Sin esto</span>':''}</div>`;});menuH+=`</div>`;}
-      const _canConfirm=!_hasTypes||_selType;
-      menuH+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" ${_canConfirm?'':'disabled'} onclick="waiterConfirmDish('${C.waiterCustDishId}','${_src}')">Agregar al pedido</button><button class="btn btn-ghost" onclick="waiterCancelPick()">Cancelar</button></div></div>`;
-    }
-  }
     menuH+='<div class="menu-grid">';
     const filtered=C.waiterCafCat&&C.waiterCafCat!=='todos'?allItems.filter(d=>d.cat===C.waiterCafCat):allItems;
     filtered.forEach(d=>{const ci=C.waiterCart[d._key];const q=ci?ci.qty:0;const excl=ci&&ci.excluded&&ci.excluded.length?'<div class="excl-note">sin: '+ci.excluded.join(', ')+'</div>':'';menuH+='<div class="menu-card"><div class="menu-card-name">'+(d.emoji||'☕')+' '+d.name+'</div><div class="menu-card-desc">'+(d.desc||'')+'</div>'+excl+'<div class="menu-card-footer"><span class="menu-card-price">$'+Number(d.price).toLocaleString()+'</span>'+(q===0?'<button class="add-btn" onclick="waiterAddDish(\''+d._key+'\',\'caf\')">+</button>':'<div class="qty-ctrl"><button class="qty-btn" onclick="waiterRemove(\''+d._key+'\')">−</button><span class="qty-val">'+q+'</span><button class="qty-btn" onclick="waiterQuickAdd(\''+d._key+'\',\'caf\')">+</button></div>')+'</div></div>';});
@@ -1311,32 +1292,42 @@ function buildWaiterMenuH(){
     const allDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
     const cats=getCats();const catIds=cats.map(c=>c._key).filter(id=>allDishes.some(d=>d.cat===id));
     menuH+='<div class="cat-tabs">';catIds.forEach(cid=>{const cat=cats.find(c=>c._key===cid);menuH+='<button class="cat-tab'+(C.waiterCat===cid?' active':'')+(cat&&cat.isPromo?' promo-tab':'')+'" onclick="setWaiterCat(\''+cid+'\')">'+(cat?'<span class="cat-emoji">'+cat.icon+'</span>'+cat.label:'<span class="cat-emoji">🍽</span>'+cid)+'</button>';});menuH+='</div>';
-  // Modal picker — después del cat-tabs, igual que comensal
-  if(C.waiterCustDishId){
-    const _d=DB.dishes[C.waiterCustDishId]||DB.cafeteriaItems[C.waiterCustDishId];
-    if(_d){
-      const _isCaf=!!DB.cafeteriaItems[C.waiterCustDishId];
-      const _src=_isCaf?'caf':'dish';
-      const _hasTypes=!_isCaf&&_d.hasTypes&&(_d.types||[]).length>0;
-      const _hasCustom=_d.customizable&&(_d.ingredients||[]).length>0;
-      const _selType=C.waiterPickType||null;
-      const _selExcl=new Set(C.waiterPickExcl||[]);
-      const _catIcon=!_isCaf?(getCats().find(c=>c._key===_d.cat)||{}).icon||'🍽':(_d.emoji||'☕');
-      menuH+=`<div class="cust-modal"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:20px">${_catIcon}</span><div><div style="font-size:16px;font-weight:500">${_d.name}</div><div style="font-size:12px;color:var(--muted)">${_hasTypes&&!_selType?'Elegí una variante':'Destildá lo que no querés'}</div></div></div>`;
-      if(_hasTypes){menuH+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">`;availableTypes(_d).forEach(_t=>{const _tn=typeof _t==='string'?_t:_t.name;const _tp=typeof _t==='object'&&_t.priceMode!=='base'?(_t.priceMode==='extra'?'+$'+(_t.priceExtra||0).toLocaleString():'$'+(_t.priceVal||0).toLocaleString()):null;const _ts=typeof _t==='object'&&_t.stock!=null?_t.stock:null;const _s=_selType===_tn;menuH+=`<button onclick="waiterPickType('${_tn.replace(/'/g,"\'")}')" style="padding:8px 16px;border-radius:20px;border:0.5px solid ${_s?'var(--accent)':'var(--border)'};background:${_s?'var(--accent)':'var(--card)'};color:${_s?'#fff':'var(--text)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${_tn}${_tp?'<span style="font-size:11px;opacity:.75;margin-left:4px">'+_tp+'</span>':''}${_ts!=null?'<span style="font-size:10px;color:var(--muted);margin-left:4px">📦'+_ts+'</span>':''}</button>`;});menuH+=`</div>`;}
-      if(_hasCustom&&(!_hasTypes||_selType)){menuH+=`<div class="cust-ing-list">`;(_d.ingredients||[]).forEach(_ing=>{const _ex=_selExcl.has(_ing);menuH+=`<div class="cust-ing-row${_ex?' excluded':''}" onclick="waiterToggleExcl('${_ing.replace(/'/g,"\'")}')"><div style="display:flex;align-items:center;gap:8px"><div class="cust-check ${_ex?'unchecked':'checked'}">${_ex?'':'✓'}</div><span class="${_ex?'strikethrough':''}">${_ing}</span></div>${_ex?'<span style="font-size:11px;color:#b45309">Sin esto</span>':''}</div>`;});menuH+=`</div>`;}
-      const _canConfirm=!_hasTypes||_selType;
-      menuH+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" ${_canConfirm?'':'disabled'} onclick="waiterConfirmDish('${C.waiterCustDishId}','${_src}')">Agregar al pedido</button><button class="btn btn-ghost" onclick="waiterCancelPick()">Cancelar</button></div></div>`;
-    }
-  }
     menuH+='<div class="menu-grid">';
     const filtered=C.waiterCat&&C.waiterCat!=='todos'?allDishes.filter(d=>d.cat===C.waiterCat):allDishes;
     filtered.forEach(d=>{
-      const hasTypes=d.hasTypes&&(d.types||[]).length>0;const hasCustom=d.customizable&&(d.ingredients||[]).length>0;
+      const hasTypes=d.hasTypes&&availableTypes(d).length>0;const hasCustom=d.customizable&&(d.ingredients||[]).length>0;
       const dishCat=cats.find(c=>c._key===d.cat);const isP=dishCat&&dishCat.isPromo&&(d.promoDiscount>0||d.is2x1);
       const fp=d.isMitadMitad?null:dishFinalPrice(d,1);const myEntries=Object.entries(C.waiterCart).filter(([k])=>k===d._key||k.startsWith(d._key+'|')||k.startsWith('mitad|'+d._key+'|'));
       const totalQty=myEntries.reduce((s,[,v])=>s+v.qty,0);
+      const pickerOpen=C.waiterCustDishId===d._key;
       menuH+='<div class="menu-card'+(isP?' promo-card':'')+'"><div class="menu-card-name">'+d.name+'</div><div class="menu-card-desc">'+(d.desc||'')+'</div>';
+      // Mostrar variantes disponibles como chips
+      if(d.hasTypes&&!d.isMitadMitad){
+        const avT=availableTypes(d);
+        if(avT.length>0){menuH+='<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">';avT.forEach(t=>{const tn=typeof t==='string'?t:t.name;menuH+=`<span style="font-size:11px;padding:2px 8px;border-radius:12px;background:#f3f4f6;color:#374151;border:0.5px solid #e5e7eb">${tn}</span>`;});menuH+='</div>';}
+      }
+      // Inline picker para el plato activo
+      if(pickerOpen){
+        const _d=d;const _isCaf=false;const _src='dish';
+        const _hasTypes=hasTypes;const _hasCustom=hasCustom;
+        const _selType=C.waiterPickType||null;const _selExcl=new Set(C.waiterPickExcl||[]);
+        menuH+=`<div style="margin-top:8px;padding:10px;background:var(--bg);border-radius:10px;border:0.5px solid var(--border)">`;
+        menuH+=`<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">${_hasTypes&&!_selType?'Elegí una variante':'Destildá lo que no querés'}</div>`;
+        if(_hasTypes){
+          const _avTypes=availableTypes(_d);
+          menuH+=`<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">`;
+          _avTypes.forEach(_t=>{const _tn=typeof _t==='string'?_t:_t.name;const _tp=typeof _t==='object'&&_t.priceMode!=='base'?(_t.priceMode==='extra'?'+$'+(_t.priceExtra||0).toLocaleString():'$'+(_t.priceVal||0).toLocaleString()):null;const _ts=typeof _t==='object'&&_t.stock!=null?_t.stock:null;const _s=_selType===_tn;menuH+=`<button onclick="waiterPickType('${_tn.replace(/'/g,"\\'")}') " style="padding:8px 14px;border-radius:20px;border:0.5px solid ${_s?'var(--accent)':'var(--border)'};background:${_s?'var(--accent)':'var(--card)'};color:${_s?'#fff':'var(--text)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${_tn}${_tp?'<span style="font-size:11px;opacity:.75;margin-left:4px">'+_tp+'</span>':''}${_ts!=null?'<span style="font-size:10px;color:var(--muted);margin-left:4px">📦'+_ts+'</span>':''}</button>`;});
+          menuH+=`</div>`;
+        }
+        if(_hasCustom&&(!_hasTypes||_selType)){
+          menuH+=`<div class="cust-ing-list">`;
+          (_d.ingredients||[]).forEach(_ing=>{const _ex=_selExcl.has(_ing);menuH+=`<div class="cust-ing-row${_ex?' excluded':''}" onclick="waiterToggleExcl('${_ing.replace(/'/g,"\\'")}')"><div style="display:flex;align-items:center;gap:8px"><div class="cust-check ${_ex?'unchecked':'checked'}">${_ex?'':'✓'}</div><span class="${_ex?'strikethrough':''}">${_ing}</span></div>${_ex?'<span style="font-size:11px;color:#b45309">Sin esto</span>':''}</div>`;});
+          menuH+=`</div>`;
+        }
+        const _canConfirm=!_hasTypes||_selType;
+        menuH+=`<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-primary" style="flex:1" ${_canConfirm?'':'disabled'} onclick="waiterConfirmDish('${d._key}','dish')">Agregar al pedido</button><button class="btn btn-ghost" onclick="waiterCancelPick()">Cancelar</button></div>`;
+        menuH+=`</div>`;
+      }
       if(d.isMitadMitad){
         const _isOpen=C.mitadDishId===d._key;
         // Mostrar items de mitad en carrito
@@ -1373,12 +1364,12 @@ function buildWaiterMenuH(){
         }
       } else if(myEntries.length>0&&(hasTypes||hasCustom)){
         myEntries.forEach(([k,v])=>{const lbl=v.selectedType?'<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">'+v.selectedType+'</span>':'';const excl=v.excluded&&v.excluded.length?'<div class="excl-note">sin: '+v.excluded.join(', ')+'</div>':'';menuH+=excl+'<div style="display:flex;align-items:center;gap:6px;margin-top:2px">'+lbl+'<div class="qty-ctrl"><button class="qty-btn" onclick="waiterRemove(\''+k+'\')">−</button><span class="qty-val">'+v.qty+'</span><button class="qty-btn" onclick="waiterQuickAdd(\''+k+'\',\'dish\')">+</button></div></div>';});
-        menuH+='<div class="menu-card-footer"><span class="menu-card-price">'+(fp===null?'<span style="font-size:11px;color:var(--muted)">A definir</span>':'$'+fp.toLocaleString())+'</span><button class="add-btn" onclick="waiterAddDish(\''+d._key+'\',\'dish\')">+</button></div>';
+        if(!pickerOpen)menuH+='<div class="menu-card-footer"><span class="menu-card-price">'+(fp===null?'<span style="font-size:11px;color:var(--muted)">A definir</span>':'$'+fp.toLocaleString())+'</span><button class="add-btn" onclick="waiterAddDish(\''+d._key+'\',\'dish\')">+</button></div>';
       } else {
-        menuH+='<div class="menu-card-footer"><span class="menu-card-price">$'+fp.toLocaleString()+'</span>';
+        if(!pickerOpen){menuH+='<div class="menu-card-footer"><span class="menu-card-price">$'+fp.toLocaleString()+'</span>';
         if(totalQty===0){menuH+='<button class="add-btn" onclick="waiterAddDish(\''+d._key+'\',\'dish\')">+</button>';}
         else{menuH+='<div class="qty-ctrl"><button class="qty-btn" onclick="waiterRemove(\''+d._key+'\')">−</button><span class="qty-val">'+totalQty+'</span><button class="qty-btn" onclick="waiterQuickAdd(\''+d._key+'\',\'dish\')">+</button></div>';}
-        menuH+='</div>';
+        menuH+='</div>';}
       }
       menuH+='</div>';
     });
@@ -4514,7 +4505,7 @@ function cartTotal(){
   return Object.entries(C.cart).reduce((s,[id,v])=>{
     if(id.startsWith('mitad|'))return s+(v._mitadPrice||0)*v.qty;
     if(id.startsWith('kiosk|')){const d=DB.kioskItems[v._kioskKey];return s+(d?Number(d.price)*v.qty:0);}
-    if(id.startsWith('restk|')){const d=DB.dishes[v._kioskKey];return s+(d?dishFinalPrice(d,1)*v.qty:0);}
+    if(id.startsWith('restk|')){const d=DB.dishes[v._kioskKey];return s+(d?dishFinalPrice(d,v.qty,v._typeName||null)*v.qty:0);}
     const d=DB.dishes[id]||DB.cafeteriaItems[id];
     if(!d)return s;
     return s+(d.isCafeteria?Number(d.price)*v.qty:dishFinalPrice(d,v.qty)*v.qty);
@@ -5014,17 +5005,40 @@ function renderKioskoMenuCust(mc, menuH, ct, isIndividual){
     const isRest=d._src==='dish';
     const cartKey=isRest?`restk|${d._key}`:`kiosk|${d._key}`;
     const entry=C.cart[cartKey];const q=entry?entry.qty:0;
-    const sc=d.stock!=null?`<div style="font-size:11px;color:var(--muted)">📦 ${d.stock} disponibles</div>`:'';
     const fp=isRest?dishFinalPrice(d,1):Number(d.price);
-    menuH+=`<div class="menu-card">
-      <div class="menu-card-name">🏪 ${d.name}</div>
-      ${d.desc?`<div class="menu-card-desc">${d.desc}</div>`:''}
-      ${sc}
-      <div class="menu-card-footer">
-        <span class="menu-card-price">$${fp.toLocaleString()}</span>
-        ${q===0?`<button class="add-btn" onclick="quickAddKioskItem('${d._key}','${d._src}')">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeKioskItem('${d._key}','${d._src}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="quickAddKioskItem('${d._key}','${d._src}')">+</button></div>`}
-      </div>
-    </div>`;
+    const avTypes=isRest&&d.hasTypes?availableTypes(d):[];
+    const typePickerOpen=isRest&&C.typePickerDishId===d._key;
+
+    menuH+=`<div class="menu-card">`;
+    menuH+=`<div class="menu-card-name">🏪 ${d.name}</div>`;
+    if(d.desc)menuH+=`<div class="menu-card-desc">${d.desc}</div>`;
+    // Mostrar variantes disponibles como chips
+    if(avTypes.length>0){
+      menuH+=`<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px">`;
+      avTypes.forEach(t=>{const tn=typeof t==='string'?t:t.name;menuH+=`<span style="font-size:11px;padding:2px 8px;border-radius:12px;background:#f3f4f6;color:#374151;border:0.5px solid #e5e7eb">${tn}</span>`;});
+      menuH+=`</div>`;
+    }
+    // Inline type picker
+    if(typePickerOpen&&avTypes.length>0){
+      menuH+=`<div style="display:flex;flex-direction:column;gap:6px;margin:8px 0;padding:10px;background:var(--bg);border-radius:10px;border:0.5px solid var(--border)">`;
+      menuH+=`<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:2px">Elegí el tipo:</div>`;
+      avTypes.forEach(t=>{
+        const tname=typeof t==='string'?t:t.name;
+        const tp=typeof t==='object'&&t.priceMode!=='base'?(t.priceMode==='extra'?'+$'+(t.priceExtra||0).toLocaleString():'$'+(t.priceVal||0).toLocaleString()):null;
+        menuH+=`<button onclick="pickKioskType('${d._key}','${tname.replace(/'/g,"\\'")}')" style="padding:9px 12px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);font-size:14px;font-family:inherit;cursor:pointer;text-align:left;display:flex;align-items:center;justify-content:space-between"><span>${tname}</span>${tp?`<span style="font-size:12px;color:#7c3aed">${tp}</span>`:''}</button>`;
+      });
+      menuH+=`<button class="btn btn-ghost btn-sm" onclick="closeKioskTypePicker()" style="margin-top:2px">Cancelar</button>`;
+      menuH+=`</div>`;
+    }
+    menuH+=`<div class="menu-card-footer">`;
+    menuH+=`<span class="menu-card-price">$${fp.toLocaleString()}</span>`;
+    if(!typePickerOpen){
+      const addOnclick=isRest&&avTypes.length>0?`openKioskTypePicker('${d._key}')`:`quickAddKioskItem('${d._key}','${d._src}')`;
+      menuH+=q===0
+        ?`<button class="add-btn" onclick="${addOnclick}">+</button>`
+        :`<div class="qty-ctrl"><button class="qty-btn" onclick="removeKioskItem('${d._key}','${d._src}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="${addOnclick}">+</button></div>`;
+    }
+    menuH+=`</div></div>`;
   });
   if(items.length===0)menuH+=`<div class="empty-state" style="grid-column:1/-1">Sin items disponibles</div>`;
   menuH+=`</div>`;
@@ -5040,6 +5054,15 @@ function refreshKioskoMenu(){
   });
 }
 window.setKioskSubTab=tab=>{C.kioskSubTab=tab;render();};
+window.openKioskTypePicker=id=>{C.typePickerDishId=id;refreshKioskoMenu();};
+window.closeKioskTypePicker=()=>{C.typePickerDishId=null;refreshKioskoMenu();};
+window.pickKioskType=(dishId,typeName)=>{
+  const k='restk|'+dishId+'|'+typeName;
+  if(!C.cart[k])C.cart[k]={qty:0,_kioskKey:dishId,_src:'dish',_typeName:typeName};
+  C.cart[k].qty++;
+  C.typePickerDishId=null;
+  refreshKioskoMenu();
+};
 window.toggleKioskCatOpen=id=>{if(!C._kioskCatOpen)C._kioskCatOpen={};C._kioskCatOpen[id]=C._kioskCatOpen[id]===false?true:false;render();};
 window.setKioskCat=c=>{C.kioskCat=c;C._catScrollReset=false;refreshKioskoMenu();scrollActiveCat();};
 window.quickAddKioskItem=(id,src)=>{
@@ -5069,7 +5092,7 @@ function renderCartPanel(mc, menuH, ct, isIndividual, cats){
       const isRest=id.startsWith('restk|');
       const kd=isRest?DB.dishes[v._kioskKey]:DB.kioskItems[v._kioskKey];if(!kd)return;
       const kp=isRest?dishFinalPrice(kd,1):Number(kd.price);
-      cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🏪</div><div class="cart-item-info"><div class="cart-item-name">${kd.name}</div></div><div class="cart-qty"><button class="cqbtn" onclick="removeKioskItem('${v._kioskKey}','${v._src||'kiosk'}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="quickAddKioskItem('${v._kioskKey}','${v._src||'kiosk'}')">+</button></div><div class="cart-item-price">$${(kp*v.qty).toLocaleString()}</div></div>`;
+      cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🏪</div><div class="cart-item-info"><div class="cart-item-name">${kd.name}${v._typeName?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">${v._typeName}</span>`:''}</div></div><div class="cart-qty"><button class="cqbtn" onclick="removeKioskItem('${v._kioskKey}','${v._src||'kiosk'}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="quickAddKioskItem('${v._kioskKey}','${v._src||'kiosk'}')">+</button></div><div class="cart-item-price">$${(kp*v.qty).toLocaleString()}</div></div>`;
       return;
     }
     // Mitad y mitad
@@ -5169,7 +5192,7 @@ window.toggleCafIng=(id,ing)=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set
 window.placeOrder=()=>{
   if(cartCount()===0)return;
   const items=Object.entries(C.cart).map(([id,v])=>{
-    if(id.startsWith('kiosk|')||id.startsWith('restk|')){const isRest=id.startsWith('restk|');const kd=isRest?DB.dishes[v._kioskKey]:DB.kioskItems[v._kioskKey];if(!kd)return null;const kp=isRest?dishFinalPrice(kd,1):Number(kd.price);return{name:kd.name,qty:v.qty,price:kp,finalPrice:kp,excluded:[],selectedType:null,isCafeteria:false,isKiosko:true,emoji:'🏪'};}
+    if(id.startsWith('kiosk|')||id.startsWith('restk|')){const isRest=id.startsWith('restk|');const kd=isRest?DB.dishes[v._kioskKey]:DB.kioskItems[v._kioskKey];if(!kd)return null;const kp=isRest&&v._typeName?dishFinalPrice(kd,v.qty,v._typeName):isRest?dishFinalPrice(kd,v.qty):Number(kd.price);const kname=v._typeName?kd.name+' — '+v._typeName:kd.name;return{name:kname,qty:v.qty,price:kp,finalPrice:kp,excluded:[],selectedType:v._typeName||null,isCafeteria:false,isKiosko:true,emoji:'🏪'};}
     if(id.startsWith('mitad|'))return{name:v._mitadName||id,qty:v.qty,price:v._mitadPrice||0,finalPrice:v._mitadPrice||0,excluded:[],selectedType:null,isCafeteria:false,emoji:'🍕'};
     const dPlato=DB.dishes[id];
     const dCaf=DB.cafeteriaItems[id];
