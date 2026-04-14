@@ -3451,15 +3451,9 @@ function renderDeudoresTab(){
       const fecha=firstOrder.createdAt?new Date(firstOrder.createdAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}):'—';
       const tableLabel2=table?table.label:(firstOrder.tableId||'—');
 
-      // Saldo pendiente: primero busca en estado local, luego en Firebase
-      const getSaldo=o=>{
-        const localSaldo=C._saldosPendientes&&C._saldosPendientes[o._key];
-        if(localSaldo!=null)return localSaldo;
-        if(o.saldoPendiente!=null)return o.saldoPendiente;
-        return (o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0);
-      };
-      const saldoMostrar=g.orders.reduce((s,o)=>s+getSaldo(o),0);
-      const tuvoParcial=g.orders.some(o=>o.saldoPendiente!=null||(C._saldosPendientes&&C._saldosPendientes[o._key]!=null));
+      // saldoPendiente siempre existe desde la creación del deudor
+      const saldoMostrar=g.orders.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
+      const tuvoParcial=saldoMostrar<total;
 
       h+=`<div class="card" style="margin-bottom:.875rem;border-left:3px solid #dc2626">`;
       // Header
@@ -3521,7 +3515,8 @@ window.marcarDeudor=async key=>{
     if(!nombre){alert('Ingresá nombre y apellido');return;}
     cleanup();
     // El pedido pasa a status 'deudor' con nombre/apellido guardados en el mismo registro
-    await update(ref(db,`orders/${key}`),{status:'deudor',deudorNombre:nombre,deudorApellido:apellido,deudorRegistradoAt:Date.now()});
+    const saldoInicial=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+    await update(ref(db,`orders/${key}`),{status:'deudor',deudorNombre:nombre,deudorApellido:apellido,deudorRegistradoAt:Date.now(),saldoPendiente:saldoInicial});
     C.adminTab='deudores';render();
   };
 };
@@ -4184,6 +4179,7 @@ window.submitKioskoOrder=async(modo)=>{
     }
     // Crear pedido en orders con status deudor
     const items=ko.items.map(i=>({name:i.name,qty:i.qty,price:i.price,finalPrice:i.price,isKiosko:true}));
+    const saldoInicial=ko.items.reduce((s,i)=>s+i.price*i.qty,0);
     const nombre=ko.personName.split(' ')[0]||ko.personName;
     const apellido=ko.personName.split(' ').slice(1).join(' ')||'';
     await push(ref(db,'orders'),{
@@ -4192,6 +4188,7 @@ window.submitKioskoOrder=async(modo)=>{
       orderMode:'individual',personName:ko.personName,
       deudorNombre:nombre,deudorApellido:apellido,
       deudorRegistradoAt:Date.now(),
+      saldoPendiente:saldoInicial,
       isKiosko:true
     });
     C.kioskoOrder=null;C.kioskoSearch='';
@@ -4257,7 +4254,9 @@ window.adminGroupDeudor=async keys=>{
     if(!nombre){alert('Ingresá nombre y apellido');return;}
     cleanup();
     for(const k of keys){
-      await update(ref(db,`orders/${k}`),{status:'deudor',deudorNombre:nombre,deudorApellido:'',deudorRegistradoAt:Date.now()});
+      const o=DB.orders[k];
+      const saldoInicial=o?(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0):0;
+      await update(ref(db,`orders/${k}`),{status:'deudor',deudorNombre:nombre,deudorApellido:'',deudorRegistradoAt:Date.now(),saldoPendiente:saldoInicial});
     }
     C.adminTab='deudores';render();
   };
