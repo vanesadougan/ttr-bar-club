@@ -3521,8 +3521,17 @@ window.marcarDeudor=async key=>{
   };
 };
 
-window.cobrarDeudorParcial=async(keys,totalDeuda)=>{
+window.cobrarDeudorParcial=async(keys,_ignored)=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
+  // Leer saldo actual directo de Firebase — ignorar el valor pasado por parámetro
+  let totalDeuda=0;let nombreDeudor='';let tableLabel='';
+  for(const k of keys){
+    const snap=await get(ref(db,`orders/${k}`));
+    const o=snap.val();if(!o)continue;
+    totalDeuda+=o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+    if(!nombreDeudor)nombreDeudor=`${o.deudorNombre||''} ${o.deudorApellido||''}`.trim();
+    if(!tableLabel){const t=DB.tables[o.tableId];tableLabel=t?t.label:(o.tableId||'');}
+  }
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
   overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
@@ -3557,8 +3566,6 @@ window.cobrarDeudorParcial=async(keys,totalDeuda)=>{
     if(!pm)return;
     overlay.remove();
     const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
-    let nombreDeudor='';let tableLabel='';
-    for(const k of keys){const o=DB.orders[k];if(!o)continue;if(!nombreDeudor)nombreDeudor=`${o.deudorNombre||''} ${o.deudorApellido||''}`.trim();if(!tableLabel){const t=DB.tables[o.tableId];tableLabel=t?t.label:(o.tableId||'');}break;}
     const nuevoSaldo=Math.max(0,totalDeuda-monto);
     const esPagoTotal=nuevoSaldo===0;
     if(esPagoTotal){
