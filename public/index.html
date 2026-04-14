@@ -3450,11 +3450,15 @@ function renderDeudoresTab(){
       const fecha=firstOrder.createdAt?new Date(firstOrder.createdAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}):'—';
       const tableLabel2=table?table.label:(firstOrder.tableId||'—');
 
-      // Saldo pendiente: usa saldoPendiente si existe, sino el total original
-      const saldoPendiente=g.orders.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:
-        (o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
-      const tuvoParcial=g.orders.some(o=>o.saldoPendiente!=null);
-      const saldoMostrar=saldoPendiente;
+      // Saldo pendiente: primero busca en estado local, luego en Firebase
+      const getSaldo=o=>{
+        const localSaldo=C._saldosPendientes&&C._saldosPendientes[o._key];
+        if(localSaldo!=null)return localSaldo;
+        if(o.saldoPendiente!=null)return o.saldoPendiente;
+        return (o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0);
+      };
+      const saldoMostrar=g.orders.reduce((s,o)=>s+getSaldo(o),0);
+      const tuvoParcial=g.orders.some(o=>o.saldoPendiente!=null||(C._saldosPendientes&&C._saldosPendientes[o._key]!=null));
 
       h+=`<div class="card" style="margin-bottom:.875rem;border-left:3px solid #dc2626">`;
       // Header
@@ -3559,11 +3563,15 @@ window.cobrarDeudorParcial=async(keys,totalDeuda)=>{
     for(const k of keys){const o=DB.orders[k];if(!o)continue;if(!nombreDeudor)nombreDeudor=`${o.deudorNombre||''} ${o.deudorApellido||''}`.trim();if(!tableLabel){const t=DB.tables[o.tableId];tableLabel=t?t.label:(o.tableId||'');}break;}
     const nuevoSaldo=Math.max(0,totalDeuda-monto);
     const esPagoTotal=nuevoSaldo===0;
+    // Guardar en estado local inmediatamente (antes de que Firebase actualice)
+    if(!C._saldosPendientes)C._saldosPendientes={};
     if(esPagoTotal){
-      // Saldó todo — marcar cobrado
-      for(const k of keys)await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now(),saldoPendiente:0});
+      for(const k of keys){
+        await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now(),saldoPendiente:0});
+        delete C._saldosPendientes[k];
+      }
     } else {
-      // Pago parcial — guardar el nuevo saldo pendiente en el primer pedido del grupo
+      C._saldosPendientes[keys[0]]=nuevoSaldo;
       await update(ref(db,`orders/${keys[0]}`),{saldoPendiente:nuevoSaldo});
     }
     const concepto=`${esPagoTotal?'Deudor':'Pago parcial'}: ${nombreDeudor} · ${tableLabel} (${pmL[pm]||pm})${!esPagoTotal?` — quedan $${nuevoSaldo.toLocaleString()}`:''}`;
