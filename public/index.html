@@ -3451,12 +3451,15 @@ function renderDeudoresTab(){
       const fecha=firstOrder.createdAt?new Date(firstOrder.createdAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}):'—';
       const tableLabel2=table?table.label:(firstOrder.tableId||'—');
 
+      const pagoParcial=g.orders.reduce((s,o)=>s+(o.pagoParcialAcumulado||0),0);
+      const saldoMostrar=pagoParcial>0?total-pagoParcial:total;
+
       h+=`<div class="card" style="margin-bottom:.875rem;border-left:3px solid #dc2626">`;
       // Header
       h+=`<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">`;
       h+=`<div><div style="font-size:16px;font-weight:700">${g.nombre}</div>`;
       h+=`<div style="font-size:12px;color:var(--muted);margin-top:2px">${fecha} · ${tableLabel2}</div></div>`;
-      h+=`<div style="font-size:20px;font-weight:700;color:#dc2626">$${total.toLocaleString()}</div>`;
+      h+=`<div style="text-align:right"><div style="font-size:20px;font-weight:700;color:#dc2626">$${saldoMostrar.toLocaleString()}</div>${pagoParcial>0?`<div style="font-size:11px;color:#059669;margin-top:1px">Ya pagó $${pagoParcial.toLocaleString()}</div>`:''}</div>`;
       h+=`</div>`;
 
       // Items de todos los pedidos agrupados
@@ -3472,9 +3475,12 @@ function renderDeudoresTab(){
       });
       h+=`</div>`;
 
-      // Botón cobrar (guarda keys en window._deudorKeys)
+      // Botones cobrar (guarda keys en window._deudorKeys)
       const dIdx=window._deudorKeys.push(keys)-1;
-      h+=`<button onclick="cobrarDeudorGrupo(window._deudorKeys[${dIdx}])" style="width:100%;padding:9px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrado ✓ — registrar pago</button>`;
+      h+=`<div style="display:flex;gap:8px;margin-top:4px">`;
+      h+=`<button onclick="cobrarDeudorGrupo(window._deudorKeys[${dIdx}])" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">✓ Cobrado total</button>`;
+      h+=`<button onclick="cobrarDeudorParcial(window._deudorKeys[${dIdx}],${saldoMostrar})" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid #d97706;background:#fffbeb;color:#92400e;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">$ Pago parcial</button>`;
+      h+=`</div>`;
       h+=`</div>`;
     });
   }
@@ -3511,6 +3517,54 @@ window.marcarDeudor=async key=>{
   };
 };
 
+window.cobrarDeudorParcial=async(keys,totalDeuda)=>{
+  if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
+  // Modal para ingresar monto parcial
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">$ Pago parcial</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Deuda total: <strong style="color:#dc2626">$${totalDeuda.toLocaleString()}</strong></div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label>¿Cuánto paga ahora?</label>
+      <input id="parcial-monto" type="number" min="1" max="${totalDeuda}" placeholder="$0" autofocus
+        style="width:100%;padding:10px 12px;border:1.5px solid var(--brand);border-radius:8px;font-size:20px;font-weight:700;font-family:inherit;text-align:center;box-sizing:border-box">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="this.closest('[style*=fixed]').remove()" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
+      <button id="parcial-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Confirmar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const inp=overlay.querySelector('#parcial-monto');
+  setTimeout(()=>inp&&inp.focus(),50);
+  overlay.querySelector('#parcial-ok').onclick=async()=>{
+    const monto=Number(inp.value);
+    if(!monto||monto<=0){inp.focus();return;}
+    if(monto>totalDeuda){alert('El monto no puede superar la deuda total');inp.focus();return;}
+    const pm=await showPaymentChoiceModal(null);
+    if(!pm)return;
+    overlay.remove();
+    const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+    // Obtener nombre y mesa del primer pedido
+    let nombreDeudor='';let tableLabel='';
+    for(const k of keys){const o=DB.orders[k];if(!o)continue;if(!nombreDeudor)nombreDeudor=`${o.deudorNombre||''} ${o.deudorApellido||''}`.trim();if(!tableLabel){const t=DB.tables[o.tableId];tableLabel=t?t.label:(o.tableId||'');}break;}
+    // Si pagó el total, marcar cobrado; si es parcial, registrar en caja y reducir deuda
+    const esPagoTotal=monto>=totalDeuda;
+    if(esPagoTotal){
+      for(const k of keys)await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,pagoParcia:false,cobradoAt:Date.now()});
+    } else {
+      // Registrar pago parcial: guardar saldo restante en los pedidos
+      const restante=totalDeuda-monto;
+      for(const k of keys)await update(ref(db,`orders/${k}`),{pagoParcialAcumulado:(DB.orders[k]?.pagoParcialAcumulado||0)+monto,saldoRestante:restante});
+    }
+    // Registrar en caja siempre
+    const concepto=`${esPagoTotal?'Deudor':'Pago parcial'}: ${nombreDeudor} · ${tableLabel} (${pmL[pm]||pm})${!esPagoTotal?` — quedan $${(totalDeuda-monto).toLocaleString()}`:''} `;
+    const hoy=new Date().toISOString().slice(0,10);
+    await push(ref(db,'caja'),{tipo:'venta',concepto,monto,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,parcial:!esPagoTotal});
+    render();
+  };
+};
 window.cobrarDeudorGrupo=async keys=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
   const pm=await showPaymentChoiceModal(null);
