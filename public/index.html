@@ -3591,20 +3591,18 @@ window.cobrarDeudorGrupo=async keys=>{
     if(!tableLabel3){const t=DB.tables[o.tableId];tableLabel3=t?t.label:(o.tableId||'');}
   }
   const saldoRestante=Math.max(0,totalOriginal-pagadoParcial);
-  const res=await showPaymentChoiceModal(null,saldoRestante);
+  const res=await showPaymentChoiceModal(null);
   if(!res)return;
   const pm=typeof res==='string'?res:res.pm;
-  const descuento=typeof res==='object'?(res.descuento||0):0;
-  const pct=typeof res==='object'?(res.pct||0):0;
-  const montoACobrar=Math.max(0,saldoRestante-descuento);
+  const montoACobrar=saldoRestante;
   const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
   for(const k of keys){
-    await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now(),descuento,pct});
+    await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now()});
   }
   if(montoACobrar>0&&getCajaAbierta()){
-    const concepto=`Deudor: ${nombreDeudor} · ${tableLabel3} (${pmL[pm]||pm})${pagadoParcial>0?` — ya había pagado $${pagadoParcial.toLocaleString()}`:''}${pct>0?` -${pct}%`:''}`;
+    const concepto=`Deudor: ${nombreDeudor} · ${tableLabel3} (${pmL[pm]||pm})${pagadoParcial>0?` — ya había pagado $${pagadoParcial.toLocaleString()}`:''}`;
     const hoy=new Date().toISOString().slice(0,10);
-    await push(ref(db,'caja'),{tipo:'venta',concepto,monto:montoACobrar,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,descuento,pct});
+    await push(ref(db,'caja'),{tipo:'venta',concepto,monto:montoACobrar,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm});
   }
   render();
 };
