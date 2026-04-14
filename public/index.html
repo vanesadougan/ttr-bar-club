@@ -242,7 +242,7 @@
 <!-- Firebase SDK -->
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, push, onValue, update, remove, serverTimestamp }
+import { getDatabase, ref, set, push, onValue, update, remove, get, serverTimestamp }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
@@ -3577,11 +3577,14 @@ window.cobrarDeudorParcial=async(keys,totalDeuda)=>{
 };
 window.cobrarDeudorGrupo=async keys=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
-  // Calcular saldo real (total original menos pagos parciales ya registrados)
+  // Leer datos frescos de Firebase para no depender del cache local
   let totalOriginal=0;let pagadoParcial=0;
   let nombreDeudor='';let tableLabel3='';
+  const freshOrders=[];
   for(const k of keys){
-    const o=DB.orders[k];if(!o)continue;
+    const snap=await get(ref(db,`orders/${k}`));
+    const o=snap.val();if(!o)continue;
+    freshOrders.push({_key:k,...o});
     totalOriginal+=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
     pagadoParcial+=(o.pagoParcialAcumulado||0);
     if(!nombreDeudor)nombreDeudor=`${o.deudorNombre||''} ${o.deudorApellido||''}`.trim();
