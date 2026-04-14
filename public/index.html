@@ -249,7 +249,16 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
 
 // ─── FIREBASE CONFIG ───────────────────────────────
 // Reemplazá estos valores con los de tu proyecto Firebase
-const firebaseConfig = __FIREBASE_CONFIG__;
+const firebaseConfig = {
+  apiKey: "AIzaSyBvZ-t5rFj6Eo2Eveze5f5eqqRxZ2xiodY",
+  authDomain: "ttr-bar-club.firebaseapp.com",
+  databaseURL: "https://ttr-bar-club-default-rtdb.firebaseio.com",
+  projectId: "ttr-bar-club",
+  storageBucket: "ttr-bar-club.firebasestorage.app",
+  messagingSenderId: "197986436291",
+  appId: "1:197986436291:web:338ddcf70a35962aacce76",
+  measurementId: "G-4QYLLN280Q"
+};
 
 const app = initializeApp(firebaseConfig);
 const db  = getDatabase(app);
