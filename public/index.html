@@ -3477,7 +3477,7 @@ function renderDeudoresTab(){
       // Botones cobrar (guarda keys en window._deudorKeys)
       const dIdx=window._deudorKeys.push(keys)-1;
       h+=`<div style="display:flex;gap:8px;margin-top:4px">`;
-      h+=`<button onclick="cobrarDeudorGrupo(window._deudorKeys[${dIdx}])" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">✓ Cobrado total</button>`;
+      h+=`<button onclick="cobrarDeudorGrupo(window._deudorKeys[${dIdx}],${saldoMostrar})" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">✓ Cobrado total</button>`;
       h+=`<button onclick="cobrarDeudorParcial(window._deudorKeys[${dIdx}],${saldoMostrar})" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid #d97706;background:#fffbeb;color:#92400e;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">$ Pago parcial</button>`;
       h+=`</div>`;
       h+=`</div>`;
@@ -3575,26 +3575,17 @@ window.cobrarDeudorParcial=async(keys,totalDeuda)=>{
     render();
   };
 };
-window.cobrarDeudorGrupo=async keys=>{
+window.cobrarDeudorGrupo=async(keys,montoACobrar)=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
-  // Leer datos frescos de Firebase para no depender del cache local
-  let totalOriginal=0;let pagadoParcial=0;
-  let nombreDeudor='';let tableLabel3='';
-  const freshOrders=[];
+  let nombreDeudor='';let tableLabel3='';let pagadoParcial=0;
   for(const k of keys){
-    const snap=await get(ref(db,`orders/${k}`));
-    const o=snap.val();if(!o)continue;
-    freshOrders.push({_key:k,...o});
-    totalOriginal+=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+    const o=DB.orders[k];if(!o)continue;
     pagadoParcial+=(o.pagoParcialAcumulado||0);
     if(!nombreDeudor)nombreDeudor=`${o.deudorNombre||''} ${o.deudorApellido||''}`.trim();
     if(!tableLabel3){const t=DB.tables[o.tableId];tableLabel3=t?t.label:(o.tableId||'');}
   }
-  const saldoRestante=Math.max(0,totalOriginal-pagadoParcial);
-  const res=await showPaymentChoiceModal(null);
-  if(!res)return;
-  const pm=typeof res==='string'?res:res.pm;
-  const montoACobrar=saldoRestante;
+  const pm=await showPaymentChoiceModal(null);
+  if(!pm)return;
   const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
   for(const k of keys){
     await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now()});
