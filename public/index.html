@@ -3551,11 +3551,22 @@ window.cobrarDeudorParcial=async(keys,totalDeuda)=>{
     // Si pagó el total, marcar cobrado; si es parcial, registrar en caja y reducir deuda
     const esPagoTotal=monto>=totalDeuda;
     if(esPagoTotal){
-      for(const k of keys)await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,pagoParcia:false,cobradoAt:Date.now()});
+      for(const k of keys)await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now()});
     } else {
-      // Registrar pago parcial: guardar saldo restante en los pedidos
-      const restante=totalDeuda-monto;
-      for(const k of keys)await update(ref(db,`orders/${k}`),{pagoParcialAcumulado:(DB.orders[k]?.pagoParcialAcumulado||0)+monto,saldoRestante:restante});
+      // Distribuir el pago parcial proporcionalmente entre los pedidos
+      let montoRestante=monto;
+      for(const k of keys){
+        const o=DB.orders[k];if(!o)continue;
+        const oTotal=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+        const oYaPago=o.pagoParcialAcumulado||0;
+        const oSaldo=Math.max(0,oTotal-oYaPago);
+        const oAbono=Math.min(oSaldo,montoRestante);
+        if(oAbono>0){
+          await update(ref(db,`orders/${k}`),{pagoParcialAcumulado:oYaPago+oAbono});
+        }
+        montoRestante-=oAbono;
+        if(montoRestante<=0)break;
+      }
     }
     // Registrar en caja siempre
     const concepto=`${esPagoTotal?'Deudor':'Pago parcial'}: ${nombreDeudor} · ${tableLabel} (${pmL[pm]||pm})${!esPagoTotal?` — quedan $${(totalDeuda-monto).toLocaleString()}`:''} `;
