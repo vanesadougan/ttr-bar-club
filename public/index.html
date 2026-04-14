@@ -3561,16 +3561,21 @@ window.cobrarDeudorParcial=async(keys,totalDeuda)=>{
     for(const k of keys){const o=DB.orders[k];if(!o)continue;if(!nombreDeudor)nombreDeudor=`${o.deudorNombre||''} ${o.deudorApellido||''}`.trim();if(!tableLabel){const t=DB.tables[o.tableId];tableLabel=t?t.label:(o.tableId||'');}break;}
     const nuevoSaldo=Math.max(0,totalDeuda-monto);
     const esPagoTotal=nuevoSaldo===0;
-    // Guardar en estado local inmediatamente (antes de que Firebase actualice)
-    if(!C._saldosPendientes)C._saldosPendientes={};
     if(esPagoTotal){
-      for(const k of keys){
-        await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now(),saldoPendiente:0});
-        delete C._saldosPendientes[k];
-      }
+      for(const k of keys)await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now(),saldoPendiente:0});
     } else {
-      C._saldosPendientes[keys[0]]=nuevoSaldo;
-      await update(ref(db,`orders/${keys[0]}`),{saldoPendiente:nuevoSaldo});
+      // Leer saldoPendiente actual de Firebase y restarle el monto
+      let restante=monto;
+      for(const k of keys){
+        if(restante<=0)break;
+        const snap=await get(ref(db,`orders/${k}`));
+        const o=snap.val();if(!o)continue;
+        const saldoActual=o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+        const abono=Math.min(saldoActual,restante);
+        const nuevoSaldoK=Math.max(0,saldoActual-abono);
+        await update(ref(db,`orders/${k}`),{saldoPendiente:nuevoSaldoK});
+        restante-=abono;
+      }
     }
     const concepto=`${esPagoTotal?'Deudor':'Pago parcial'}: ${nombreDeudor} · ${tableLabel} (${pmL[pm]||pm})${!esPagoTotal?` — quedan $${nuevoSaldo.toLocaleString()}`:''}`;
     const hoy=new Date().toISOString().slice(0,10);
@@ -3578,12 +3583,15 @@ window.cobrarDeudorParcial=async(keys,totalDeuda)=>{
     render();
   };
 };
-window.cobrarDeudorGrupo=async(keys,montoACobrar)=>{
+window.cobrarDeudorGrupo=async(keys,_ignored)=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
-  let nombreDeudor='';let tableLabel3='';let pagadoParcial=0;
+  // Leer saldoPendiente fresco de Firebase — no usar cache local
+  let montoACobrar=0;let nombreDeudor='';let tableLabel3='';
   for(const k of keys){
-    const o=DB.orders[k];if(!o)continue;
-    pagadoParcial+=(o.pagoParcialAcumulado||0);
+    const snap=await get(ref(db,`orders/${k}`));
+    const o=snap.val();if(!o)continue;
+    const saldo=o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+    montoACobrar+=saldo;
     if(!nombreDeudor)nombreDeudor=`${o.deudorNombre||''} ${o.deudorApellido||''}`.trim();
     if(!tableLabel3){const t=DB.tables[o.tableId];tableLabel3=t?t.label:(o.tableId||'');}
   }
@@ -3594,7 +3602,7 @@ window.cobrarDeudorGrupo=async(keys,montoACobrar)=>{
     await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now()});
   }
   if(montoACobrar>0&&getCajaAbierta()){
-    const concepto=`Deudor: ${nombreDeudor} · ${tableLabel3} (${pmL[pm]||pm})${pagadoParcial>0?` — ya había pagado $${pagadoParcial.toLocaleString()}`:''}`;
+    const concepto=`Deudor: ${nombreDeudor} · ${tableLabel3} (${pmL[pm]||pm})`;
     const hoy=new Date().toISOString().slice(0,10);
     await push(ref(db,'caja'),{tipo:'venta',concepto,monto:montoACobrar,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm});
   }
