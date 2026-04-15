@@ -2419,7 +2419,7 @@ function renderStockTab(){
       </div>
       <div style="display:flex;gap:4px;align-items:center">
         <button onclick="applyStockAdj('${id}','${src||'ing'}')" style="flex:1;padding:6px 8px;border-radius:6px;border:0.5px solid #10b981;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">✓ Aplicar</button>
-        ${!src?`<button class="btn btn-ghost btn-sm" onclick="editIng('${id}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteIng('${id}')">✕</button>`:`<button class="btn btn-ghost btn-sm" onclick="toggleStockEdit('${id}','${src}')">✏️</button>`}
+        ${!src?`<button class="btn btn-ghost btn-sm" onclick="editIng('${id}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteIng('${id}')">✕</button>`:`<button class="btn btn-ghost btn-sm" onclick="openStockEditModal('${id}','${src}')">✏️</button>`}
       </div>
     </div>`;
   };
@@ -2586,6 +2586,113 @@ function renderStockTab(){
 }
 
 // ── INGREDIENT ACTIONS ────────────────────────────
+window.openStockEditModal=(key,src)=>{
+  const isType=key.includes('__');
+  let dishId,typeName,typeIdx,dish,t,item,itemName,stock,alertAt,barcodes;
+
+  if(isType){
+    [dishId,typeName]=key.split('__');
+    dish=DB.dishes[dishId]||{};
+    typeIdx=(dish.types||[]).findIndex(t2=>(typeof t2==='string'?t2:t2.name)===typeName);
+    t=dish.types[typeIdx];
+    const tObj=typeof t==='object'?t:{name:t,priceMode:'base'};
+    itemName=`${dish.name} — ${tObj.name}`;
+    stock=tObj.stock??'';
+    alertAt=tObj.alertAt??'';
+    barcodes=tObj.barcodes?[...tObj.barcodes]:(tObj.barcode?[tObj.barcode]:[]);
+  } else {
+    const dbObj=src==='dishes'?DB.dishes:src==='cafeteria'?DB.cafeteriaItems:DB.kioskItems;
+    item=dbObj[key]||{};
+    itemName=item.name||key;
+    stock=item.stock??'';
+    alertAt=item.alertAt??'';
+    barcodes=item.barcodes?[...item.barcodes]:(item.barcode?[item.barcode]:[]);
+  }
+
+  const overlay=document.createElement('div');
+  overlay.id='stock-edit-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+
+  const renderModal=()=>{
+    overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;width:100%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,.3);overflow:hidden">
+      <div style="padding:16px 20px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-size:15px;font-weight:600">✏️ Editar — ${itemName}</div>
+        <button onclick="document.getElementById('stock-edit-overlay').remove()" style="border:none;background:none;font-size:22px;cursor:pointer;color:var(--muted);line-height:1">✕</button>
+      </div>
+      <div style="padding:16px 20px">
+        ${isType?`<div class="form-group" style="margin-bottom:14px">
+          <label>Nombre variante</label>
+          <input id="se-name" type="text" value="${typeName}" style="font-size:15px">
+        </div>`:''}
+        <div style="display:flex;gap:12px;margin-bottom:14px">
+          <div class="form-group" style="margin-bottom:0;flex:1">
+            <label>Stock actual</label>
+            <input id="se-stock" type="number" min="0" value="${stock}" style="font-size:18px;font-weight:700;text-align:center">
+          </div>
+          ${!isType?`<div class="form-group" style="margin-bottom:0;flex:1">
+            <label>Alerta de stock</label>
+            <input id="se-alertat" type="number" min="0" value="${alertAt}" style="font-size:15px;text-align:center">
+          </div>`:''}
+        </div>
+        <div style="margin-bottom:16px">
+          <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:8px">🔍 Códigos de barras</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px" id="se-barcodes">
+            ${barcodes.map((bc,bi)=>`<div style="display:flex;align-items:center;gap:4px;background:var(--bg);border:0.5px solid var(--border);border-radius:6px;padding:3px 8px;font-family:monospace;font-size:12px">${bc}<button onclick="seRemoveBarcode(${bi})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:14px;line-height:1;margin-left:2px">✕</button></div>`).join('')}
+            ${barcodes.length===0?'<span style="font-size:12px;color:var(--muted)">Sin códigos</span>':''}
+          </div>
+          <div style="display:flex;gap:6px">
+            <input id="se-bc-inp" placeholder="Escaneá o escribí un código"
+              style="flex:1;padding:7px 10px;border:0.5px solid var(--border);border-radius:8px;font-family:monospace;font-size:13px"
+              onkeydown="if(event.key==='Enter'){seAddBarcode();event.preventDefault();}">
+            <button onclick="seAddBarcode()" style="padding:7px 14px;border-radius:8px;border:0.5px solid var(--brand);color:var(--brand);background:transparent;font-size:13px;cursor:pointer;font-family:inherit">+ Agregar</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button onclick="seGuardar()" style="flex:1;padding:11px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">💾 Guardar</button>
+          <button onclick="document.getElementById('stock-edit-overlay').remove()" style="padding:11px 16px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit;color:var(--muted)">Cancelar</button>
+        </div>
+      </div>
+    </div>`;
+  };
+
+  window.seAddBarcode=()=>{
+    const inp=document.getElementById('se-bc-inp');
+    if(!inp||!inp.value.trim())return;
+    const bc=inp.value.trim();
+    if(!barcodes.includes(bc))barcodes.push(bc);
+    inp.value='';
+    renderModal();setTimeout(()=>document.getElementById('se-bc-inp')?.focus(),30);
+  };
+  window.seRemoveBarcode=(bi)=>{barcodes.splice(bi,1);renderModal();};
+  window.seGuardar=async()=>{
+    if(isType){
+      const nombre=(document.getElementById('se-name')?.value||'').trim()||typeName;
+      const stockVal=document.getElementById('se-stock')?.value;
+      const newStock=stockVal===''?null:Math.max(0,Number(stockVal));
+      const updatedTypes=[...(DB.dishes[dishId]?.types||[])];
+      const tObj=typeof updatedTypes[typeIdx]==='object'?{...updatedTypes[typeIdx]}:{name:updatedTypes[typeIdx],priceMode:'base'};
+      tObj.name=nombre;tObj.stock=newStock;tObj.barcodes=barcodes;
+      updatedTypes[typeIdx]=tObj;
+      await update(ref(db,`dishes/${dishId}`),{types:updatedTypes});
+    } else {
+      const stockVal=document.getElementById('se-stock')?.value;
+      const alertVal=document.getElementById('se-alertat')?.value;
+      const newStock=stockVal===''?null:Math.max(0,Number(stockVal));
+      const newAlert=alertVal===''?null:Math.max(0,Number(alertVal));
+      const dbPath=src==='dishes'?'dishes':src==='cafeteria'?'cafeteriaItems':'kioskItems';
+      const updates={stock:newStock,alertAt:newAlert};
+      if(barcodes.length>0)updates.barcodes=barcodes;
+      await update(ref(db,`${dbPath}/${key}`),updates);
+    }
+    document.getElementById('stock-edit-overlay')?.remove();
+    render();
+  };
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  renderModal();
+  setTimeout(()=>document.getElementById('se-stock')?.select(),50);
+};
 window.toggleStockEdit=(key,src)=>{
   if(!C._stockEdit) C._stockEdit={};
   // key puede ser dishKey o dishKey__typeName para filas de tipo
@@ -3403,6 +3510,7 @@ function renderClientesTab(){
     clientes.forEach(c=>{
       h+=`<div style="display:flex;align-items:center;padding:12px 16px;border-bottom:0.5px solid var(--border)">
         <div style="flex:1;font-size:14px;font-weight:500">👤 ${c.nombre}</div>
+        <button onclick="editCliente('${c._key}','${c.nombre.replace(/'/g,"\\'")}') " style="width:28px;height:28px;border-radius:50%;border:none;background:#dbeafe;color:#1e40af;font-size:13px;cursor:pointer;line-height:1;margin-right:6px">✏️</button>
         <button onclick="deleteCliente('${c._key}')" style="width:28px;height:28px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:14px;cursor:pointer;line-height:1">✕</button>
       </div>`;
     });
@@ -3422,6 +3530,32 @@ window.addCliente=async()=>{
 window.deleteCliente=async key=>{
   if(!confirm('¿Eliminar este cliente?'))return;
   await remove(ref(db,`clientes/${key}`));
+};
+window.editCliente=(key,nombreActual)=>{
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="font-size:16px;font-weight:600;margin-bottom:14px">✏️ Editar cliente</div>
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Nombre</label>
+      <input id="edit-cliente-inp" value="${nombreActual}" style="font-size:16px" autocomplete="off">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button id="edit-cliente-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
+      <button onclick="this.closest('[style*=fixed]').remove()" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit;color:var(--muted)">Cancelar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const inp=overlay.querySelector('#edit-cliente-inp');
+  setTimeout(()=>{inp.focus();inp.select();},50);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  overlay.querySelector('#edit-cliente-ok').onclick=async()=>{
+    const nombre=(inp.value||'').trim();
+    if(!nombre){inp.focus();return;}
+    await update(ref(db,`clientes/${key}`),{nombre});
+    overlay.remove();
+  };
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')overlay.querySelector('#edit-cliente-ok').click();});
 };
 function renderDeudoresTab(){
   window._deudorKeys=[];
