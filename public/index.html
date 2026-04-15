@@ -1252,7 +1252,28 @@ function renderWaiterMesaScreen(mc){
       <button class="btn btn-ghost btn-sm" onclick="setWaiterStep('mesas')" style="font-size:12px">← Mis mesas</button>
     </div>
     <div class="mesa-grid">`;
-  tables.forEach(t=>{const occ=tableOccupied(t._key);h+=`<button class="mesa-btn" onclick="waiterSelectMesa('${t._key}')" style="${occ?'border-color:#f59e0b;':''}"><div>${t.label}</div>${t.capacity?`<div class="mesa-btn-label">${t.capacity} personas</div>`:''}</button>`;});
+  tables.forEach(t=>{
+    const occ=tableOccupied(t._key);
+    const orders=occ?Object.values(DB.orders).filter(o=>o.tableId===t._key&&o.status!=='cobrado'&&o.status!=='deudor'):[];
+    const hasBilled=orders.some(o=>o.status==='billed');
+    const total=orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
+    if(occ){
+      const bg=hasBilled?'#7c3aed':'#dc2626';
+      const bgLight=hasBilled?'#ede9fe':'#fee2e2';
+      const emoji=hasBilled?'💜':'🔴';
+      h+=`<button class="mesa-btn" onclick="waiterSelectMesa('${t._key}')" style="background:${bgLight};border:2px solid ${bg};position:relative;padding:16px 8px">
+        <div style="font-size:15px;font-weight:700;color:${bg}">${t.label}</div>
+        <div style="font-size:10px;font-weight:600;color:${bg};margin-top:3px">${emoji} ${hasBilled?'Pide cuenta':'En uso'}</div>
+        ${total>0?`<div style="font-size:11px;color:${bg};opacity:.8;margin-top:2px">$${total.toLocaleString()}</div>`:''}
+      </button>`;
+    } else {
+      h+=`<button class="mesa-btn" onclick="waiterSelectMesa('${t._key}')" style="background:var(--card);border:1.5px dashed #d1d5db;opacity:.75">
+        <div style="font-size:15px;font-weight:600;color:var(--muted)">${t.label}</div>
+        <div style="font-size:10px;color:#9ca3af;margin-top:3px">✓ Libre</div>
+        ${t.capacity?`<div class="mesa-btn-label">${t.capacity} pers.</div>`:''}
+      </button>`;
+    }
+  });
   h+=`</div></div></div></div>`;
   mc.innerHTML=h;
 }
