@@ -286,7 +286,7 @@ function getCats(){
 const catOpen={};
 
 // Local reactive state (synced from Firebase)
-let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}, cancellations:{}, cafeteriaItems:{}, cafeteriaCategories:{}, ingredients:{}, waiters:{}, caja:{}, deudores:{}, kioskItems:{} };
+let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}, cancellations:{}, cafeteriaItems:{}, cafeteriaCategories:{}, ingredients:{}, waiters:{}, caja:{}, deudores:{}, kioskItems:{}, clientes:{} };
 
 // Customer flow state (local only)
 let C = {
@@ -396,6 +396,7 @@ onValue(ref(db,'waiters'), snap=>{ DB.waiters = snap.val()||{}; _markLoaded(); i
 onValue(ref(db,'caja'), snap=>{ DB.caja = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'deudores'), snap=>{ DB.deudores = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'kioskItems'), snap=>{ DB.kioskItems = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
+onValue(ref(db,'clientes'), snap=>{ DB.clientes = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'kioskCategories'), snap=>{ DB.kioskCategories = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
 onValue(ref(db,'ingredients'), snap=>{
   DB.ingredients = snap.val()||{};
@@ -657,7 +658,7 @@ function renderAdmin(){
   const pc=pendingCount();
 
   // ── Nivel 1: pestañas principales ──
-  const mainTabs=['tables','mozas','menu','orders','history','deudores','caja','stock'];
+  const mainTabs=['tables','mozas','menu','orders','history','deudores','caja','stock','clientes'];
   const mainLabels={
     tables:'🪑 Mesas',
     mozas:'👩 Mozas',
@@ -667,7 +668,8 @@ function renderAdmin(){
     deudores:`💳 Deudores${Object.values(DB.orders).filter(o=>o.status==='deudor').length>0?` <span class="badge">${Object.values(DB.orders).filter(o=>o.status==='deudor').length}</span>`:''}`,
     caja:'💰 Caja',
     stock:'📦 Stock',
-    ratings:'⭐ Calificaciones'
+    ratings:'⭐ Calificaciones',
+    clientes:'👥 Clientes'
   };
   // Determinar tab activo de nivel 1
   const dishTabs=['dishes','cafeteria','kiosko'];
@@ -705,6 +707,7 @@ function renderAdmin(){
   else if(activeMain==='mozas') h+=renderWaitersAdminTab();
   else if(activeMain==='caja') h+=renderCajaTab();
   else if(activeMain==='deudores') h+=renderDeudoresTab();
+  else if(activeMain==='clientes') h+=renderClientesTab();
 
   h+=`</div>`;
   mc.innerHTML=h;
@@ -1259,9 +1262,40 @@ function renderWaiterModeChoice(mc){
 }
 window.waiterChooseMode=mode=>{C.waiterOrderMode=mode;if(mode==='individual')C.waiterStep='nameInput';else{C.waiterPersonName='';C.waiterStep='menu';}render();};
 function renderWaiterNameInput(mc){
-  mc.innerHTML=`<div class="content"><div class="mode-screen"><div class="mesa-title" style="font-size:22px;margin-bottom:.5rem">Nombre del comensal</div><div style="font-size:14px;color:var(--muted);margin-bottom:1.5rem">¿Para quién es este pedido?</div><input id="waiter-name-inp" style="width:100%;max-width:320px;padding:12px 16px;border:0.5px solid var(--border);border-radius:10px;font-size:16px;font-family:inherit;text-align:center;background:var(--card);color:var(--text)" placeholder="Nombre del comensal" value="${C.waiterPersonName||''}"><div style="display:flex;gap:10px;margin-top:1rem"><button class="btn btn-primary" onclick="waiterConfirmName()">Continuar →</button><button class="back-btn" onclick="setWaiterStep('modeChoice')">← Volver</button></div></div></div>`;
+  const clientes=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
+  mc.innerHTML=`<div class="content"><div class="mode-screen">
+    <div class="mesa-title" style="font-size:22px;margin-bottom:.5rem">Nombre del comensal</div>
+    <div style="font-size:14px;color:var(--muted);margin-bottom:1.5rem">¿Para quién es este pedido?</div>
+    <div style="position:relative;width:100%;max-width:320px;margin:0 auto">
+      <input id="waiter-name-inp" style="width:100%;padding:12px 16px;border:0.5px solid var(--border);border-radius:10px;font-size:16px;font-family:inherit;text-align:center;background:var(--card);color:var(--text);box-sizing:border-box"
+        placeholder="Nombre del comensal" value="${C.waiterPersonName||''}"
+        oninput="waiterNombreInput(this.value)">
+      <div id="waiter-clientes-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:0.5px solid var(--border);border-radius:8px;z-index:100;max-height:200px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.12);margin-top:4px;text-align:left">
+        ${clientes.map(n=>`<div onclick="waiterSelectCliente('${n.replace(/'/g,"\\'")}') " style="padding:12px 16px;cursor:pointer;font-size:14px;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">${n}</div>`).join('')}
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:1rem">
+      <button class="btn btn-primary" onclick="waiterConfirmName()">Continuar →</button>
+      <button class="back-btn" onclick="setWaiterStep('modeChoice')">← Volver</button>
+    </div>
+  </div></div>`;
   setTimeout(()=>{const el=document.getElementById('waiter-name-inp');if(el)el.focus();},50);
 }
+window.waiterNombreInput=val=>{
+  C.waiterPersonName=val;
+  const dd=document.getElementById('waiter-clientes-dd');if(!dd)return;
+  const q=val.toLowerCase().trim();
+  const clientes=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
+  const filtered=q?clientes.filter(n=>n.toLowerCase().includes(q)):clientes;
+  if(!filtered.length){dd.style.display='none';return;}
+  dd.innerHTML=filtered.map(n=>`<div onclick="waiterSelectCliente('${n.replace(/'/g,"\\'")}') " style="padding:12px 16px;cursor:pointer;font-size:14px;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">${n}</div>`).join('');
+  dd.style.display='block';
+};
+window.waiterSelectCliente=nombre=>{
+  C.waiterPersonName=nombre;
+  const inp=document.getElementById('waiter-name-inp');if(inp)inp.value=nombre;
+  const dd=document.getElementById('waiter-clientes-dd');if(dd)dd.style.display='none';
+};
 window.waiterConfirmName=()=>{const inp=document.getElementById('waiter-name-inp');const name=(inp?inp.value:'').trim();if(!name){alert('Ingresá el nombre');return;}C.waiterPersonName=name;C.waiterStep='menu';render();};
 function waiterCartCount(){return Object.values(C.waiterCart).reduce((s,v)=>s+v.qty,0);}
 function waiterCartTotal(){return Object.entries(C.waiterCart).reduce((s,[key,v])=>{
@@ -3085,10 +3119,13 @@ function renderOrdersTab(){
     const mo=C.manualOrder;
     const tables=Object.entries(DB.tables).map(([k,v])=>({...v,_key:k}));
     const moTotal=(mo.items||[]).reduce((s,i)=>s+i.price*i.qty,0);
+    const clientesList=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
+    const hasItems=(mo.items||[]).length>0;
+    const canConfirm=!!mo.tableId&&hasItems&&!(mo.orderMode==='individual'&&!mo.personName?.trim());
 
     manualH=`<div class="card" style="border:1.5px solid var(--brand);margin-bottom:1.25rem">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-        <div style="font-size:15px;font-weight:600;color:var(--text)">📋 Nuevo pedido manual</div>
+        <div style="font-size:15px;font-weight:600;color:var(--text)">📋 Nuevo pedido</div>
         <button onclick="cancelManualOrder()" style="border:none;background:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
@@ -3104,32 +3141,40 @@ function renderOrdersTab(){
             <option value="individual"${mo.orderMode==='individual'?' selected':''}>👤 Individual</option>
           </select>
         </div>
-        ${mo.orderMode==='individual'?`<div class="form-group" style="flex:1;min-width:140px;margin-bottom:0"><label>Nombre <span style="color:var(--danger)">*</span></label><input id="manual-nombre" placeholder="Nombre (obligatorio)" value="${mo.personName||''}" oninput="if(C.manualOrder)C.manualOrder.personName=this.value" autocomplete="off"></div>`:''}
+        ${mo.orderMode==='individual'?`<div class="form-group" style="flex:1;min-width:140px;margin-bottom:0;position:relative">
+          <label>Nombre <span style="color:var(--danger)">*</span></label>
+          <input id="manual-nombre" placeholder="Nombre o elegí de la lista" value="${mo.personName||''}"
+            oninput="manualNombreInput(this.value)" autocomplete="off"
+            style="font-size:16px;width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;font-family:inherit;box-sizing:border-box">
+          <div id="clientes-dropdown" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:0.5px solid var(--border);border-radius:8px;z-index:100;max-height:180px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)">
+            ${clientesList.map(n=>`<div onclick="selectCliente('${n.replace(/'/g,"\\'")}') " style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">${n}</div>`).join('')}
+          </div>
+        </div>`:''}
       </div>
       <div style="margin-bottom:10px">
-        <div class="form-group" style="margin-bottom:6px"><label>Buscar plato o item</label>
-          <input id="manual-search" placeholder="Escribí para buscar..." value="${C.manualOrderSearch||''}" oninput="updateManualSearch()" autocomplete="off">
+        <div class="form-group" style="margin-bottom:6px"><label>Buscar plato, kiosko o cafetería</label>
+          <input id="manual-search" placeholder="Escribí para buscar..." value="${C.manualOrderSearch||''}" oninput="updateManualSearch()" autocomplete="off" style="font-size:16px">
         </div>
         <div id="manual-search-results" style="border:0.5px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;background:var(--card);margin-top:4px"></div>
       </div>
       ${C.manualOrderPicker?`<div style="margin-bottom:12px;padding:12px;border:1px dashed #c4b5fd;border-radius:8px;background:#faf5ff">
-        ${(()=>{const pk=C.manualOrderPicker;const d=pk.src==='cafeteria'?DB.cafeteriaItems[pk.key]:DB.dishes[pk.key];if(!d)return'';
+        ${(()=>{const pk=C.manualOrderPicker;const d=pk.src==='cafeteria'?DB.cafeteriaItems[pk.key]:pk.src==='kiosko'?DB.kioskItems[pk.key]:DB.dishes[pk.key];if(!d)return'';
           let ph=`<div style="font-size:14px;font-weight:600;margin-bottom:10px">🛠 Configurar: ${d.name}</div>`;
           if(d.hasTypes&&(d.types||[]).length>0){
             ph+=`<div style="font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px">TIPO (obligatorio)</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">`;
-            (d.types||[]).forEach(t=>{const tn=typeof t==='string'?t:t.name;const tp=typeof t==='object'&&t.priceMode!=='base'?(t.priceMode==='extra'?'+$'+(t.priceExtra||0).toLocaleString():'$'+(t.priceVal||0).toLocaleString()):null;ph+=`<button onclick="setManualPickerType('${tn.replace(/'/g,"\\'")}')" style="padding:6px 14px;border-radius:6px;border:1.5px solid ${pk.selectedType===tn?'#5b21b6':'var(--border)'};background:${pk.selectedType===tn?'#ede9fe':'var(--bg)'};color:${pk.selectedType===tn?'#5b21b6':'var(--text)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${tn}${tp?'<span style="font-size:11px;color:#7c3aed;margin-left:4px">'+tp+'</span>':''}</button>`;});
+            (d.types||[]).forEach(t=>{const tn=typeof t==='string'?t:t.name;const tp=typeof t==='object'&&t.priceMode!=='base'?(t.priceMode==='extra'?'+$'+(t.priceExtra||0).toLocaleString():'$'+(t.priceVal||0).toLocaleString()):null;ph+=`<button onclick="setManualPickerType('${tn.replace(/'/g,"\\'")}') " style="padding:6px 14px;border-radius:6px;border:1.5px solid ${pk.selectedType===tn?'#5b21b6':'var(--border)'};background:${pk.selectedType===tn?'#ede9fe':'var(--bg)'};color:${pk.selectedType===tn?'#5b21b6':'var(--text)'};font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">${tn}${tp?'<span style="font-size:11px;color:#7c3aed;margin-left:4px">'+tp+'</span>':''}</button>`;});
             ph+=`</div>`;
           }
           if(d.customizable&&(d.ingredients||[]).length>0){
             ph+=`<div style="font-size:12px;font-weight:500;color:var(--muted);margin-bottom:6px">INGREDIENTES</div><div style="display:flex;flex-direction:column;gap:4px;margin-bottom:10px">`;
-            (d.ingredients||[]).forEach(ing=>{const ex=pk.excluded.has(ing);ph+=`<div onclick="toggleManualPickerIng('${ing.replace(/'/g,"\\'")}')" style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;background:${ex?'#fee2e2':'var(--bg)'};cursor:pointer"><div style="width:18px;height:18px;border-radius:4px;border:1.5px solid ${ex?'#ef4444':'#10b981'};background:${ex?'transparent':'#d1fae5'};display:flex;align-items:center;justify-content:center;font-size:12px">${ex?'':'✓'}</div><span style="${ex?'text-decoration:line-through;color:var(--muted)':''}">${ing}</span>${ex?`<span style="font-size:11px;color:#b45309;margin-left:auto">Sin esto</span>`:''}</div>`;});
+            (d.ingredients||[]).forEach(ing=>{const ex=pk.excluded.has(ing);ph+=`<div onclick="toggleManualPickerIng('${ing.replace(/'/g,"\\'")}') " style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;background:${ex?'#fee2e2':'var(--bg)'};cursor:pointer"><div style="width:18px;height:18px;border-radius:4px;border:1.5px solid ${ex?'#ef4444':'#10b981'};background:${ex?'transparent':'#d1fae5'};display:flex;align-items:center;justify-content:center;font-size:12px">${ex?'':'✓'}</div><span style="${ex?'text-decoration:line-through;color:var(--muted)':''}">${ing}</span>${ex?`<span style="font-size:11px;color:#b45309;margin-left:auto">Sin esto</span>`:''}</div>`;});
             ph+=`</div>`;
           }
           ph+=`<div style="display:flex;gap:8px"><button onclick="confirmManualPicker()" ${d.hasTypes&&(d.types||[]).length>0&&!pk.selectedType?'disabled':''} style="flex:1;padding:8px;border-radius:6px;border:none;background:${d.hasTypes&&(d.types||[]).length>0&&!pk.selectedType?'var(--border)':'var(--brand)'};color:${d.hasTypes&&(d.types||[]).length>0&&!pk.selectedType?'var(--muted)':'#fff'};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Agregar al pedido</button><button onclick="cancelManualPicker()" style="padding:8px 14px;border-radius:6px;border:0.5px solid var(--border);background:transparent;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button></div>`;
           return ph;
         })()}
       </div>`:''}
-      ${(mo.items||[]).length>0?`<div style="margin-bottom:12px">
+      ${hasItems?`<div style="margin-bottom:12px">
         <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em">Items del pedido</div>
         ${(mo.items||[]).map((item,idx)=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:0.5px solid #f3f4f6">
           <div style="flex:1;font-size:13px;font-weight:500">${item.name}${item.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${item.selectedType}</span>`:''}${item.excluded&&item.excluded.length>0?`<div style="font-size:11px;color:#b45309">sin: ${item.excluded.join(', ')}</div>`:''}<div style="font-size:11px;color:var(--muted)">$${Number(item.price).toLocaleString()} c/u</div></div>
@@ -3142,9 +3187,11 @@ function renderOrdersTab(){
           <span>Total</span><span style="color:var(--accent)">$${moTotal.toLocaleString()}</span>
         </div>
       </div>`:'<div style="font-size:13px;color:var(--muted);margin-bottom:12px;text-align:center;padding:12px 0">Buscá y agregá items al pedido ↑</div>'}
-      <button id="manual-confirm-btn" onclick="submitManualOrder()" style="width:100%;padding:12px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${!mo.tableId||(mo.items||[]).length===0?'0.45':'1'}">
-        Confirmar pedido →
-      </button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button onclick="submitManualOrder('pending')" ${canConfirm?'':'disabled'} style="flex:1;min-width:120px;padding:11px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${canConfirm?1:.45}">📋 Confirmar pedido</button>
+        <button onclick="submitManualOrder('cobrado')" ${canConfirm?'':'disabled'} style="flex:1;min-width:120px;padding:11px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${canConfirm?1:.45}">💵 Cobrado</button>
+        <button onclick="submitManualOrder('deudor')" ${canConfirm?'':'disabled'} style="flex:1;min-width:120px;padding:11px;border-radius:8px;border:0.5px solid #dc2626;background:#fef2f2;color:#dc2626;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${canConfirm?1:.45}">💳 Deudor</button>
+      </div>
     </div>`;
   }
 
@@ -3214,8 +3261,7 @@ function renderOrdersTab(){
       <div class="metric" style="${pendingAlerts.length>0?'background:#fef3c7;border-color:#fcd34d':''}"><div class="metric-val" style="${pendingAlerts.length>0?'color:#92400e':''}">${pendingAlerts.length}</div><div class="metric-lbl">🛎 Llamadas</div></div>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px">
-      <button onclick="startManualOrder()" style="padding:9px 16px;border-radius:8px;border:0.5px solid var(--brand);background:${C.manualOrder?'var(--brand)':'transparent'};color:${C.manualOrder?'#fff':'var(--brand)'};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">+ Pedido manual</button>
-      <button onclick="startKioskoOrder()" style="padding:9px 16px;border-radius:8px;border:0.5px solid #059669;background:${C.kioskoOrder?'#059669':'transparent'};color:${C.kioskoOrder?'#fff':'#059669'};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">🏪 + Kiosko</button>
+      <button onclick="startManualOrder()" style="padding:9px 16px;border-radius:8px;border:0.5px solid var(--brand);background:${C.manualOrder?'var(--brand)':'transparent'};color:${C.manualOrder?'#fff':'var(--brand)'};font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">📋 + Nuevo pedido</button>
     </div>
   </div>
   ${manualH}
@@ -3416,6 +3462,56 @@ function renderOrdersTab(){
 }
 
 // ── DEUDORES TAB ──────────────────────────────────
+function renderClientesTab(){
+  const clientes=Object.entries(DB.clientes||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
+  let h=`<div style="max-width:600px">`;
+  h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">`;
+  h+=`<div><div style="font-size:18px;font-weight:600">👥 Clientes recurrentes</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${clientes.length} cliente${clientes.length!==1?'s':''}</div></div>`;
+  h+=`<button onclick="showAddClienteForm()" style="padding:8px 16px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar cliente</button>`;
+  h+=`</div>`;
+  if(C._showAddCliente){
+    h+=`<div class="card" style="border-color:var(--accent);margin-bottom:1rem">
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px">Nuevo cliente</div>
+      <div class="form-group" style="margin-bottom:12px"><label>Nombre completo</label>
+        <input id="new-cliente-nombre" placeholder="Nombre y apellido" style="font-size:16px" oninput="" autocomplete="off">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="addCliente()" class="btn btn-primary">Agregar</button>
+        <button onclick="C._showAddCliente=false;render()" class="btn btn-ghost">Cancelar</button>
+      </div>
+    </div>`;
+  }
+  if(clientes.length===0&&!C._showAddCliente){
+    h+=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">
+      <div style="font-size:40px;margin-bottom:12px">👥</div>
+      <div style="font-size:16px;font-weight:500">Sin clientes cargados</div>
+      <div style="font-size:13px;margin-top:4px">Agregá clientes recurrentes para seleccionarlos rápido en los pedidos</div>
+    </div>`;
+  } else {
+    h+=`<div class="card" style="padding:0;overflow:hidden">`;
+    clientes.forEach(c=>{
+      h+=`<div style="display:flex;align-items:center;padding:12px 16px;border-bottom:0.5px solid var(--border)">
+        <div style="flex:1;font-size:14px;font-weight:500">👤 ${c.nombre}</div>
+        <button onclick="deleteCliente('${c._key}')" style="width:28px;height:28px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:14px;cursor:pointer;line-height:1">✕</button>
+      </div>`;
+    });
+    h+=`</div>`;
+  }
+  h+=`</div>`;
+  return h;
+}
+window.showAddClienteForm=()=>{C._showAddCliente=true;render();setTimeout(()=>document.getElementById('new-cliente-nombre')?.focus(),50);};
+window.addCliente=async()=>{
+  const inp=document.getElementById('new-cliente-nombre');
+  const nombre=(inp?.value||'').trim();
+  if(!nombre){inp?.focus();return;}
+  await push(ref(db,'clientes'),{nombre});
+  C._showAddCliente=false;render();
+};
+window.deleteCliente=async key=>{
+  if(!confirm('¿Eliminar este cliente?'))return;
+  await remove(ref(db,`clientes/${key}`));
+};
 function renderDeudoresTab(){
   window._deudorKeys=[];
   window._deudorSaldos=[];
@@ -3882,6 +3978,23 @@ window.startManualOrder=()=>{
 };
 window.cancelManualOrder=()=>{C.manualOrder=null;C.manualOrderSearch='';C.manualOrderPicker=null;render();};
 window.updateManualOrder=(field,val)=>{if(!C.manualOrder)return;C.manualOrder[field]=val;render();};
+window.manualNombreInput=val=>{
+  if(C.manualOrder)C.manualOrder.personName=val;
+  const dd=document.getElementById('clientes-dropdown');if(!dd)return;
+  const q=val.toLowerCase().trim();
+  const clientes=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
+  const filtered=q?clientes.filter(n=>n.toLowerCase().includes(q)):clientes;
+  if(filtered.length===0||!q){dd.style.display='none';return;}
+  dd.innerHTML=filtered.map(n=>`<div onclick="selectCliente('${n.replace(/'/g,"\\'")}') " style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">${n}</div>`).join('');
+  dd.style.display='block';
+};
+window.selectCliente=nombre=>{
+  if(C.manualOrder)C.manualOrder.personName=nombre;
+  const inp=document.getElementById('manual-nombre');if(inp)inp.value=nombre;
+  const dd=document.getElementById('clientes-dropdown');if(dd)dd.style.display='none';
+};
+// Cerrar dropdown al hacer click fuera
+document.addEventListener('click',e=>{if(!e.target.closest('#manual-nombre')&&!e.target.closest('#clientes-dropdown')){const dd=document.getElementById('clientes-dropdown');if(dd)dd.style.display='none';}});
 
 // Search: solo actualiza la lista sin destruir el input
 window.updateManualSearch=()=>{
@@ -3894,7 +4007,8 @@ window.updateManualSearch=()=>{
   if(search.length<1){list.style.display='none';list.innerHTML='';return;}
   const allItems=[
     ...Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k,_src:'dishes'})),
-    ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria',emoji:v.emoji||'☕'}))
+    ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria',emoji:v.emoji||'☕'})),
+    ...Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k,_src:'kiosko',emoji:'🏪'}))
   ].filter(d=>!d.unavailable&&d.name.toLowerCase().includes(search));
   // Deduplicar por nombre+src (por si hay entradas duplicadas en Firebase)
   const seen=new Set();
@@ -3960,20 +4074,41 @@ window.manualOrderRemoveItem=idx=>{
   if(!C.manualOrder)return;
   C.manualOrder.items.splice(idx,1);render();
 };
-window.submitManualOrder=async()=>{
+window.submitManualOrder=async(modo='pending')=>{
   const mo=C.manualOrder;
   if(!mo)return;
-  // Leer nombre del DOM por si no hubo render intermedio
   const nombreInp=document.getElementById('manual-nombre');
   if(nombreInp)mo.personName=nombreInp.value;
   if(!mo.tableId){alert('Elegí una mesa');return;}
   if(!mo.items.length){alert('Agregá al menos un item');return;}
-  if(mo.orderMode==='individual'&&!mo.personName.trim()){
+  if(mo.orderMode==='individual'&&!mo.personName?.trim()){
     if(nombreInp){nombreInp.focus();nombreInp.style.borderColor='var(--danger)';}
     alert('Ingresá el nombre de la persona');return;
   }
-  const items=mo.items.map(i=>({name:i.name,qty:i.qty,price:i.price,finalPrice:i.price,excluded:[],selectedType:null,isCafeteria:i.isCafeteria||false,emoji:i.emoji||null,manualEntry:true}));
-  await push(ref(db,'orders'),{tableId:mo.tableId,items,status:'pending',time:nowStr(),billRequested:false,orderMode:mo.orderMode,personName:mo.orderMode==='individual'&&mo.personName?mo.personName:null,createdAt:Date.now(),manualEntry:true});
+  const total=mo.items.reduce((s,i)=>s+i.price*i.qty,0);
+  const items=mo.items.map(i=>({name:i.name,qty:i.qty,price:i.price,finalPrice:i.price,excluded:i.excluded||[],selectedType:i.selectedType||null,isCafeteria:i.isCafeteria||false,isKiosko:i.isKiosko||false,emoji:i.emoji||null,manualEntry:true}));
+  const orderBase={tableId:mo.tableId,items,billRequested:false,orderMode:mo.orderMode,personName:mo.orderMode==='individual'&&mo.personName?mo.personName.trim():null,createdAt:Date.now(),manualEntry:true,time:nowStr()};
+
+  if(modo==='pending'){
+    await push(ref(db,'orders'),{...orderBase,status:'pending'});
+  } else if(modo==='cobrado'){
+    if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
+    const res=await showPaymentChoiceModal(null,total);
+    if(!res)return;
+    const pm=res.pm;const descuento=res.descuento||0;const pct=res.pct||0;
+    const totalFinal=total-descuento;
+    await push(ref(db,'orders'),{...orderBase,status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});
+    const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+    const table=DB.tables[mo.tableId];
+    const concepto=`${table?table.label:mo.tableId}${orderBase.personName?' · '+orderBase.personName:''} (${pmL[pm]||pm})${pct>0?` -${pct}%`:''}`;
+    const hoy=new Date().toISOString().slice(0,10);
+    await push(ref(db,'caja'),{tipo:'venta',concepto,monto:totalFinal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,descuento,pct});
+  } else if(modo==='deudor'){
+    if(!mo.personName?.trim()){alert('Para registrar como deudor es obligatorio el nombre');return;}
+    const nombre=mo.personName.trim().split(' ')[0];
+    const apellido=mo.personName.trim().split(' ').slice(1).join(' ')||'';
+    await push(ref(db,'orders'),{...orderBase,status:'deudor',deudorNombre:nombre,deudorApellido:apellido,deudorRegistradoAt:Date.now(),saldoPendiente:total,orderMode:'individual'});
+  }
   C.manualOrder=null;C.manualOrderSearch='';render();
 };
 
