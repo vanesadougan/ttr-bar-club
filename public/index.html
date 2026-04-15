@@ -1223,7 +1223,7 @@ function renderWaiterMesasScreen(mc){
         const pm=orders.find(o=>o.paymentMethod)?.paymentMethod;
         h+=`<div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">`;
         h+=`<span style="font-size:12px;color:#5b21b6;font-weight:500">💜 Cuenta pedida${pm?' · '+pmLabels[pm]:''}</span>`;
-        h+=`<button onclick="waiterMarkCobrado('${tableId}')" style="padding:6px 14px;border-radius:8px;border:0.5px solid #065f46;background:#d1fae5;color:#065f46;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrado ✓</button>`;
+        h+=`<button onclick="waiterMarkCobrado('${tableId}')" style="padding:6px 14px;border-radius:8px;border:0.5px solid #065f46;background:#d1fae5;color:#065f46;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrar ✓</button>`;
         h+=`</div>`;
       } else {
         if(hasPendingOrPrep){
@@ -1564,26 +1564,28 @@ window.waiterRequestBill=async tableId=>{
 window.waiterMarkCobrado=async tableId=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
   const orders=Object.entries(DB.orders).filter(([,o])=>o.tableId===tableId&&(o.status==='billed'||o.status==='delivered'||o.status==='pending')&&o.status!=='deudor');
-  // Verificar método de pago
+  const total=orders.reduce((s,[,o])=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
   const pm=orders.find(([,o])=>o.paymentMethod)?.[1]?.paymentMethod||C.waiterPayMethod||null;
-  let finalPm=pm;
-  if(!finalPm){
-    finalPm=await showPaymentChoiceModal(null);
-    if(!finalPm)return;
+  let finalPm=pm;let descuento=0;let pct=0;
+  if(finalPm){
+    // Ya tiene medio de pago — solo preguntar descuento
+    const disc=await showDiscountModal(total);
+    descuento=disc.descuento;pct=disc.pct;
+  } else {
+    const res=await showPaymentChoiceModal(null,total);
+    if(!res)return;
+    finalPm=res.pm;descuento=res.descuento||0;pct=res.pct||0;
   }
+  const totalFinal=total-descuento;
   for(const [k] of orders){
-    await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:finalPm});
+    await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:finalPm,descuento,pct});
   }
-  // Registrar en caja
-  if(getCajaAbierta()){
-    const total=orders.reduce((s,[,o])=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
-    if(total>0){
-      const table=DB.tables[tableId];const tLabel=table?table.label:tableId;
-      const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
-      const concepto=`${tLabel} (${pmL[finalPm]||finalPm})`;
-      const hoy=new Date().toISOString().slice(0,10);
-      await push(ref(db,'caja'),{tipo:'venta',concepto,monto:total,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:finalPm});
-    }
+  if(getCajaAbierta()&&totalFinal>0){
+    const table=DB.tables[tableId];const tLabel=table?table.label:tableId;
+    const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+    const concepto=`${tLabel} (${pmL[finalPm]||finalPm})${pct>0?` -${pct}%`:''}`;
+    const hoy=new Date().toISOString().slice(0,10);
+    await push(ref(db,'caja'),{tipo:'venta',concepto,monto:totalFinal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:finalPm,descuento,pct});
   }
   render();
 };
