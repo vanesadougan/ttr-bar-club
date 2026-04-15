@@ -1358,9 +1358,10 @@ function buildWaiterMenuH(){
       menuH+='<div class="cat-tabs" id="waiter-cat-tabs">';catIds.forEach(cid=>{const cat=cats.find(c=>c._key===cid);menuH+='<button class="cat-tab'+(C.waiterCat===cid?' active':'')+(cat&&cat.isPromo?' promo-tab':'')+'" onclick="setWaiterCat(\''+cid+'\')">'+(cat?'<span class="cat-emoji">'+cat.icon+'</span>'+cat.label:'<span class="cat-emoji">🍽</span>'+cid)+'</button>';});menuH+='</div>';
     }
     menuH+='<div class="menu-grid" id="waiter-dish-grid">';
-    const filtered=wsq
+    const filtered=(wsq
       ? allDishes.filter(d=>d.name.toLowerCase().includes(wsq)||(d.desc||'').toLowerCase().includes(wsq))
-      : (C.waiterCat&&C.waiterCat!=='todos'?allDishes.filter(d=>d.cat===C.waiterCat):allDishes);
+      : (C.waiterCat&&C.waiterCat!=='todos'?allDishes.filter(d=>d.cat===C.waiterCat):allDishes)
+    ).sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
     if(filtered.length===0)menuH+=`<div style="grid-column:1/-1;text-align:center;padding:2rem;color:var(--muted);font-size:14px">Sin resultados para "${C.waiterSearch}"</div>`;
     filtered.forEach(d=>{
       const hasTypes=d.hasTypes&&availableTypes(d).length>0;const hasCustom=d.customizable&&(d.ingredients||[]).length>0;
@@ -1501,9 +1502,10 @@ window.waiterSearchInput=val=>{
   // Update grid
   const grid=document.getElementById('waiter-dish-grid');
   if(!grid)return;
-  const filtered=wsq
+  const filtered=(wsq
     ? allDishes.filter(d=>d.name.toLowerCase().includes(wsq)||(d.desc||'').toLowerCase().includes(wsq))
-    : (C.waiterCat?allDishes.filter(d=>d.cat===C.waiterCat):allDishes);
+    : (C.waiterCat?allDishes.filter(d=>d.cat===C.waiterCat):allDishes)
+  ).sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
   if(filtered.length===0){grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:2rem;color:var(--muted);font-size:14px">Sin resultados para "${val}"</div>`;return;}
   grid.innerHTML=filtered.map(d=>{
     const cat=cats.find(c=>c._key===d.cat);
@@ -1895,18 +1897,22 @@ function renderDishesTab(){
   const dishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k}));
   let listH=`<div class="cat-sections">`;
   cats.forEach(cat=>{
-    const catDishes=dishes.filter(d=>d.cat===cat._key);
+    const catDishes=dishes.filter(d=>d.cat===cat._key).sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
     if(!catOpen[cat._key] && catOpen[cat._key]===undefined) catOpen[cat._key]=true;
     const open=catOpen[cat._key]!==false;
     listH+=`<div class="cat-section"><div class="cat-section-header" onclick="toggleCatOpen('${cat._key}')"><div class="cat-section-title"><span style="font-size:16px">${cat.icon}</span><span>${cat.label}</span><span class="cat-count">${catDishes.length}</span></div><span class="cat-chevron${open?' open':''}">▼</span></div>`;
     if(open){
       listH+=`<div>`;
       if(catDishes.length===0)listH+=`<div style="padding:10px 14px;font-size:13px;color:var(--muted)">Sin platos en esta categoría</div>`;
-      catDishes.forEach(d=>{
+      catDishes.forEach((d,idx)=>{
         const fp=dishFinalPrice(d);const isP=cat.isPromo&&d.promoDiscount>0;
         const r=DB.ratings[d.name];const avg=r?r.total/r.count:null;
         const unavail=d.unavailable===true;
         listH+=`<div class="dish-row" style="${unavail?'background:#f3f4f6;opacity:0.7':''}">
+          <div style="display:flex;flex-direction:column;gap:2px;margin-right:2px">
+            <button onclick="dishMoveUp('${d._key}','${cat._key}')" ${idx===0?'disabled':''} style="width:22px;height:22px;border-radius:4px;border:0.5px solid var(--border);background:var(--bg);font-size:12px;cursor:pointer;line-height:1;opacity:${idx===0?.3:1}">↑</button>
+            <button onclick="dishMoveDown('${d._key}','${cat._key}')" ${idx===catDishes.length-1?'disabled':''} style="width:22px;height:22px;border-radius:4px;border:0.5px solid var(--border);background:var(--bg);font-size:12px;cursor:pointer;line-height:1;opacity:${idx===catDishes.length-1?.3:1}">↓</button>
+          </div>
           <div class="dish-emoji" style="background:var(--bg);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--muted)">${(cats.find(c=>c._key===d.cat)||{}).icon||'🍽'}</div>
           <div class="dish-info">
             <div style="display:flex;align-items:center;gap:6px">
@@ -4007,6 +4013,22 @@ window.saveEditDish=()=>{
   C.editingDish=null;render();
 };
 window.deleteDish=key=>{if(confirm('¿Eliminar este plato?'))remove(ref(db,`dishes/${key}`));};
+window.dishMoveUp=async(key,catId)=>{
+  const catDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>d.cat===catId).sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
+  const idx=catDishes.findIndex(d=>d._key===key);
+  if(idx<=0)return;
+  const a=catDishes[idx],b=catDishes[idx-1];
+  await update(ref(db,`dishes/${a._key}`),{sortOrder:idx-1});
+  await update(ref(db,`dishes/${b._key}`),{sortOrder:idx});
+};
+window.dishMoveDown=async(key,catId)=>{
+  const catDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>d.cat===catId).sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
+  const idx=catDishes.findIndex(d=>d._key===key);
+  if(idx>=catDishes.length-1)return;
+  const a=catDishes[idx],b=catDishes[idx+1];
+  await update(ref(db,`dishes/${a._key}`),{sortOrder:idx+1});
+  await update(ref(db,`dishes/${b._key}`),{sortOrder:idx});
+};
 window.addTable=()=>{const t=C.newTable;if(!t.label){alert('Ingresá un nombre');return;}push(ref(db,'tables'),{...t});C.newTable={label:'',capacity:''};render();};
 window.editTable=key=>{C.editingTable={...DB.tables[key],_key:key};render();};
 window.saveEditTable=()=>{const {_key,...data}=C.editingTable;set(ref(db,`tables/${_key}`),data);C.editingTable=null;render();};
@@ -5187,11 +5209,11 @@ function renderMenuWithCart(mc){
     const firstCat=cats.find(c=>!c.isPromo&&allCatIds.includes(c._key));
     if(firstCat)C.customerCat=firstCat._key;
   }
-  const filtered=dishes.filter(d=>d.cat===C.customerCat);
+  const filtered=dishes.filter(d=>d.cat===C.customerCat).sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
   const tabLabel=id=>{
     const cat=cats.find(c=>c._key===id);if(!cat)return id;
     const cnt=dishes.filter(d=>d.cat===id).length;
-    return cat.isPromo?`${cat.icon} ${cat.label}${cnt>0?` (${cnt})`:''}`:cat.icon+' '+cat.label;
+    return cat.isPromo?`${cat.icon} ${cat.label}`:cat.icon+' '+cat.label;
   };
   menuH+=`<div class="cat-tabs">`;
   allCatIds.forEach(c=>{
