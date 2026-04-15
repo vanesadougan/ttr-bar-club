@@ -3517,6 +3517,7 @@ window.marcarDeudor=async key=>{
     // El pedido pasa a status 'deudor' con nombre/apellido guardados en el mismo registro
     const saldoInicial=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
     await update(ref(db,`orders/${key}`),{status:'deudor',deudorNombre:nombre,deudorApellido:apellido,deudorRegistradoAt:Date.now(),saldoPendiente:saldoInicial});
+    if(DB.orders[key])DB.orders[key].saldoPendiente=saldoInicial;
     C.adminTab='deudores';render();
   };
 };
@@ -3571,7 +3572,6 @@ window.cobrarDeudorParcial=async(keys,_ignored)=>{
     if(esPagoTotal){
       for(const k of keys)await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now(),saldoPendiente:0});
     } else {
-      // Leer saldoPendiente actual de Firebase y restarle el monto
       let restante=monto;
       for(const k of keys){
         if(restante<=0)break;
@@ -3581,6 +3581,8 @@ window.cobrarDeudorParcial=async(keys,_ignored)=>{
         const abono=Math.min(saldoActual,restante);
         const nuevoSaldoK=Math.max(0,saldoActual-abono);
         await update(ref(db,`orders/${k}`),{saldoPendiente:nuevoSaldoK});
+        // Actualizar cache local inmediatamente
+        if(DB.orders[k])DB.orders[k].saldoPendiente=nuevoSaldoK;
         restante-=abono;
       }
     }
