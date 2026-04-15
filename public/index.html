@@ -3542,42 +3542,65 @@ function renderDeudoresTab(){
 
     Object.values(grupos).forEach(g=>{
       const keys=g.orders.map(o=>o._key);
-      const total=g.orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
-      const firstOrder=g.orders[0];
-      const table=DB.tables[firstOrder.tableId];
-      const fecha=firstOrder.createdAt?new Date(firstOrder.createdAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}):'—';
-      const tableLabel2=table?table.label:(firstOrder.tableId||'—');
-
-      // saldoPendiente siempre existe desde la creación del deudor
+      // Total original suma de items de todos los pedidos
+      const totalOriginal=g.orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
+      // Saldo pendiente total
       const saldoMostrar=g.orders.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
-      const tuvoParcial=saldoMostrar<total;
+      const pagadoParcial=Math.max(0,totalOriginal-saldoMostrar);
 
-      h+=`<div class="card" style="margin-bottom:.875rem;border-left:3px solid #dc2626">`;
-      // Header
-      h+=`<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">`;
-      h+=`<div><div style="font-size:16px;font-weight:700">${g.nombre}</div>`;
-      h+=`<div style="font-size:12px;color:var(--muted);margin-top:2px">${fecha} · ${tableLabel2}</div></div>`;
-      h+=`<div style="text-align:right"><div style="font-size:20px;font-weight:700;color:#dc2626">$${saldoMostrar.toLocaleString()}</div>${tuvoParcial?`<div style="font-size:11px;color:#059669;margin-top:1px">Pagó $${(total-saldoMostrar).toLocaleString()} de $${total.toLocaleString()}</div>`:''}</div>`;
+      h+=`<div class="card" style="margin-bottom:.875rem;border-left:3px solid #dc2626;padding:0;overflow:hidden">`;
+
+      // Header: nombre + total que debe
+      h+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:0.5px solid var(--border)">`;
+      h+=`<div style="font-size:17px;font-weight:700">👤 ${g.nombre}</div>`;
+      h+=`<div style="text-align:right">
+        <div style="font-size:20px;font-weight:700;color:#dc2626">$${saldoMostrar.toLocaleString()}</div>
+        ${pagadoParcial>0?`<div style="font-size:11px;color:#059669">Ya pagó $${pagadoParcial.toLocaleString()}</div>`:''}
+      </div>`;
       h+=`</div>`;
 
-      // Items de todos los pedidos agrupados
-      const seen={};
-      g.orders.forEach(o=>(o.items||[]).forEach(i=>{
-        const k=i.name+(i.selectedType?'|'+i.selectedType:'');
-        if(seen[k])seen[k].qty+=i.qty;
-        else seen[k]={...i};
-      }));
-      h+=`<div style="display:flex;flex-direction:column;gap:3px;margin-bottom:12px">`;
-      Object.values(seen).forEach(i=>{
-        h+=`<div style="font-size:13px;color:var(--muted)">${i.qty}× <strong style="color:var(--text)">${i.name}</strong>${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:''} <span style="color:var(--accent)">$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;
+      // Un bloque por pedido
+      g.orders.forEach((o,oi)=>{
+        const oItems=o.items||[];
+        const oTotalItems=oItems.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+        const oDesc=o.descuento||0;
+        const oPct=o.pct||0;
+        const oSaldo=o.saldoPendiente!=null?o.saldoPendiente:oTotalItems;
+        const oFecha=o.createdAt?new Date(o.createdAt).toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}):o.time||'—';
+        const oTable=DB.tables[o.tableId];
+        const oTableLabel=oTable?oTable.label:(o.tableId==='sinmesa'?'Sin Mesa':(o.tableId||'—'));
+
+        h+=`<div style="padding:10px 16px;${oi<g.orders.length-1?'border-bottom:0.5px solid #f3f4f6':''}">`;
+        // Fecha y mesa
+        h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">`;
+        h+=`<div style="font-size:11px;color:var(--muted);font-weight:500">${oFecha} · ${oTableLabel}</div>`;
+        h+=`<div style="font-size:13px;font-weight:600;color:var(--text)">$${oTotalItems.toLocaleString()}</div>`;
+        h+=`</div>`;
+        // Items
+        oItems.forEach(i=>{
+          h+=`<div style="font-size:12px;color:var(--muted);padding-left:4px">${i.qty}× <strong style="color:var(--text)">${i.name}</strong>${i.selectedType?` <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 4px;border-radius:3px">${i.selectedType}</span>`:''} <span style="color:var(--accent)">$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;
+        });
+        // Descuento si aplica
+        if(oDesc>0){
+          h+=`<div style="display:flex;justify-content:space-between;margin-top:4px;padding:4px 8px;background:#f0fdf4;border-radius:6px">`;
+          h+=`<span style="font-size:12px;color:#059669;font-weight:500">Descuento ${oPct}%</span>`;
+          h+=`<span style="font-size:12px;color:#059669;font-weight:600">-$${oDesc.toLocaleString()}</span>`;
+          h+=`</div>`;
+          h+=`<div style="display:flex;justify-content:space-between;margin-top:2px">`;
+          h+=`<span style="font-size:12px;color:var(--muted)">Subtotal con descuento</span>`;
+          h+=`<span style="font-size:13px;font-weight:600;color:#059669">$${oSaldo.toLocaleString()}</span>`;
+          h+=`</div>`;
+        }
+        h+=`</div>`;
       });
-      h+=`</div>`;
 
-      // Botón único de cobro
+      // Botón cobro
       const dIdx=window._deudorKeys.push(keys)-1;
       if(!window._deudorSaldos)window._deudorSaldos=[];
       window._deudorSaldos[dIdx]=saldoMostrar;
-      h+=`<button onclick="cobrarDeuda(window._deudorKeys[${dIdx}],window._deudorSaldos[${dIdx}])" style="width:100%;padding:10px;border-radius:8px;border:0.5px solid #d97706;background:#fffbeb;color:#92400e;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px">$ Pago Parcial/Total</button>`;
+      h+=`<div style="padding:10px 16px;border-top:0.5px solid var(--border);background:#fafafa">`;
+      h+=`<button onclick="cobrarDeuda(window._deudorKeys[${dIdx}],window._deudorSaldos[${dIdx}])" style="width:100%;padding:10px;border-radius:8px;border:0.5px solid #d97706;background:#fffbeb;color:#92400e;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">$ Pago Parcial/Total</button>`;
+      h+=`</div>`;
       h+=`</div>`;
     });
   }
@@ -4134,11 +4157,8 @@ window.submitManualOrder=async(modo='pending')=>{
       <div class="form-group" style="margin-bottom:12px;position:relative">
         <label>Nombre del deudor <span style="color:var(--danger)">*</span></label>
         <input id="mn-deudor-nombre" placeholder="Nombre" value="${nombreExistente}"
-          style="width:100%;padding:10px 12px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:16px;font-family:inherit;box-sizing:border-box"
-          oninput="(function(inp){const q=inp.value.toLowerCase();const dd=document.getElementById('mn-deudor-dd');const cl=JSON.parse(dd.dataset.cl||'[]');const f=q?cl.filter(n=>n.toLowerCase().includes(q)):cl;dd.innerHTML=f.map(n=>'<div onclick=\'document.getElementById(\'mn-deudor-nombre\').value=\''+n.replace(/\'/g,\'\\\'\')+\'\';document.getElementById(\'mn-deudor-dd\').style.display=\'none\'\' style=\'padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6\'>'+n+'</div>').join('');dd.style.display=f.length?'block':'none';}).call(this,this)">
-        <div id="mn-deudor-dd" data-cl='${JSON.stringify(clientesList)}' style="display:${nombreExistente?'none':'block'};position:absolute;left:0;right:0;top:100%;background:#fff;border:0.5px solid #e5e7eb;border-radius:8px;z-index:10;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)">
-          ${clientesList.map(n=>`<div onclick="document.getElementById('mn-deudor-nombre').value='${n.replace(/'/g,"\'")}';document.getElementById('mn-deudor-dd').style.display='none'" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6">${n}</div>`).join('')}
-        </div>
+          style="width:100%;padding:10px 12px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:16px;font-family:inherit;box-sizing:border-box">
+        <div id="mn-deudor-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:0.5px solid #e5e7eb;border-radius:8px;z-index:10;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
       </div>
       <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer;margin-bottom:4px">
         <input type="checkbox" id="mn-deudor-disc" style="width:16px;height:16px;accent-color:#dc2626" onchange="document.getElementById('mn-deudor-disc-detail').style.display=this.checked?'flex':'none'">
@@ -4152,15 +4172,36 @@ window.submitManualOrder=async(modo='pending')=>{
       </div>
       <div style="display:flex;gap:8px">
         <button id="mn-deudor-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Registrar deuda</button>
-        <button onclick="this.closest('[style*=fixed]').remove()" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #e5e7eb;background:transparent;font-size:14px;cursor:pointer;font-family:inherit;color:#6b7280">Cancelar</button>
+        <button id="mn-deudor-cancel" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #e5e7eb;background:transparent;font-size:14px;cursor:pointer;font-family:inherit;color:#6b7280">Cancelar</button>
       </div>
     </div>`;
     document.body.appendChild(overlay);
-    setTimeout(()=>{const el=document.getElementById('mn-deudor-nombre');if(el){if(!nombreExistente)el.focus();}},50);
-    document.getElementById('mn-deudor-ok').onclick=async()=>{
-      const nombre=(document.getElementById('mn-deudor-nombre')?.value||'').trim();
-      if(!nombre){document.getElementById('mn-deudor-nombre')?.focus();return;}
-      const conDesc=document.getElementById('mn-deudor-disc').checked;
+    // Autocomplete con DOM puro
+    const mnInp=overlay.querySelector('#mn-deudor-nombre');
+    const mnDd=overlay.querySelector('#mn-deudor-dd');
+    const mnShowDD=filtered=>{
+      mnDd.innerHTML='';
+      filtered.forEach(n=>{
+        const div=document.createElement('div');
+        div.textContent=n;
+        div.style.cssText='padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6';
+        div.onmouseover=()=>div.style.background='#f9fafb';
+        div.onmouseout=()=>div.style.background='';
+        div.onclick=()=>{mnInp.value=n;mnDd.style.display='none';};
+        mnDd.appendChild(div);
+      });
+      mnDd.style.display=filtered.length?'block':'none';
+    };
+    mnInp.addEventListener('input',()=>{const q=mnInp.value.toLowerCase();mnShowDD(q?clientesList.filter(n=>n.toLowerCase().includes(q)):clientesList);});
+    mnInp.addEventListener('focus',()=>mnShowDD(mnInp.value?clientesList.filter(n=>n.toLowerCase().includes(mnInp.value.toLowerCase())):clientesList));
+    document.addEventListener('mousedown',e=>{if(!overlay.contains(e.target))mnDd.style.display='none';});
+    overlay.querySelector('#mn-deudor-cancel').onclick=()=>document.body.removeChild(overlay);
+    overlay.addEventListener('click',e=>{if(e.target===overlay)document.body.removeChild(overlay);});
+    setTimeout(()=>{mnInp.focus();if(!nombreExistente)mnShowDD(clientesList);},50);
+    overlay.querySelector('#mn-deudor-ok').onclick=async()=>{
+      const nombre=(mnInp.value||'').trim();
+      if(!nombre){mnInp.focus();return;}
+      const conDesc=overlay.querySelector('#mn-deudor-disc').checked;
       const pct=conDesc?10:0;
       const descuento=conDesc?Math.round(total*0.1):0;
       const saldoPendiente=total-descuento;
@@ -4464,13 +4505,22 @@ window.adminGroupDeudor=async keys=>{
   const inp=overlay.querySelector('#deudor-nombre-g');
   const dd=overlay.querySelector('#deudor-dd-g');
   const showDD=filtered=>{
-    dd.innerHTML=filtered.map(n=>{const div=document.createElement('div');div.textContent=n;div.style.cssText='padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6';div.onmouseover=()=>div.style.background='#f9fafb';div.onmouseout=()=>div.style.background='';div.onclick=()=>{inp.value=n;dd.style.display='none';};return div.outerHTML;}).join('');
+    dd.innerHTML='';
+    filtered.forEach(n=>{
+      const div=document.createElement('div');
+      div.textContent=n;
+      div.style.cssText='padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6';
+      div.onmouseover=()=>div.style.background='#f9fafb';
+      div.onmouseout=()=>div.style.background='';
+      div.onclick=()=>{inp.value=n;dd.style.display='none';};
+      dd.appendChild(div);
+    });
     dd.style.display=filtered.length?'block':'none';
   };
   inp.addEventListener('input',()=>{const q=inp.value.toLowerCase();showDD(q?clientesList.filter(n=>n.toLowerCase().includes(q)):clientesList);});
-  inp.addEventListener('focus',()=>{if(!inp.value)showDD(clientesList);});
-  document.addEventListener('click',e=>{if(!overlay.contains(e.target))dd.style.display='none';},{once:false});
-  setTimeout(()=>{if(!existingName)inp.focus();},50);
+  inp.addEventListener('focus',()=>showDD(inp.value?clientesList.filter(n=>n.toLowerCase().includes(inp.value.toLowerCase())):clientesList));
+  document.addEventListener('mousedown',e=>{if(!overlay.contains(e.target))dd.style.display='none';});
+  setTimeout(()=>{inp.focus();if(!existingName)showDD(clientesList);},50);
   const cleanup=()=>document.body.removeChild(overlay);
   overlay.querySelector('#deudor-cancel-g').onclick=cleanup;
   overlay.addEventListener('click',e=>{if(e.target===overlay)cleanup();});
