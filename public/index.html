@@ -3476,14 +3476,11 @@ function renderDeudoresTab(){
       });
       h+=`</div>`;
 
-      // Botones cobrar
+      // Botón único de cobro
       const dIdx=window._deudorKeys.push(keys)-1;
       if(!window._deudorSaldos)window._deudorSaldos=[];
       window._deudorSaldos[dIdx]=saldoMostrar;
-      h+=`<div style="display:flex;gap:8px;margin-top:4px">`;
-      h+=`<button onclick="cobrarDeudorGrupo(window._deudorKeys[${dIdx}],window._deudorSaldos[${dIdx}])" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">✓ Cobrado total ($${saldoMostrar.toLocaleString()})</button>`;
-      h+=`<button onclick="cobrarDeudorParcial(window._deudorKeys[${dIdx}],window._deudorSaldos[${dIdx}])" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid #d97706;background:#fffbeb;color:#92400e;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">$ Pago parcial</button>`;
-      h+=`</div>`;
+      h+=`<button onclick="cobrarDeuda(window._deudorKeys[${dIdx}],window._deudorSaldos[${dIdx}])" style="width:100%;padding:10px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px">💳 Cobro de deuda</button>`;
       h+=`</div>`;
     });
   }
@@ -3522,100 +3519,70 @@ window.marcarDeudor=async key=>{
   };
 };
 
-window.cobrarDeudorParcial=async(keys,_ignored)=>{
+window.cobrarDeuda=async(keys,saldoMostrado)=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
-  // Leer saldo actual directo de Firebase — ignorar el valor pasado por parámetro
-  let totalDeuda=0;let nombreDeudor='';let tableLabel='';
-  for(const k of keys){
-    const snap=await get(ref(db,`orders/${k}`));
-    const o=snap.val();if(!o)continue;
-    totalDeuda+=o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-    if(!nombreDeudor)nombreDeudor=`${o.deudorNombre||''} ${o.deudorApellido||''}`.trim();
-    if(!tableLabel){const t=DB.tables[o.tableId];tableLabel=t?t.label:(o.tableId||'');}
-  }
+  // Leer datos del deudor
+  let nombreDeudor='';let tableLabel='';
+  for(const k of keys){const o=DB.orders[k];if(!o)continue;if(!nombreDeudor)nombreDeudor=`${o.deudorNombre||''} ${o.deudorApellido||''}`.trim();if(!tableLabel){const t=DB.tables[o.tableId];tableLabel=t?t.label:(o.tableId||'');}break;}
+  // Modal: cantidad a cobrar + medio de pago
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
   overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <div style="font-size:16px;font-weight:700;margin-bottom:4px">$ Pago parcial</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Saldo pendiente: <strong style="color:#dc2626">$${totalDeuda.toLocaleString()}</strong></div>
+    <div style="font-size:16px;font-weight:700;margin-bottom:4px">💳 Cobro de deuda</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">${nombreDeudor} · Deuda: <strong style="color:#dc2626">$${saldoMostrado.toLocaleString()}</strong></div>
     <div class="form-group" style="margin-bottom:8px">
-      <label>¿Cuánto paga ahora?</label>
-      <input id="parcial-monto" type="number" min="1" max="${totalDeuda}" placeholder="$0" autofocus
+      <label>Cantidad cobrada</label>
+      <input id="cobro-monto" type="number" min="1" max="${saldoMostrado}" placeholder="$0" value="${saldoMostrado}"
         style="width:100%;padding:10px 12px;border:1.5px solid var(--brand);border-radius:8px;font-size:20px;font-weight:700;font-family:inherit;text-align:center;box-sizing:border-box">
     </div>
-    <div id="parcial-resta" style="text-align:center;font-size:13px;color:var(--muted);margin-bottom:14px;min-height:20px"></div>
-    <div style="display:flex;gap:8px">
-      <button onclick="this.closest('[style*=fixed]').remove()" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
-      <button id="parcial-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Confirmar</button>
+    <div id="cobro-resta" style="text-align:center;font-size:13px;color:#059669;margin-bottom:12px;min-height:18px">Saldo saldado</div>
+    <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:8px">Medio de pago</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+      ${[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}].map(p=>`<button data-pm="${p.v}" style="padding:9px 14px;border-radius:8px;border:0.5px solid #e5e7eb;background:#fff;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">${p.l}</button>`).join('')}
     </div>
+    <button onclick="this.closest('[style*=fixed]').remove()" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
   </div>`;
   document.body.appendChild(overlay);
-  const inp=overlay.querySelector('#parcial-monto');
-  const resta=overlay.querySelector('#parcial-resta');
+  const inp=overlay.querySelector('#cobro-monto');
+  const restaEl=overlay.querySelector('#cobro-resta');
   inp.addEventListener('input',()=>{
-    const m=Number(inp.value)||0;
-    if(m>0&&m<totalDeuda)resta.textContent=`Quedarán $${(totalDeuda-m).toLocaleString()}`;
-    else if(m>=totalDeuda)resta.textContent='Saldo saldado';
-    else resta.textContent='';
+    const m=Math.min(Number(inp.value)||0,saldoMostrado);
+    if(m<=0){restaEl.textContent='';restaEl.style.color='var(--muted)';}
+    else if(m>=saldoMostrado){restaEl.textContent='Saldo saldado';restaEl.style.color='#059669';}
+    else{restaEl.textContent=`Quedan $${(saldoMostrado-m).toLocaleString()}`;restaEl.style.color='#d97706';}
   });
-  setTimeout(()=>inp&&inp.focus(),50);
-  overlay.querySelector('#parcial-ok').onclick=async()=>{
-    const monto=Number(inp.value);
-    if(!monto||monto<=0){inp.focus();return;}
-    if(monto>totalDeuda){alert('El monto no puede superar el saldo pendiente');inp.focus();return;}
-    const pm=await showPaymentChoiceModal(null);
-    if(!pm)return;
-    overlay.remove();
-    const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
-    const nuevoSaldo=Math.max(0,totalDeuda-monto);
-    const esPagoTotal=nuevoSaldo===0;
-    if(esPagoTotal){
-      for(const k of keys)await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now(),saldoPendiente:0});
-    } else {
-      let restante=monto;
+  inp.select();
+  overlay.querySelectorAll('[data-pm]').forEach(btn=>{
+    btn.addEventListener('mouseover',()=>btn.style.background='#f8f7f4');
+    btn.addEventListener('mouseout',()=>btn.style.background='#fff');
+    btn.addEventListener('click',async()=>{
+      const monto=Math.min(Number(inp.value)||0,saldoMostrado);
+      if(!monto||monto<=0){inp.focus();inp.style.borderColor='#dc2626';return;}
+      const pm=btn.dataset.pm;
+      overlay.remove();
+      const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+      const nuevoSaldo=Math.max(0,saldoMostrado-monto);
+      const esSaldado=nuevoSaldo===0;
+      // Actualizar Firebase y cache local
       for(const k of keys){
-        if(restante<=0)break;
-        const snap=await get(ref(db,`orders/${k}`));
-        const o=snap.val();if(!o)continue;
-        const saldoActual=o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-        const abono=Math.min(saldoActual,restante);
-        const nuevoSaldoK=Math.max(0,saldoActual-abono);
-        await update(ref(db,`orders/${k}`),{saldoPendiente:nuevoSaldoK});
-        // Actualizar cache local inmediatamente
-        if(DB.orders[k])DB.orders[k].saldoPendiente=nuevoSaldoK;
-        restante-=abono;
+        const o=DB.orders[k];if(!o)continue;
+        if(esSaldado){
+          await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now(),saldoPendiente:0});
+          if(DB.orders[k])DB.orders[k].saldoPendiente=0;
+        } else {
+          const saldoK=o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+          const nuevoSaldoK=Math.max(0,saldoK-(monto));
+          await update(ref(db,`orders/${k}`),{saldoPendiente:nuevoSaldoK});
+          if(DB.orders[k])DB.orders[k].saldoPendiente=nuevoSaldoK;
+        }
       }
-    }
-    const concepto=`${esPagoTotal?'Deudor':'Pago parcial'}: ${nombreDeudor} · ${tableLabel} (${pmL[pm]||pm})${!esPagoTotal?` — quedan $${nuevoSaldo.toLocaleString()}`:''}`;
-    const hoy=new Date().toISOString().slice(0,10);
-    await push(ref(db,'caja'),{tipo:'venta',concepto,monto,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,parcial:!esPagoTotal});
-    render();
-  };
-};
-window.cobrarDeudorGrupo=async(keys,_ignored)=>{
-  if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
-  // Leer saldoPendiente fresco de Firebase — no usar cache local
-  let montoACobrar=0;let nombreDeudor='';let tableLabel3='';
-  for(const k of keys){
-    const snap=await get(ref(db,`orders/${k}`));
-    const o=snap.val();if(!o)continue;
-    const saldo=o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-    montoACobrar+=saldo;
-    if(!nombreDeudor)nombreDeudor=`${o.deudorNombre||''} ${o.deudorApellido||''}`.trim();
-    if(!tableLabel3){const t=DB.tables[o.tableId];tableLabel3=t?t.label:(o.tableId||'');}
-  }
-  const pm=await showPaymentChoiceModal(null);
-  if(!pm)return;
-  const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
-  for(const k of keys){
-    await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now()});
-  }
-  if(montoACobrar>0&&getCajaAbierta()){
-    const concepto=`Deudor: ${nombreDeudor} · ${tableLabel3} (${pmL[pm]||pm})`;
-    const hoy=new Date().toISOString().slice(0,10);
-    await push(ref(db,'caja'),{tipo:'venta',concepto,monto:montoACobrar,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm});
-  }
-  render();
+      // Registrar en caja
+      const concepto=`${esSaldado?'Deudor':'Pago parcial'}: ${nombreDeudor} · ${tableLabel} (${pmL[pm]||pm})${!esSaldado?` — quedan $${nuevoSaldo.toLocaleString()}`:''}`;
+      const hoy=new Date().toISOString().slice(0,10);
+      await push(ref(db,'caja'),{tipo:'venta',concepto,monto,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,parcial:!esSaldado});
+      render();
+    });
+  });
 };
 
 window.cobrarDeudor=async key=>{
