@@ -2525,15 +2525,19 @@ function renderStockTab(){
         h+=itemRow(editKey,d.name,d.stock||0,'u',d.alertAt,d._isTypeRow?'__type__':d._src,'',d);
         if(isOpen){
           if(d._isTypeRow){
-            // Editor para fila de tipo — guarda directamente en el tipo
             const dish=DB.dishes[d._key];
             const typeIdx=(dish?.types||[]).findIndex(t=>(typeof t==='string'?t:t.name)===d._typeName);
             h+=`<div style="padding:10px 14px;background:#f8f7f4;">
             <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px">
-              <div class="form-group" style="margin:0;flex:1;min-width:120px">
+              <div class="form-group" style="margin:0;flex:2;min-width:140px">
+                <label style="font-size:11px">Nombre variante</label>
+                <input id="type-name-${d._key}-${typeIdx}" type="text" value="${d._typeName}"
+                  style="padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;width:100%">
+              </div>
+              <div class="form-group" style="margin:0;flex:1;min-width:80px">
                 <label style="font-size:11px">Stock</label>
                 <input type="number" min="0" placeholder="0" value="${d.stock!=null?d.stock:''}"
-                  oninput="updateTypeStockDirect('${d._key}',${typeIdx},this.value)"
+                  id="type-stock-${d._key}-${typeIdx}"
                   style="padding:5px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;width:100%">
               </div>
             </div>
@@ -2653,8 +2657,15 @@ window.typeRowRemoveBarcode=async(dishId,typeIdx,bcIdx)=>{
 };
 window.typeRowSave=async(dishId,typeIdx,storeKey)=>{
   const dish=DB.dishes[dishId];if(!dish||!dish.types||!dish.types[typeIdx])return;
-  // Stock already saved live via updateTypeStockDirect
-  // Just close the editor
+  const updatedTypes=[...dish.types];
+  const t=typeof updatedTypes[typeIdx]==='string'?{name:updatedTypes[typeIdx],priceMode:'base'}:{...updatedTypes[typeIdx]};
+  // Read name and stock from DOM inputs
+  const nameInp=document.getElementById(`type-name-${dishId}-${typeIdx}`);
+  const stockInp=document.getElementById(`type-stock-${dishId}-${typeIdx}`);
+  if(nameInp&&nameInp.value.trim())t.name=nameInp.value.trim();
+  if(stockInp)t.stock=stockInp.value===''?null:Math.max(0,Number(stockInp.value));
+  updatedTypes[typeIdx]=t;
+  await update(ref(db,`dishes/${dishId}`),{types:updatedTypes});
   if(C._stockEdit)C._stockEdit[storeKey]=false;
   if(C._stockEditData)delete C._stockEditData[storeKey];
   render();
