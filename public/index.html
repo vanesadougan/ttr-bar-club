@@ -5192,7 +5192,7 @@ function renderMenuWithCart(mc){
   const tabLabel=id=>{
     const cat=cats.find(c=>c._key===id);if(!cat)return id;
     const cnt=dishes.filter(d=>d.cat===id).length;
-    return cat.isPromo?`${cat.icon} ${cat.label}${cnt>0?` (${cnt})`:''}`:cat.icon+' '+cat.label;
+    return cat.isPromo?`${cat.icon} ${cat.label}`:cat.icon+' '+cat.label;
   };
   menuH+=`<div class="cat-tabs">`;
   allCatIds.forEach(c=>{
