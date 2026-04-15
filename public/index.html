@@ -3044,12 +3044,12 @@ window.addToRecipe=(ingId,type)=>{
   const f=type==='dish'?(C.editingDish||C.newDish):(C.editingCafItem||C.newCafItem);
   if(!f.recipe)f.recipe=[];
   if(!f.recipe.some(r=>r.ingredientId===ingId))f.recipe.push({ingredientId:ingId,qty:1});
-  render();
+  if(type==='dish')renderOrModal();else render();
 };
 window.removeFromRecipe=(idx,type)=>{
   const f=type==='dish'?(C.editingDish||C.newDish):(C.editingCafItem||C.newCafItem);
   if(f.recipe)f.recipe.splice(idx,1);
-  render();
+  if(type==='dish')renderOrModal();else render();
 };
 window.updateRecipeQty=(idx,val,type)=>{
   const f=type==='dish'?(C.editingDish||C.newDish):(C.editingCafItem||C.newCafItem);
@@ -3924,8 +3924,9 @@ function updateDiscountPreview(){
     el.innerHTML='<div style="font-size:12px;color:#92400e">Ingresá precio y descuento.</div>';
   }
 }
-window.toggleCustomizable=val=>{const f=C.editingDish||C.newDish;f.customizable=val;if(!f.ingredients)f.ingredients=[];render();};
-window.toggleHasTypes=val=>{const f=C.editingDish||C.newDish;f.hasTypes=val;if(!f.types)f.types=[];if(!val)f.types=[];render();};
+const renderOrModal=()=>{if(window._renderDishAdvBody&&document.getElementById('dish-adv-overlay'))window._renderDishAdvBody();else render();};
+window.toggleCustomizable=val=>{const f=C.editingDish||C.newDish;f.customizable=val;if(!f.ingredients)f.ingredients=[];renderOrModal();};
+window.toggleHasTypes=val=>{const f=C.editingDish||C.newDish;f.hasTypes=val;if(!f.types)f.types=[];if(!val)f.types=[];renderOrModal();};
 window.addType=()=>{
   const inp=document.getElementById('type-input');
   const val=(inp?inp.value:C.newTypeInput).trim();
@@ -3937,9 +3938,9 @@ window.addType=()=>{
     if(!exists) f.types.push({name:v,priceMode:'base',priceExtra:0,priceVal:0});
   });
   C.newTypeInput='';
-  render();
+  renderOrModal();
 };
-window.removeType=idx=>{const f=C.editingDish||C.newDish;f.types.splice(idx,1);render();};
+window.removeType=idx=>{const f=C.editingDish||C.newDish;f.types.splice(idx,1);renderOrModal();};
 window.updateTypePrice=(idx,field,val)=>{
   const f=C.editingDish||C.newDish;
   if(!f.types||!f.types[idx])return;
@@ -3947,7 +3948,7 @@ window.updateTypePrice=(idx,field,val)=>{
   if(typeof f.types[idx]==='string') f.types[idx]={name:f.types[idx],priceMode:'base',priceExtra:0,priceVal:0};
   if(field==='mode'){
     f.types[idx].priceMode=val;
-    render(); // re-render to show/hide price input
+    renderOrModal(); // re-render to show/hide price input
   } else {
     const n=Number(val)||0;
     f.types[idx].priceExtra=n;
@@ -3968,7 +3969,7 @@ window.updateTypeStockDirect=async(dishId,typeIdx,val)=>{
   updatedTypes[typeIdx]={...updatedTypes[typeIdx],stock:val===''||val==null?null:Math.max(0,Number(val))};
   await update(ref(db,`dishes/${dishId}`),{types:updatedTypes});
 };
-window.toggleTypeBc=idx=>{if(!C._typeBcOpen)C._typeBcOpen={};C._typeBcOpen[idx]=!C._typeBcOpen[idx];render();};
+window.toggleTypeBc=idx=>{if(!C._typeBcOpen)C._typeBcOpen={};C._typeBcOpen[idx]=!C._typeBcOpen[idx];renderOrModal();};
 window.addTypeBarcode=idx=>{
   const inp=document.getElementById('type-bc-'+idx);if(!inp||!inp.value.trim())return;
   const f=C.editingDish||C.newDish;if(!f.types||!f.types[idx])return;
@@ -3976,15 +3977,15 @@ window.addTypeBarcode=idx=>{
   if(!f.types[idx].barcodes)f.types[idx].barcodes=[];
   const bc=inp.value.trim();
   if(!f.types[idx].barcodes.includes(bc))f.types[idx].barcodes.push(bc);
-  inp.value='';render();
+  inp.value='';renderOrModal();
 };
 window.removeTypeBarcode=(typeIdx,bcIdx)=>{
   const f=C.editingDish||C.newDish;if(!f.types||!f.types[typeIdx])return;
   if(f.types[typeIdx].barcodes)f.types[typeIdx].barcodes.splice(bcIdx,1);
-  render();
+  renderOrModal();
 };
-window.addIngredient=()=>{const inp=document.getElementById('ing-input');const val=(inp?inp.value:C.newIngInput).trim();if(!val)return;const f=C.editingDish||C.newDish;if(!f.ingredients)f.ingredients=[];val.split(',').map(v=>v.trim()).filter(Boolean).forEach(v=>{if(!f.ingredients.includes(v))f.ingredients.push(v);});C.newIngInput='';render();};
-window.removeIngredient=idx=>{const f=C.editingDish||C.newDish;f.ingredients.splice(idx,1);render();};
+window.addIngredient=()=>{const inp=document.getElementById('ing-input');const val=(inp?inp.value:C.newIngInput).trim();if(!val)return;const f=C.editingDish||C.newDish;if(!f.ingredients)f.ingredients=[];val.split(',').map(v=>v.trim()).filter(Boolean).forEach(v=>{if(!f.ingredients.includes(v))f.ingredients.push(v);});C.newIngInput='';renderOrModal();};
+window.removeIngredient=idx=>{const f=C.editingDish||C.newDish;f.ingredients.splice(idx,1);renderOrModal();};
 window.addDish=()=>{
   const d=C.newDish;
   // Leer stock del DOM por si no hubo render
