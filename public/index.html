@@ -2314,25 +2314,18 @@ function renderStockTab(){
   const directStockDishes=[];
   Object.entries(DB.dishes).filter(([,d])=>{
     if(d.recipe&&d.recipe.length>0)return false;
-    if(d.hasTypes&&(d.types||[]).length>0)return true;
-    const typesWithStock=(d.types||[]).filter(t=>typeof t==='object'&&t.stock!=null);
-    return d.stock!=null||directStockCats.has(d.cat)||typesWithStock.length>0;
+    return directStockCats.has(d.cat);
   }).forEach(([k,d])=>{
-    // Si tiene tipos, mostrar solo variantes (no el padre)
-    const allTypes=(d.types||[]).filter(t=>typeof t==='object'?t.name:t);
+    const allTypes=(d.types||[]).filter(t=>t);
     if(d.hasTypes&&allTypes.length>0){
       allTypes.forEach((t,typeIdx)=>{
         const tObj=typeof t==='object'?t:{name:t,priceMode:'base'};
         directStockDishes.push({
-          ...d, _key:k, _src:'dishes',
-          _isTypeRow:true, _typeName:tObj.name,
-          _typeIdx:typeIdx,
+          ...d,_key:k,_src:'dishes',
+          _isTypeRow:true,_typeName:tObj.name,_typeIdx:typeIdx,
           name:`${d.name} — ${tObj.name}`,
-          stock:tObj.stock??null,
-          alertAt:tObj.alertAt??null,
-          barcodes:tObj.barcodes||[],
-          barcode:tObj.barcode||null,
-          _typeObj:tObj,
+          stock:tObj.stock??null,alertAt:tObj.alertAt??null,
+          barcodes:tObj.barcodes||[],barcode:tObj.barcode||null,_typeObj:tObj,
         });
       });
     } else {
