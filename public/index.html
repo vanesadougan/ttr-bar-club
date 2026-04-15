@@ -3371,7 +3371,7 @@ function renderOrdersTab(){
       const isBilled=pgOrders.every(o=>o.status==='billed');
 
       if(personList.length>1||pg.personName){
-        const addBtn=pg.personName?`<button onclick="addOrderToIndividual('${tableKey.split('|')[0]}','${(pg.personName||'').replace(/'/g,"\\'")}') " title="Agregar pedido a ${pg.personName}" style="margin-left:auto;width:22px;height:22px;border-radius:50%;border:none;background:#3b82f6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>`:'';
+        const addBtn=pg.personName?`<button onclick="event.stopPropagation();addOrderToIndividual('${tg.tableId||''}','${(pg.personName||'').replace(/'/g,"\\'")}') " title="Agregar pedido a ${pg.personName}" style="margin-left:auto;width:22px;height:22px;border-radius:50%;border:none;background:#3b82f6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>`:'';
         h+=`<div style="padding:6px 14px;background:#f0f4ff;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:600;color:#1e40af;display:flex;align-items:center">👤 ${pg.personName||'General'}${addBtn}</div>`;
       }
 
@@ -4575,24 +4575,18 @@ function showDiscountModal(totalBase){
   return new Promise(resolve=>{
     const overlay=document.createElement('div');
     overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    const desc10=Math.round(totalBase*0.1);
     overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:320px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
       <div style="font-size:16px;font-weight:600;margin-bottom:16px">¿Aplicar descuento?</div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;padding:10px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer" onclick="(function(){const cb=document.getElementById('disc-check');cb.checked=!cb.checked;document.getElementById('disc-detail').style.display=cb.checked?'block':'none';}).call(this)">
-        <input type="checkbox" id="disc-check" style="width:18px;height:18px;cursor:pointer;accent-color:var(--brand)">
-        <span style="font-size:14px;font-weight:500">Aplicar 10% de descuento</span>
-      </div>
-      <div id="disc-detail" style="display:none;background:#f8f7f4;border-radius:10px;padding:12px 14px;margin-bottom:16px">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
-          <span style="font-size:13px;color:#6b7280;flex:1">Descuento %</span>
-          <input id="disc-pct" type="number" min="0" max="100" value="10"
-            style="width:70px;padding:5px 8px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:16px;font-weight:600;font-family:inherit;text-align:center"
-            oninput="(function(){const pct=Math.min(100,Math.max(0,Number(this.value)||0));const desc=Math.round(${totalBase}*pct/100);document.getElementById('disc-amt').textContent=pct>0?'-$'+desc.toLocaleString():'';document.getElementById('disc-final').textContent='$'+(${totalBase}-desc).toLocaleString();document.getElementById('disc-final').style.color=pct>0?'#059669':'#111';}).call(this)">
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div><div style="font-size:11px;color:#9ca3af">Total original</div><div style="font-size:14px;color:#6b7280">$${totalBase.toLocaleString()}</div></div>
-          <div id="disc-amt" style="font-size:13px;color:#dc2626;font-weight:600">-$${Math.round(totalBase*0.1).toLocaleString()}</div>
-          <div><div style="font-size:11px;color:#9ca3af;text-align:right">Total a cobrar</div><div id="disc-final" style="font-size:20px;font-weight:700;color:#059669">$${(totalBase-Math.round(totalBase*0.1)).toLocaleString()}</div></div>
-        </div>
+      <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer;margin-bottom:4px">
+        <input type="checkbox" id="disc-check" style="width:18px;height:18px;cursor:pointer;accent-color:var(--brand)" onchange="document.getElementById('disc-detail').style.display=this.checked?'flex':'none'">
+        <span style="font-size:14px;font-weight:600;flex:1">Aplica 10%</span>
+        <span style="font-size:13px;color:#059669;font-weight:600">-$${desc10.toLocaleString()}</span>
+      </label>
+      <div id="disc-detail" style="display:none;justify-content:space-between;align-items:center;padding:10px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;margin-bottom:16px;border-top:0.5px solid #bbf7d0">
+        <div><div style="font-size:11px;color:#9ca3af">Total original</div><div style="font-size:14px;color:#6b7280;text-decoration:line-through">$${totalBase.toLocaleString()}</div></div>
+        <div style="font-size:13px;color:#dc2626;font-weight:600">-10%</div>
+        <div><div style="font-size:11px;color:#9ca3af;text-align:right">Total a cobrar</div><div style="font-size:20px;font-weight:700;color:#059669">$${(totalBase-desc10).toLocaleString()}</div></div>
       </div>
       <div style="display:flex;gap:8px">
         <button id="disc-cancel" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #e5e7eb;background:transparent;font-size:14px;cursor:pointer;font-family:inherit;color:#6b7280">Sin descuento</button>
@@ -4602,8 +4596,8 @@ function showDiscountModal(totalBase){
     document.body.appendChild(overlay);
     overlay.querySelector('#disc-ok').onclick=()=>{
       const checked=overlay.querySelector('#disc-check').checked;
-      const pct=checked?Math.min(100,Math.max(0,Number(overlay.querySelector('#disc-pct').value)||0)):0;
-      const descuento=Math.round(totalBase*pct/100);
+      const pct=checked?10:0;
+      const descuento=checked?desc10:0;
       document.body.removeChild(overlay);resolve({descuento,pct});
     };
     overlay.querySelector('#disc-cancel').onclick=()=>{document.body.removeChild(overlay);resolve({descuento:0,pct:0});};
@@ -4616,26 +4610,20 @@ function showPaymentChoiceModal(orderKey, totalBase){
     overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
     const pms=[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}];
     const showTotal=totalBase!=null&&totalBase>0;
+    const _desc10=showTotal?Math.round(totalBase*0.1):0;
     overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
       <div style="font-size:16px;font-weight:600;margin-bottom:4px">Medio de pago</div>
       <div style="font-size:13px;color:#6b7280;margin-bottom:12px">Seleccioná el método para registrar el cobro</div>
       ${showTotal?`<div style="margin-bottom:14px">
-        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer" onclick="(function(){const cb=document.getElementById('pm-disc-check');cb.checked=!cb.checked;document.getElementById('pm-disc-detail').style.display=cb.checked?'block':'none';}).call(this)">
-          <input type="checkbox" id="pm-disc-check" style="width:16px;height:16px;cursor:pointer;accent-color:var(--brand)">
-          <span style="font-size:13px;font-weight:500">Aplicar descuento</span>
-        </div>
-        <div id="pm-disc-detail" style="display:none;background:#f8f7f4;border-radius:0 0 10px 10px;padding:10px 14px;border-top:0.5px solid var(--border)">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-            <span style="font-size:13px;color:#6b7280;flex:1">Descuento %</span>
-            <input id="desc-pct" type="number" min="0" max="100" value="10"
-              style="width:70px;padding:5px 8px;border:1.5px solid #e5e7eb;border-radius:7px;font-size:16px;font-weight:600;font-family:inherit;text-align:center"
-              oninput="(function(){const pct=Math.min(100,Math.max(0,Number(this.value)||0));const desc=Math.round(${totalBase}*pct/100);const final=${totalBase}-desc;document.getElementById('pm-desc-amt').textContent=pct>0?'-$'+desc.toLocaleString():'';document.getElementById('pm-total-final').textContent='$'+final.toLocaleString();document.getElementById('pm-total-final').style.color=pct>0?'#059669':'#111';}).call(this)">
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <div><div style="font-size:11px;color:#9ca3af">Total original</div><div style="font-size:14px;color:#6b7280">$${totalBase.toLocaleString()}</div></div>
-            <div id="pm-desc-amt" style="font-size:13px;color:#dc2626;font-weight:600"></div>
-            <div><div style="font-size:11px;color:#9ca3af;text-align:right">Total a cobrar</div><div id="pm-total-final" style="font-size:20px;font-weight:700;color:#111">$${totalBase.toLocaleString()}</div></div>
-          </div>
+        <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer">
+          <input type="checkbox" id="pm-disc-check" style="width:18px;height:18px;cursor:pointer;accent-color:var(--brand)" onchange="document.getElementById('pm-disc-detail').style.display=this.checked?'flex':'none'">
+          <span style="font-size:14px;font-weight:600;flex:1">Aplica 10%</span>
+          <span style="font-size:13px;color:#059669;font-weight:600">-$${_desc10.toLocaleString()}</span>
+        </label>
+        <div id="pm-disc-detail" style="display:none;justify-content:space-between;align-items:center;padding:10px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;border-top:0.5px solid #bbf7d0">
+          <div><div style="font-size:11px;color:#9ca3af">Total original</div><div style="font-size:14px;color:#6b7280;text-decoration:line-through">$${totalBase.toLocaleString()}</div></div>
+          <div style="font-size:13px;color:#dc2626;font-weight:600">-10%</div>
+          <div><div style="font-size:11px;color:#9ca3af;text-align:right">Total a cobrar</div><div style="font-size:20px;font-weight:700;color:#059669">$${(totalBase-_desc10).toLocaleString()}</div></div>
         </div>
       </div>`:''}
       <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
@@ -4649,8 +4637,8 @@ function showPaymentChoiceModal(orderKey, totalBase){
       btn.addEventListener('mouseout',()=>btn.style.background='#fff');
       btn.addEventListener('click',()=>{
         const checked=showTotal&&(overlay.querySelector('#pm-disc-check')?.checked||false);
-        const pct=checked?Math.min(100,Math.max(0,Number(overlay.querySelector('#desc-pct')?.value)||0)):0;
-        const descuento=showTotal?Math.round(totalBase*pct/100):0;
+        const pct=checked?10:0;
+        const descuento=checked?Math.round(totalBase*0.1):0;
         document.body.removeChild(overlay);
         resolve(showTotal?{pm:btn.dataset.pm,descuento,pct,totalFinal:totalBase-descuento}:btn.dataset.pm);
       });
