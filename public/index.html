@@ -3480,7 +3480,7 @@ function renderDeudoresTab(){
       const dIdx=window._deudorKeys.push(keys)-1;
       if(!window._deudorSaldos)window._deudorSaldos=[];
       window._deudorSaldos[dIdx]=saldoMostrar;
-      h+=`<button onclick="cobrarDeuda(window._deudorKeys[${dIdx}],window._deudorSaldos[${dIdx}])" style="width:100%;padding:10px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px">💳 Cobro de deuda</button>`;
+      h+=`<button onclick="cobrarDeuda(window._deudorKeys[${dIdx}],window._deudorSaldos[${dIdx}])" style="width:100%;padding:10px;border-radius:8px;border:0.5px solid #d97706;background:#fffbeb;color:#92400e;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px">$ Pago Parcial/Total</button>`;
       h+=`</div>`;
     });
   }
