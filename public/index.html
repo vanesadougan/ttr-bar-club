@@ -3121,7 +3121,7 @@ function renderOrdersTab(){
     const moTotal=(mo.items||[]).reduce((s,i)=>s+i.price*i.qty,0);
     const clientesList=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
     const hasItems=(mo.items||[]).length>0;
-    const canConfirm=!!mo.tableId&&hasItems&&!(mo.orderMode==='individual'&&!mo.personName?.trim());
+    const canConfirm=hasItems&&!(mo.orderMode==='individual'&&!mo.personName?.trim());
 
     manualH=`<div class="card" style="border:1.5px solid var(--brand);margin-bottom:1.25rem">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
@@ -4016,8 +4016,15 @@ window.updateManualSearch=()=>{
     ...Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k,_src:'dishes'})),
     ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria',emoji:v.emoji||'☕'})),
     ...Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k,_src:'kiosko',emoji:'🏪'}))
-  ].filter(d=>!d.unavailable&&d.name.toLowerCase().includes(search));
-  // Deduplicar por nombre+src (por si hay entradas duplicadas en Firebase)
+  ].filter(d=>{
+    if(d.unavailable)return false;
+    if(d.name.toLowerCase().includes(search))return true;
+    // Buscar por código de barras
+    if(d.barcodes&&d.barcodes.some(b=>String(b).includes(search)))return true;
+    if(d.types&&d.types.some(t=>t.barcodes&&t.barcodes.some(b=>String(b).includes(search))))return true;
+    return false;
+  });
+  // Deduplicar por nombre+src
   const seen=new Set();
   const unique=allItems.filter(d=>{const k=d.name+'|'+d._src;if(seen.has(k))return false;seen.add(k);return true;});
   list.style.display='block';
@@ -4025,16 +4032,17 @@ window.updateManualSearch=()=>{
     list.innerHTML=`<div style="padding:10px 14px;font-size:13px;color:var(--muted)">Sin resultados para "${val}"</div>`;
     return;
   }
+  const srcLabel={cafeteria:'☕ Cafetería',kiosko:'🏪 Kiosko',dishes:'🍽 Restaurant'};
   list.innerHTML=unique.map(d=>`<div onclick="selectManualItem('${d._key}','${d._src}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
     <span style="font-size:18px">${d.emoji||'🍽️'}</span>
-    <div style="flex:1"><div style="font-size:14px;font-weight:500">${d.name}</div><div style="font-size:12px;color:var(--muted)">${d._src==='cafeteria'?'☕ Cafetería':'🍽 Restaurant'}${d.hasTypes&&(d.types||[]).length>0?' · variantes':''}${d.customizable&&(d.ingredients||[]).length>0?' · personalizable':''}</div></div>
+    <div style="flex:1"><div style="font-size:14px;font-weight:500">${d.name}</div><div style="font-size:12px;color:var(--muted)">${srcLabel[d._src]||''}${d.hasTypes&&(d.types||[]).length>0?' · variantes':''}${d.customizable&&(d.ingredients||[]).length>0?' · personalizable':''}</div></div>
     <span style="font-size:14px;font-weight:600;color:var(--accent)">$${Number(d.price).toLocaleString()}</span>
   </div>`).join('');
 };
 
 // Al seleccionar un item: si tiene variantes o ingredientes, abrir picker; si no, agregar directo
 window.selectManualItem=(key,src)=>{
-  const d=src==='cafeteria'?DB.cafeteriaItems[key]:DB.dishes[key];
+  const d=src==='cafeteria'?DB.cafeteriaItems[key]:src==='kiosko'?DB.kioskItems[key]:DB.dishes[key];
   if(!d)return;
   const needsPicker=(d.hasTypes&&(d.types||[]).length>0)||(d.customizable&&(d.ingredients||[]).length>0);
   if(needsPicker){
@@ -4063,13 +4071,12 @@ window.cancelManualPicker=()=>{C.manualOrderPicker=null;render();};
 
 window.addItemToManualOrder=(key,src,selectedType,excluded)=>{
   if(!C.manualOrder)return;
-  const d=src==='cafeteria'?DB.cafeteriaItems[key]:DB.dishes[key];
+  const d=src==='cafeteria'?DB.cafeteriaItems[key]:src==='kiosko'?DB.kioskItems[key]:DB.dishes[key];
   if(!d)return;
-  // Si mismo key Y mismo tipo → sumar; si no → nuevo item
   const excArr=excluded?[...excluded]:[];
   const existing=C.manualOrder.items.find(i=>i._key===key&&(i.selectedType||null)===(selectedType||null)&&JSON.stringify(i.excluded||[])==JSON.stringify(excArr));
   if(existing){existing.qty+=1;}
-  else{C.manualOrder.items.push({_key:key,name:d.name,price:Number(d.price),qty:1,isCafeteria:src==='cafeteria',emoji:d.emoji||null,selectedType:selectedType||null,excluded:excArr});}
+  else{C.manualOrder.items.push({_key:key,name:d.name,price:Number(d.price),qty:1,isCafeteria:src==='cafeteria',isKiosko:src==='kiosko',emoji:d.emoji||null,selectedType:selectedType||null,excluded:excArr});}
   C.manualOrderSearch='';render();
 };
 window.manualOrderQty=(idx,delta)=>{
@@ -4086,7 +4093,6 @@ window.submitManualOrder=async(modo='pending')=>{
   if(!mo)return;
   const nombreInp=document.getElementById('manual-nombre');
   if(nombreInp)mo.personName=nombreInp.value;
-  if(!mo.tableId){alert('Elegí una mesa');return;}
   if(!mo.items.length){alert('Agregá al menos un item');return;}
   if(mo.orderMode==='individual'&&!mo.personName?.trim()){
     if(nombreInp){nombreInp.focus();nombreInp.style.borderColor='var(--danger)';}
@@ -4094,10 +4100,15 @@ window.submitManualOrder=async(modo='pending')=>{
   }
   const total=mo.items.reduce((s,i)=>s+i.price*i.qty,0);
   const items=mo.items.map(i=>({name:i.name,qty:i.qty,price:i.price,finalPrice:i.price,excluded:i.excluded||[],selectedType:i.selectedType||null,isCafeteria:i.isCafeteria||false,isKiosko:i.isKiosko||false,emoji:i.emoji||null,manualEntry:true}));
-  const orderBase={tableId:mo.tableId,items,billRequested:false,orderMode:mo.orderMode,personName:mo.orderMode==='individual'&&mo.personName?mo.personName.trim():null,createdAt:Date.now(),manualEntry:true,time:nowStr()};
+  const tableId=mo.tableId||'sinmesa';
+  const table=DB.tables[tableId];
+  const tableLabel=table?table.label:'Sin Mesa';
+  const personName=mo.orderMode==='individual'&&mo.personName?mo.personName.trim():null;
+  const orderBase={tableId,items,billRequested:false,orderMode:mo.orderMode,personName,createdAt:Date.now(),manualEntry:true,time:nowStr()};
 
   if(modo==='pending'){
     await push(ref(db,'orders'),{...orderBase,status:'pending'});
+    C.manualOrder=null;C.manualOrderSearch='';render();
   } else if(modo==='cobrado'){
     if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
     const res=await showPaymentChoiceModal(null,total);
@@ -4106,17 +4117,64 @@ window.submitManualOrder=async(modo='pending')=>{
     const totalFinal=total-descuento;
     await push(ref(db,'orders'),{...orderBase,status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});
     const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
-    const table=DB.tables[mo.tableId];
-    const concepto=`${table?table.label:mo.tableId}${orderBase.personName?' · '+orderBase.personName:''} (${pmL[pm]||pm})${pct>0?` -${pct}%`:''}`;
+    const concepto=`${tableLabel}${personName?' · '+personName:''} (${pmL[pm]||pm})${pct>0?` -${pct}%`:''}`;
     const hoy=new Date().toISOString().slice(0,10);
     await push(ref(db,'caja'),{tipo:'venta',concepto,monto:totalFinal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,descuento,pct});
+    C.manualOrder=null;C.manualOrderSearch='';render();
   } else if(modo==='deudor'){
-    if(!mo.personName?.trim()){alert('Para registrar como deudor es obligatorio el nombre');return;}
-    const nombre=mo.personName.trim().split(' ')[0];
-    const apellido=mo.personName.trim().split(' ').slice(1).join(' ')||'';
-    await push(ref(db,'orders'),{...orderBase,status:'deudor',deudorNombre:nombre,deudorApellido:apellido,deudorRegistradoAt:Date.now(),saldoPendiente:total,orderMode:'individual'});
+    // Mostrar modal para confirmar nombre y descuento
+    const nombreExistente=personName||'';
+    const clientesList=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
+    const desc10=Math.round(total*0.1);
+    const overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="font-size:16px;font-weight:600;margin-bottom:4px">💳 Registrar deudor</div>
+      <div style="font-size:13px;color:#6b7280;margin-bottom:14px">Total: <strong style="color:#dc2626">$${total.toLocaleString()}</strong></div>
+      <div class="form-group" style="margin-bottom:12px;position:relative">
+        <label>Nombre del deudor <span style="color:var(--danger)">*</span></label>
+        <input id="mn-deudor-nombre" placeholder="Nombre" value="${nombreExistente}"
+          style="width:100%;padding:10px 12px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:16px;font-family:inherit;box-sizing:border-box"
+          oninput="(function(inp){const q=inp.value.toLowerCase();const dd=document.getElementById('mn-deudor-dd');const cl=JSON.parse(dd.dataset.cl||'[]');const f=q?cl.filter(n=>n.toLowerCase().includes(q)):cl;dd.innerHTML=f.map(n=>'<div onclick=\'document.getElementById(\'mn-deudor-nombre\').value=\''+n.replace(/\'/g,\'\\\'\')+\'\';document.getElementById(\'mn-deudor-dd\').style.display=\'none\'\' style=\'padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6\'>'+n+'</div>').join('');dd.style.display=f.length?'block':'none';}).call(this,this)">
+        <div id="mn-deudor-dd" data-cl='${JSON.stringify(clientesList)}' style="display:${nombreExistente?'none':'block'};position:absolute;left:0;right:0;top:100%;background:#fff;border:0.5px solid #e5e7eb;border-radius:8px;z-index:10;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)">
+          ${clientesList.map(n=>`<div onclick="document.getElementById('mn-deudor-nombre').value='${n.replace(/'/g,"\'")}';document.getElementById('mn-deudor-dd').style.display='none'" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6">${n}</div>`).join('')}
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer;margin-bottom:4px">
+        <input type="checkbox" id="mn-deudor-disc" style="width:16px;height:16px;accent-color:#dc2626" onchange="document.getElementById('mn-deudor-disc-detail').style.display=this.checked?'flex':'none'">
+        <span style="font-size:13px;font-weight:600;flex:1">Aplica 10%</span>
+        <span style="font-size:13px;color:#059669;font-weight:600">-$${desc10.toLocaleString()}</span>
+      </label>
+      <div id="mn-deudor-disc-detail" style="display:none;justify-content:space-between;align-items:center;padding:8px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;margin-bottom:12px;border-top:0.5px solid #bbf7d0">
+        <div><div style="font-size:11px;color:#9ca3af">Total original</div><div style="font-size:13px;color:#6b7280;text-decoration:line-through">$${total.toLocaleString()}</div></div>
+        <div style="font-size:12px;color:#dc2626;font-weight:600">-10%</div>
+        <div><div style="font-size:11px;color:#9ca3af;text-align:right">Deuda a registrar</div><div style="font-size:18px;font-weight:700;color:#059669">$${(total-desc10).toLocaleString()}</div></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button id="mn-deudor-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Registrar deuda</button>
+        <button onclick="this.closest('[style*=fixed]').remove()" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #e5e7eb;background:transparent;font-size:14px;cursor:pointer;font-family:inherit;color:#6b7280">Cancelar</button>
+      </div>
+    </div>`;
+    document.body.appendChild(overlay);
+    setTimeout(()=>{const el=document.getElementById('mn-deudor-nombre');if(el){if(!nombreExistente)el.focus();}},50);
+    document.getElementById('mn-deudor-ok').onclick=async()=>{
+      const nombre=(document.getElementById('mn-deudor-nombre')?.value||'').trim();
+      if(!nombre){document.getElementById('mn-deudor-nombre')?.focus();return;}
+      const conDesc=document.getElementById('mn-deudor-disc').checked;
+      const pct=conDesc?10:0;
+      const descuento=conDesc?Math.round(total*0.1):0;
+      const saldoPendiente=total-descuento;
+      document.body.removeChild(overlay);
+      await push(ref(db,'orders'),{
+        ...orderBase,status:'deudor',
+        deudorNombre:nombre,deudorApellido:'',
+        personName:nombre,orderMode:'individual',
+        deudorRegistradoAt:Date.now(),saldoPendiente,descuento,pct
+      });
+      C.manualOrder=null;C.manualOrderSearch='';
+      C.adminTab='deudores';render();
+    };
   }
-  C.manualOrder=null;C.manualOrderSearch='';render();
 };
 
 // ── KIOSKO ORDER ──────────────────────────────────
@@ -4367,63 +4425,71 @@ window.adminGroupCobrado=async keys=>{
   render();
 };
 window.adminGroupDeudor=async keys=>{
-  // Calcular total y obtener nombre existente del pedido
-  let totalBase=0;let existingName='';let tableId3='';
+  let totalBase=0;let existingName='';
   for(const k of keys){
     const o=DB.orders[k];if(!o)continue;
     totalBase+=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
     if(!existingName&&o.personName)existingName=o.personName;
-    if(!tableId3)tableId3=o.tableId||'';
   }
   const clientesList=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
+  const desc10=Math.round(totalBase*0.1);
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
   overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="font-size:16px;font-weight:600;margin-bottom:4px">💳 Registrar deudor</div>
-    <div style="font-size:13px;color:#6b7280;margin-bottom:16px">Total: <strong style="color:#dc2626">$${totalBase.toLocaleString()}</strong></div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:14px">Total: <strong style="color:#dc2626">$${totalBase.toLocaleString()}</strong></div>
     <div class="form-group" style="margin-bottom:12px;position:relative">
-      <label>Nombre del deudor</label>
+      <label>Nombre del deudor <span style="color:var(--danger)">*</span></label>
       <input id="deudor-nombre-g" placeholder="Nombre" value="${existingName}"
-        style="width:100%;padding:8px 10px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:16px;font-family:inherit;box-sizing:border-box"
-        oninput="(function(v){const dd=document.getElementById('deudor-dd-g');const q=v.toLowerCase();const filtered=${JSON.stringify(clientesList)}.filter(n=>n.toLowerCase().includes(q));dd.innerHTML=filtered.map(n=>'<div onclick=\\'document.getElementById(\\'deudor-nombre-g\\').value=n;document.getElementById(\\'deudor-dd-g\\').style.display=\\'none\\'\\' style=\\'padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6\\'>'+n+'</div>').join('');dd.style.display=filtered.length&&q?'block':'none';}).call(this,this.value)">
+        style="width:100%;padding:10px 12px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:16px;font-family:inherit;box-sizing:border-box">
       <div id="deudor-dd-g" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:0.5px solid #e5e7eb;border-radius:8px;z-index:10;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
     </div>
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer;margin-bottom:4px">
       <input type="checkbox" id="deudor-disc-check" style="width:16px;height:16px;accent-color:#dc2626" onchange="document.getElementById('deudor-disc-detail').style.display=this.checked?'flex':'none'">
       <span style="font-size:13px;font-weight:600;flex:1">Aplica 10%</span>
-      <span style="font-size:13px;color:#059669;font-weight:600">-$${Math.round(totalBase*0.1).toLocaleString()}</span>
+      <span style="font-size:13px;color:#059669;font-weight:600">-$${desc10.toLocaleString()}</span>
     </label>
     <div id="deudor-disc-detail" style="display:none;justify-content:space-between;align-items:center;padding:8px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;margin-bottom:12px;border-top:0.5px solid #bbf7d0">
       <div><div style="font-size:11px;color:#9ca3af">Total original</div><div style="font-size:13px;color:#6b7280;text-decoration:line-through">$${totalBase.toLocaleString()}</div></div>
       <div style="font-size:12px;color:#dc2626;font-weight:600">-10%</div>
-      <div><div style="font-size:11px;color:#9ca3af;text-align:right">Deuda a registrar</div><div style="font-size:18px;font-weight:700;color:#059669">$${(totalBase-Math.round(totalBase*0.1)).toLocaleString()}</div></div>
+      <div><div style="font-size:11px;color:#9ca3af;text-align:right">Deuda a registrar</div><div style="font-size:18px;font-weight:700;color:#059669">$${(totalBase-desc10).toLocaleString()}</div></div>
     </div>
-    <div style="display:flex;gap:8px;margin-top:4px">
-      <button id="deudor-ok-g" class="btn btn-primary" style="flex:1">Registrar deuda</button>
-      <button id="deudor-cancel-g" class="btn btn-ghost">Cancelar</button>
+    <div style="display:flex;gap:8px">
+      <button id="deudor-ok-g" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Registrar deuda</button>
+      <button id="deudor-cancel-g" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #e5e7eb;background:transparent;font-size:14px;cursor:pointer;font-family:inherit;color:#6b7280">Cancelar</button>
     </div>
   </div>`;
   document.body.appendChild(overlay);
-  setTimeout(()=>document.getElementById('deudor-nombre-g')?.focus(),50);
+  // Autocomplete
+  const inp=overlay.querySelector('#deudor-nombre-g');
+  const dd=overlay.querySelector('#deudor-dd-g');
+  const showDD=filtered=>{
+    dd.innerHTML=filtered.map(n=>{const div=document.createElement('div');div.textContent=n;div.style.cssText='padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6';div.onmouseover=()=>div.style.background='#f9fafb';div.onmouseout=()=>div.style.background='';div.onclick=()=>{inp.value=n;dd.style.display='none';};return div.outerHTML;}).join('');
+    dd.style.display=filtered.length?'block':'none';
+  };
+  inp.addEventListener('input',()=>{const q=inp.value.toLowerCase();showDD(q?clientesList.filter(n=>n.toLowerCase().includes(q)):clientesList);});
+  inp.addEventListener('focus',()=>{if(!inp.value)showDD(clientesList);});
+  document.addEventListener('click',e=>{if(!overlay.contains(e.target))dd.style.display='none';},{once:false});
+  setTimeout(()=>{if(!existingName)inp.focus();},50);
   const cleanup=()=>document.body.removeChild(overlay);
-  document.getElementById('deudor-cancel-g').onclick=cleanup;
+  overlay.querySelector('#deudor-cancel-g').onclick=cleanup;
   overlay.addEventListener('click',e=>{if(e.target===overlay)cleanup();});
-  document.getElementById('deudor-ok-g').onclick=async()=>{
-    const nombre=(document.getElementById('deudor-nombre-g')?.value||'').trim();
-    if(!nombre){alert('Ingresá el nombre del deudor');return;}
-    const conDescuento=document.getElementById('deudor-disc-check').checked;
-    const pct=conDescuento?10:0;
-    const descuento=conDescuento?Math.round(totalBase*0.1):0;
+  overlay.querySelector('#deudor-ok-g').onclick=async()=>{
+    const nombre=(inp.value||'').trim();
+    if(!nombre){inp.focus();return;}
+    const conDesc=overlay.querySelector('#deudor-disc-check').checked;
+    const pct=conDesc?10:0;
+    const descuento=conDesc?desc10:0;
     const saldoPendiente=totalBase-descuento;
     cleanup();
     for(const k of keys){
       const o=DB.orders[k];
       const oTotal=o?(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0):0;
-      const oSaldo=conDescuento?Math.round(oTotal*0.9):oTotal;
+      const oSaldo=conDesc?Math.round(oTotal*0.9):oTotal;
       await update(ref(db,`orders/${k}`),{
         status:'deudor',deudorNombre:nombre,deudorApellido:'',
         deudorRegistradoAt:Date.now(),saldoPendiente:oSaldo,
-        descuento:conDescuento?Math.round(oTotal*0.1):0,pct,
+        descuento:conDesc?Math.round(oTotal*0.1):0,pct,
         personName:nombre,orderMode:'individual'
       });
     }
