@@ -3684,16 +3684,23 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
       const nuevoSaldo=Math.max(0,saldoMostrado-monto);
       const esSaldado=nuevoSaldo===0;
       // Actualizar Firebase y cache local
-      for(const k of keys){
-        const o=DB.orders[k];if(!o)continue;
-        if(esSaldado){
+      if(esSaldado){
+        for(const k of keys){
           await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now(),saldoPendiente:0});
           if(DB.orders[k])DB.orders[k].saldoPendiente=0;
-        } else {
+        }
+      } else {
+        // Distribuir el pago: restar del primer pedido con saldo, luego el siguiente, etc.
+        let restante=monto;
+        for(const k of keys){
+          if(restante<=0)break;
+          const o=DB.orders[k];if(!o)continue;
           const saldoK=o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-          const nuevoSaldoK=Math.max(0,saldoK-(monto));
+          const abono=Math.min(saldoK,restante);
+          const nuevoSaldoK=Math.max(0,saldoK-abono);
           await update(ref(db,`orders/${k}`),{saldoPendiente:nuevoSaldoK});
           if(DB.orders[k])DB.orders[k].saldoPendiente=nuevoSaldoK;
+          restante-=abono;
         }
       }
       // Registrar en caja
@@ -4193,11 +4200,11 @@ window.submitManualOrder=async(modo='pending')=>{
       mnDd.style.display=filtered.length?'block':'none';
     };
     mnInp.addEventListener('input',()=>{const q=mnInp.value.toLowerCase();mnShowDD(q?clientesList.filter(n=>n.toLowerCase().includes(q)):clientesList);});
-    mnInp.addEventListener('focus',()=>mnShowDD(mnInp.value?clientesList.filter(n=>n.toLowerCase().includes(mnInp.value.toLowerCase())):clientesList));
+    mnInp.addEventListener('focus',()=>{if(!mnInp.value)mnShowDD(clientesList);});
     document.addEventListener('mousedown',e=>{if(!overlay.contains(e.target))mnDd.style.display='none';});
     overlay.querySelector('#mn-deudor-cancel').onclick=()=>document.body.removeChild(overlay);
     overlay.addEventListener('click',e=>{if(e.target===overlay)document.body.removeChild(overlay);});
-    setTimeout(()=>{mnInp.focus();if(!nombreExistente)mnShowDD(clientesList);},50);
+    setTimeout(()=>{if(!nombreExistente)mnInp.focus();},50);
     overlay.querySelector('#mn-deudor-ok').onclick=async()=>{
       const nombre=(mnInp.value||'').trim();
       if(!nombre){mnInp.focus();return;}
@@ -4518,9 +4525,9 @@ window.adminGroupDeudor=async keys=>{
     dd.style.display=filtered.length?'block':'none';
   };
   inp.addEventListener('input',()=>{const q=inp.value.toLowerCase();showDD(q?clientesList.filter(n=>n.toLowerCase().includes(q)):clientesList);});
-  inp.addEventListener('focus',()=>showDD(inp.value?clientesList.filter(n=>n.toLowerCase().includes(inp.value.toLowerCase())):clientesList));
+  inp.addEventListener('focus',()=>{if(!inp.value)showDD(clientesList);});
   document.addEventListener('mousedown',e=>{if(!overlay.contains(e.target))dd.style.display='none';});
-  setTimeout(()=>{inp.focus();if(!existingName)showDD(clientesList);},50);
+  setTimeout(()=>{if(!existingName)inp.focus();},50);
   const cleanup=()=>document.body.removeChild(overlay);
   overlay.querySelector('#deudor-cancel-g').onclick=cleanup;
   overlay.addEventListener('click',e=>{if(e.target===overlay)cleanup();});
