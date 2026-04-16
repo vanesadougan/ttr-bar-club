@@ -3943,7 +3943,7 @@ function updateDiscountPreview(){
     el.innerHTML='<div style="font-size:12px;color:#92400e">Ingresá precio y descuento.</div>';
   }
 }
-const renderOrModal=()=>{if(window._renderDishAdvBody&&document.getElementById('dish-adv-overlay'))window._renderDishAdvBody();else render();};
+function renderOrModal(){if(window._renderDishAdvBody&&document.getElementById('dish-adv-overlay'))window._renderDishAdvBody();else render();}
 window.toggleCustomizable=val=>{const f=C.editingDish||C.newDish;f.customizable=val;if(!f.ingredients)f.ingredients=[];renderOrModal();};
 window.toggleHasTypes=val=>{const f=C.editingDish||C.newDish;f.hasTypes=val;if(!f.types)f.types=[];if(!val)f.types=[];renderOrModal();};
 window.addType=()=>{
