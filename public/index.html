@@ -4255,6 +4255,7 @@ window.updateManualSearch=()=>{
     if(d.unavailable)return false;
     if(d.name.toLowerCase().includes(search))return true;
     // Buscar por código de barras
+    if(d.barcode&&String(d.barcode).includes(search))return true;
     if(d.barcodes&&d.barcodes.some(b=>String(b).includes(search)))return true;
     if(d.types&&d.types.some(t=>t.barcodes&&t.barcodes.some(b=>String(b).includes(search))))return true;
     return false;
