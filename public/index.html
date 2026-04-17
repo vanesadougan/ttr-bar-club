@@ -832,6 +832,9 @@ function renderCajaTab(){
       const cats=[{v:'proveedor',l:'🏪 Gasto proveedor'},{v:'personal',l:'👥 Pago personal'}];
       cats.forEach(c=>{const sel=(C.cajaGastoTipo||'')==c.v;h+=`<button onclick="setCajaGastoTipo('${c.v}')" style="padding:10px;border-radius:8px;border:0.5px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'#fff5f7':'var(--card)'};color:${sel?'var(--accent)':'var(--text)'};font-size:13px;font-weight:${sel?'600':'400'};cursor:pointer;font-family:inherit">${c.l}</button>`;});
       h+=`</div>`;
+      h+=`<div style="margin-bottom:10px"><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Medio de pago</label><div style="display:flex;gap:8px">`;
+      [{v:'efectivo',l:'💵 Efectivo'},{v:'mercadopago',l:'📱 Mercado Pago'},{v:'transferencia',l:'🏦 Transferencia'}].forEach(p=>{const sel=(C.cajaGastoPm||'efectivo')===p.v;h+=`<button onclick="C.cajaGastoPm='${p.v}';render()" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid ${sel?'var(--brand)':'var(--border)'};background:${sel?'var(--brand)':'var(--card)'};color:${sel?'#fff':'var(--text)'};font-size:12px;font-weight:${sel?'600':'400'};cursor:pointer;font-family:inherit">${p.l}</button>`;});
+      h+=`</div></div>`;
       h+=`<div class="two-col"><div class="form-group" style="margin-bottom:10px"><label>Monto ($)</label><input type="number" min="0" placeholder="0" id="caja-monto"></div>`;
       h+=`<div class="form-group" style="margin-bottom:10px"><label>Descripción <span style="font-size:11px;color:var(--muted)">(opcional)</span></label><input placeholder="Ej: Verdulería, Sueldo..." id="caja-desc"></div></div>`;
       h+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="cajaGuardarGasto()">Guardar gasto</button><button class="btn btn-ghost" onclick="cajaCancelarModal()">Cancelar</button></div>`;
@@ -899,7 +902,7 @@ window.cajaConfirmarApertura=async()=>{
   C.cajaModal=null;render();
 };
 // Gasto
-window.cajaGasto=()=>{C.cajaModal='gasto';C.cajaGastoTipo='proveedor';C.cajaMonto='';C.cajaDesc='';render();};
+window.cajaGasto=()=>{C.cajaModal='gasto';C.cajaGastoTipo='proveedor';C.cajaGastoPm='efectivo';C.cajaMonto='';C.cajaDesc='';render();};
 window.setCajaGastoTipo=t=>{C.cajaGastoTipo=t;render();};
 window.cajaGuardarGasto=async()=>{
   const montoInp=document.getElementById('caja-monto');
@@ -908,10 +911,11 @@ window.cajaGuardarGasto=async()=>{
   const desc=(descInp?descInp.value:'').trim();
   if(!monto||monto<=0){alert('Ingresá un monto mayor a 0');return;}
   const tipo=C.cajaGastoTipo||'proveedor';
+  const pm=C.cajaGastoPm||'efectivo';
   const concepto=tipo==='personal'?'Pago personal':'Gasto proveedor';
   const hoy=new Date().toISOString().slice(0,10);
-  await push(ref(db,'caja'),{tipo,concepto,monto:-monto,fecha:hoy,ts:Date.now(),desc});
-  C.cajaModal=null;C.cajaMonto='';C.cajaDesc='';render();
+  await push(ref(db,'caja'),{tipo,concepto,monto:-monto,fecha:hoy,ts:Date.now(),desc,paymentMethod:pm});
+  C.cajaModal=null;C.cajaMonto='';C.cajaDesc='';C.cajaGastoPm='efectivo';render();
 };
 window.cajaCancelarModal=()=>{C.cajaModal=null;render();};
 
@@ -3866,7 +3870,7 @@ function renderHistoryTab(){
       h+=`<div class="order-time">${dateStr}</div>`;
       h+=`</div>`;
       h+=`<div class="order-items-text">`;
-      (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <em>(${i.selectedType})</em>`:''}<br>`;});
+      (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:''}<br>`;});
       h+=`</div>`;
       h+=`<div class="order-footer"><span class="status status-cobrado">Cobrado</span>`;
       if(pm)h+=`<span style="font-size:12px;color:var(--muted)">${pmLabels[pm]||pm}</span>`;
@@ -3876,13 +3880,16 @@ function renderHistoryTab(){
       const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
       const kioskChip=o.isKiosko?`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">🏪 Kiosko</span>`:'';
       const waiterChip=o.takenBy?`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px;font-weight:500">👩 ${o.takenBy}</span>`:'';
+      const descuento=o.descuento||0;const pct=o.pct||0;
+      const totalFinal=total-descuento;
       h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${o.isKiosko?kioskChip:tableLabel(o.tableId)+chip}${waiterChip}</div><div class="order-time">${dateStr}</div></div>`;
       h+=`<div class="order-items-text">`;
-      (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}<br>`;});
+      (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:''}${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}<br>`;});
       h+=`</div>`;
+      if(descuento>0)h+=`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#059669"><span>Descuento ${pct}%</span><span>-$${descuento.toLocaleString()}</span></div>`;
       h+=`<div class="order-footer"><span class="status status-cobrado">Cobrado</span>`;
       if(pm)h+=`<span style="font-size:12px;color:var(--muted)">${pmLabels[pm]||pm}</span>`;
-      h+=`<span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span></div></div>`;
+      h+=`<span style="font-weight:600;font-size:14px">$${totalFinal.toLocaleString()}</span></div></div>`;
     }
   });
   return h+`</div>`;
