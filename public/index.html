@@ -1595,15 +1595,14 @@ window.waiterMarkCobrado=async tableId=>{
   const orders=Object.entries(DB.orders).filter(([,o])=>o.tableId===tableId&&(o.status==='billed'||o.status==='delivered'||o.status==='pending')&&o.status!=='deudor');
   const total=orders.reduce((s,[,o])=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
   const pm=orders.find(([,o])=>o.paymentMethod)?.[1]?.paymentMethod||C.waiterPayMethod||null;
-  let finalPm=pm;let descuento=0;let pct=0;
+  let finalPm=pm;let pmDetail=null;let descuento=0;let pct=0;
   if(finalPm){
-    // Ya tiene medio de pago — solo preguntar descuento
     const disc=await showDiscountModal(total);
     descuento=disc.descuento;pct=disc.pct;
   } else {
     const res=await showPaymentChoiceModal(null,total);
     if(!res)return;
-    finalPm=res.pm;descuento=res.descuento||0;pct=res.pct||0;
+    finalPm=res.pm;pmDetail=res.pmDetail||null;descuento=res.descuento||0;pct=res.pct||0;
   }
   const totalFinal=total-descuento;
   for(const [k] of orders){
@@ -1612,9 +1611,17 @@ window.waiterMarkCobrado=async tableId=>{
   if(getCajaAbierta()&&totalFinal>0){
     const table=DB.tables[tableId];const tLabel=table?table.label:tableId;
     const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
-    const concepto=`${tLabel} (${pmL[finalPm]||finalPm})${pct>0?` -${pct}%`:''}`;
     const hoy=new Date().toISOString().slice(0,10);
-    await push(ref(db,'caja'),{tipo:'venta',concepto,monto:totalFinal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:finalPm,descuento,pct});
+    if(pmDetail&&pmDetail.length>1){
+      for(const p of pmDetail){
+        const montoP=Number(p.monto)||0;if(!montoP)continue;
+        const concepto=`${tLabel} (${pmL[p.pm]||p.pm})${pct>0?` -${pct}%`:''}`;
+        await push(ref(db,'caja'),{tipo:'venta',concepto,monto:montoP,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:p.pm,descuento:0,pct:0});
+      }
+    } else {
+      const concepto=`${tLabel} (${pmL[finalPm]||finalPm})${pct>0?` -${pct}%`:''}`;
+      await push(ref(db,'caja'),{tipo:'venta',concepto,monto:totalFinal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:finalPm,descuento,pct});
+    }
   }
   render();
 };
@@ -3392,8 +3399,10 @@ function renderOrdersTab(){
       const allKeys=pgOrders.map(o=>o._key);
       const isBilled=pgOrders.every(o=>o.status==='billed');
 
-      if(personList.length>1||pg.personName){
-        const addBtn=pg.personName?`<button onclick="event.stopPropagation();addOrderToIndividual('${tg.tableId||''}','${(pg.personName||'').replace(/'/g,"\\'")}') " title="Agregar pedido a ${pg.personName}" style="margin-left:auto;width:22px;height:22px;border-radius:50%;border:none;background:#3b82f6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>`:'';
+      if(personList.length>1||pg.personName||!pg.personName){
+        const addBtn=pg.personName
+          ?`<button onclick="event.stopPropagation();addOrderToIndividual('${tg.tableId||''}','${(pg.personName||'').replace(/'/g,"\\'")}') " title="Agregar pedido a ${pg.personName}" style="margin-left:auto;width:22px;height:22px;border-radius:50%;border:none;background:#3b82f6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>`
+          :`<button onclick="event.stopPropagation();addOrderToGeneral('${tg.tableId||''}')" title="Agregar pedido general" style="margin-left:auto;width:22px;height:22px;border-radius:50%;border:none;background:#3b82f6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>`;
         h+=`<div style="padding:6px 14px;background:#f0f4ff;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:600;color:#1e40af;display:flex;align-items:center">👤 ${pg.personName||'General'}${addBtn}</div>`;
       }
 
@@ -3690,56 +3699,103 @@ window.marcarDeudor=async key=>{
 
 window.cobrarDeuda=async(keys,saldoMostrado)=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
-  // Leer datos del deudor
   let nombreDeudor='';let tableLabel='';
   for(const k of keys){const o=DB.orders[k];if(!o)continue;if(!nombreDeudor)nombreDeudor=`${o.deudorNombre||''} ${o.deudorApellido||''}`.trim();if(!tableLabel){const t=DB.tables[o.tableId];tableLabel=t?t.label:(o.tableId||'');}break;}
-  // Modal: cantidad a cobrar + medio de pago
+
+  const pms=[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}];
+  let payments=[];
+  let montoTotal=saldoMostrado;
   const overlay=document.createElement('div');
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
-  overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <div style="font-size:16px;font-weight:700;margin-bottom:4px">💳 Cobro de deuda</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:14px">${nombreDeudor} · Deuda: <strong style="color:#dc2626">$${saldoMostrado.toLocaleString()}</strong></div>
-    <div class="form-group" style="margin-bottom:8px">
-      <label>Cantidad cobrada</label>
-      <input id="cobro-monto" type="number" min="1" max="${saldoMostrado}" placeholder="$0" value="${saldoMostrado}"
-        style="width:100%;padding:10px 12px;border:1.5px solid var(--brand);border-radius:8px;font-size:20px;font-weight:700;font-family:inherit;text-align:center;box-sizing:border-box">
-    </div>
-    <div id="cobro-resta" style="text-align:center;font-size:13px;color:#059669;margin-bottom:12px;min-height:18px">Saldo saldado</div>
-    <div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:8px">Medio de pago</div>
-    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
-      ${[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}].map(p=>`<button data-pm="${p.v}" style="padding:9px 14px;border-radius:8px;border:0.5px solid #e5e7eb;background:#fff;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">${p.l}</button>`).join('')}
-    </div>
-    <button onclick="this.closest('[style*=fixed]').remove()" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
-  </div>`;
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
   document.body.appendChild(overlay);
-  const inp=overlay.querySelector('#cobro-monto');
-  const restaEl=overlay.querySelector('#cobro-resta');
-  inp.addEventListener('input',()=>{
-    const m=Math.min(Number(inp.value)||0,saldoMostrado);
-    if(m<=0){restaEl.textContent='';restaEl.style.color='var(--muted)';}
-    else if(m>=saldoMostrado){restaEl.textContent='Saldo saldado';restaEl.style.color='#059669';}
-    else{restaEl.textContent=`Quedan $${(saldoMostrado-m).toLocaleString()}`;restaEl.style.color='#d97706';}
-  });
-  inp.select();
-  overlay.querySelectorAll('[data-pm]').forEach(btn=>{
-    btn.addEventListener('mouseover',()=>btn.style.background='#f8f7f4');
-    btn.addEventListener('mouseout',()=>btn.style.background='#fff');
-    btn.addEventListener('click',async()=>{
-      const monto=Math.min(Number(inp.value)||0,saldoMostrado);
-      if(!monto||monto<=0){inp.focus();inp.style.borderColor='#dc2626';return;}
-      const pm=btn.dataset.pm;
+
+  const renderOverlay=()=>{
+    const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
+    const resta=Math.max(0,montoTotal-totalPagado);
+    overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto">
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px">💳 Cobro de deuda</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:14px">${nombreDeudor} · Deuda total: <strong style="color:#dc2626">$${saldoMostrado.toLocaleString()}</strong></div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label>Cantidad cobrada</label>
+        <input id="cobro-monto" type="number" min="1" value="${montoTotal}"
+          style="width:100%;padding:10px 12px;border:1.5px solid var(--brand);border-radius:8px;font-size:20px;font-weight:700;font-family:inherit;text-align:center;box-sizing:border-box">
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">MEDIOS DE PAGO</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+        ${pms.map(p=>`<button data-add-pm="${p.v}" style="padding:7px 10px;border-radius:8px;border:0.5px solid #e5e7eb;background:#fff;font-size:13px;cursor:pointer;font-family:inherit">${p.l}</button>`).join('')}
+      </div>
+      ${payments.length>0?`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+        ${payments.map((p,i)=>{const pm=pms.find(x=>x.v===p.pm);const autoMonto=payments.length===1&&!p.monto?montoTotal:p.monto;return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8f7f4;border-radius:8px;border:0.5px solid #e5e7eb">
+          <span style="font-size:13px;flex:1;font-weight:500">${pm?pm.l:p.pm}</span>
+          <span style="font-size:12px;color:#6b7280">$</span>
+          <input type="number" min="0" value="${autoMonto||''}" data-pm-idx="${i}"
+            style="width:90px;padding:4px 8px;border:0.5px solid #d1d5db;border-radius:6px;font-family:inherit;font-size:14px;font-weight:600;text-align:right">
+          <button data-rm-pm="${i}" style="width:22px;height:22px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:14px;cursor:pointer;line-height:1">×</button>
+        </div>`;}).join('')}
+      </div>`:''}
+      <div style="padding:10px 14px;background:${resta===0&&payments.length>0?'#f0fdf4':'#fff7ed'};border-radius:8px;margin-bottom:14px;border:0.5px solid ${resta===0&&payments.length>0?'#bbf7d0':'#fed7aa'};display:flex;justify-content:space-between">
+        <span style="font-size:13px;color:#6b7280">A cobrar: <strong style="color:#111">$${montoTotal.toLocaleString()}</strong></span>
+        <span style="font-size:13px;font-weight:600;color:${resta===0&&payments.length>0?'#059669':'#d97706'}">
+          ${resta===0&&payments.length>0?'✓ Completo':`Falta: $${resta.toLocaleString()}`}
+        </span>
+      </div>
+      <button id="cobro-ok" style="width:100%;padding:11px;border-radius:8px;border:none;background:${payments.length>0&&resta===0?'#059669':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${payments.length>0&&resta===0?'pointer':'not-allowed'};font-family:inherit;margin-bottom:8px;opacity:${payments.length>0&&resta===0?1:0.6}" ${payments.length===0||resta>0?'disabled':''}>
+        ${payments.length===0?'Elegí al menos un medio':resta>0?`Falta $${resta.toLocaleString()}`:'Registrar cobro'}
+      </button>
+      <button id="cobro-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+    </div>`;
+
+    overlay.querySelector('#cobro-monto')?.addEventListener('input',e=>{
+      montoTotal=Math.max(0,Number(e.target.value)||0);
+    });
+    overlay.querySelector('#cobro-monto')?.addEventListener('change',e=>{
+      montoTotal=Math.max(0,Number(e.target.value)||0);
+      renderOverlay();
+    });
+    overlay.querySelectorAll('[data-add-pm]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const montoInp=overlay.querySelector('#cobro-monto');
+        if(montoInp)montoTotal=Math.max(0,Number(montoInp.value)||0);
+        if(!payments.find(p=>p.pm===btn.dataset.addPm)){
+          const pagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
+          const resta=Math.max(0,montoTotal-pagado);
+          payments.push({pm:btn.dataset.addPm,monto:resta>0?resta:montoTotal});
+          renderOverlay();
+        }
+      });
+    });
+    overlay.querySelectorAll('[data-pm-idx]').forEach(inp=>{
+      inp.addEventListener('change',()=>{payments[parseInt(inp.dataset.pmIdx)].monto=inp.value;renderOverlay();});
+      inp.addEventListener('input',e=>{payments[parseInt(inp.dataset.pmIdx)].monto=e.target.value;});
+    });
+    overlay.querySelectorAll('[data-rm-pm]').forEach(btn=>{
+      btn.addEventListener('click',()=>{payments.splice(parseInt(btn.dataset.rmPm),1);renderOverlay();});
+    });
+    overlay.querySelector('#cobro-ok')?.addEventListener('click',async()=>{
+      if(!payments.length)return;
+      const montoInp=overlay.querySelector('#cobro-monto');
+      if(montoInp)montoTotal=Math.max(0,Number(montoInp.value)||0);
+      const monto=montoTotal;
+      if(!monto||monto<=0)return;
+      // Validar que la suma de medios de pago coincida con el monto
+      if(payments.length>1){
+        const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
+        if(Math.abs(totalPagado-monto)>1){
+          alert(`La suma de los medios de pago ($${totalPagado.toLocaleString()}) no coincide con la cantidad cobrada ($${monto.toLocaleString()}). Ajustá los montos.`);
+          return;
+        }
+      }
       overlay.remove();
       const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
       const nuevoSaldo=Math.max(0,saldoMostrado-monto);
       const esSaldado=nuevoSaldo===0;
-      // Actualizar Firebase y cache local
+      const pmPrincipal=payments.length===1?payments[0].pm:'mixto';
       if(esSaldado){
         for(const k of keys){
-          await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,fromDeuda:true,cobradoAt:Date.now(),saldoPendiente:0});
+          await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pmPrincipal,fromDeuda:true,cobradoAt:Date.now(),saldoPendiente:0});
           if(DB.orders[k])DB.orders[k].saldoPendiente=0;
         }
       } else {
-        // Distribuir el pago: restar del primer pedido con saldo, luego el siguiente, etc.
         let restante=monto;
         for(const k of keys){
           if(restante<=0)break;
@@ -3752,13 +3808,24 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
           restante-=abono;
         }
       }
-      // Registrar en caja
-      const concepto=`${esSaldado?'Deudor':'Pago parcial'}: ${nombreDeudor} · ${tableLabel} (${pmL[pm]||pm})${!esSaldado?` — quedan $${nuevoSaldo.toLocaleString()}`:''}`;
+      // Registrar en caja — una línea por medio de pago
       const hoy=new Date().toISOString().slice(0,10);
-      await push(ref(db,'caja'),{tipo:'venta',concepto,monto,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,parcial:!esSaldado});
+      if(payments.length===1){
+        const pm=payments[0].pm;
+        const concepto=`${esSaldado?'Deudor':'Pago parcial'}: ${nombreDeudor} · ${tableLabel} (${pmL[pm]||pm})${!esSaldado?` — quedan $${nuevoSaldo.toLocaleString()}`:''}`;
+        await push(ref(db,'caja'),{tipo:'venta',concepto,monto,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,parcial:!esSaldado});
+      } else {
+        for(const p of payments){
+          const montoP=Number(p.monto)||0;if(!montoP)continue;
+          const concepto=`${esSaldado?'Deudor':'Pago parcial'}: ${nombreDeudor} · ${tableLabel} (${pmL[p.pm]||p.pm})${!esSaldado?` — quedan $${nuevoSaldo.toLocaleString()}`:''}`;
+          await push(ref(db,'caja'),{tipo:'venta',concepto,monto:montoP,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:p.pm,parcial:!esSaldado});
+        }
+      }
       render();
     });
-  });
+    overlay.querySelector('#cobro-cancel')?.addEventListener('click',()=>overlay.remove());
+  };
+  renderOverlay();
 };
 
 window.cobrarDeudor=async key=>{
@@ -4216,6 +4283,12 @@ window.addOrderToIndividual=(tableId,personName)=>{
   render();
   setTimeout(()=>document.getElementById('manual-search')?.focus(),100);
 };
+window.addOrderToGeneral=(tableId)=>{
+  C.manualOrder={tableId,orderMode:'general',personName:'',items:[]};
+  C.manualOrderSearch='';C.manualOrderPicker=null;
+  render();
+  setTimeout(()=>document.getElementById('manual-search')?.focus(),100);
+};
 window.startManualOrder=()=>{
   if(C.manualOrder){C.manualOrder=null;}
   else{
@@ -4357,13 +4430,21 @@ window.submitManualOrder=async(modo='pending')=>{
     if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
     const res=await showPaymentChoiceModal(null,total);
     if(!res)return;
-    const pm=res.pm;const descuento=res.descuento||0;const pct=res.pct||0;
+    const pm=res.pm;const pmDetail=res.pmDetail||null;const descuento=res.descuento||0;const pct=res.pct||0;
     const totalFinal=total-descuento;
     await push(ref(db,'orders'),{...orderBase,status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});
     const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
-    const concepto=`${tableLabel}${personName?' · '+personName:''} (${pmL[pm]||pm})${pct>0?` -${pct}%`:''}`;
     const hoy=new Date().toISOString().slice(0,10);
-    await push(ref(db,'caja'),{tipo:'venta',concepto,monto:totalFinal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,descuento,pct});
+    if(pmDetail&&pmDetail.length>1){
+      for(const p of pmDetail){
+        const montoP=Number(p.monto)||0;if(!montoP)continue;
+        const concepto=`${tableLabel}${personName?' · '+personName:''} (${pmL[p.pm]||p.pm})${pct>0?` -${pct}%`:''}`;
+        await push(ref(db,'caja'),{tipo:'venta',concepto,monto:montoP,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:p.pm,descuento:0,pct:0});
+      }
+    } else {
+      const concepto=`${tableLabel}${personName?' · '+personName:''} (${pmL[pm]||pm})${pct>0?` -${pct}%`:''}`;
+      await push(ref(db,'caja'),{tipo:'venta',concepto,monto:totalFinal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,descuento,pct});
+    }
     C.manualOrder=null;C.manualOrderSearch='';render();
   } else if(modo==='deudor'){
     // Mostrar modal para confirmar nombre y descuento
@@ -4382,14 +4463,15 @@ window.submitManualOrder=async(modo='pending')=>{
         <div id="mn-deudor-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:0.5px solid #e5e7eb;border-radius:8px;z-index:10;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
       </div>
       <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer;margin-bottom:4px">
-        <input type="checkbox" id="mn-deudor-disc" style="width:16px;height:16px;accent-color:#dc2626" onchange="document.getElementById('mn-deudor-disc-detail').style.display=this.checked?'flex':'none'">
-        <span style="font-size:13px;font-weight:600;flex:1">Aplica 10%</span>
-        <span style="font-size:13px;color:#059669;font-weight:600">-$${desc10.toLocaleString()}</span>
+        <input type="checkbox" id="mn-deudor-disc" style="width:16px;height:16px;accent-color:#dc2626">
+        <span style="font-size:13px;font-weight:600;flex:1">Descuento</span>
+        <input type="number" id="mn-deudor-pct" min="1" max="99" value="10" style="width:50px;padding:3px 6px;border:0.5px solid #d1d5db;border-radius:6px;font-family:inherit;font-size:14px;font-weight:700;text-align:center">
+        <span style="font-size:13px;font-weight:600">%</span>
       </label>
       <div id="mn-deudor-disc-detail" style="display:none;justify-content:space-between;align-items:center;padding:8px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;margin-bottom:12px;border-top:0.5px solid #bbf7d0">
         <div><div style="font-size:11px;color:#9ca3af">Total original</div><div style="font-size:13px;color:#6b7280;text-decoration:line-through">$${total.toLocaleString()}</div></div>
-        <div style="font-size:12px;color:#dc2626;font-weight:600">-10%</div>
-        <div><div style="font-size:11px;color:#9ca3af;text-align:right">Deuda a registrar</div><div style="font-size:18px;font-weight:700;color:#059669">$${(total-desc10).toLocaleString()}</div></div>
+        <div id="mn-deudor-pct-label" style="font-size:12px;color:#dc2626;font-weight:600">-10%</div>
+        <div><div style="font-size:11px;color:#9ca3af;text-align:right">Deuda a registrar</div><div id="mn-deudor-total" style="font-size:18px;font-weight:700;color:#059669">$${(total-Math.round(total*0.1)).toLocaleString()}</div></div>
       </div>
       <div style="display:flex;gap:8px">
         <button id="mn-deudor-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Registrar deuda</button>
@@ -4418,13 +4500,28 @@ window.submitManualOrder=async(modo='pending')=>{
     document.addEventListener('mousedown',e=>{if(!overlay.contains(e.target))mnDd.style.display='none';});
     overlay.querySelector('#mn-deudor-cancel').onclick=()=>document.body.removeChild(overlay);
     overlay.addEventListener('click',e=>{if(e.target===overlay)document.body.removeChild(overlay);});
+    // Discount toggle
+    const mnDiscCheck=overlay.querySelector('#mn-deudor-disc');
+    const mnDiscDetail=overlay.querySelector('#mn-deudor-disc-detail');
+    const mnPctInp=overlay.querySelector('#mn-deudor-pct');
+    const updateDiscDetail=()=>{
+      const active=mnDiscCheck.checked;
+      const p=Math.min(99,Math.max(1,Number(mnPctInp.value)||10));
+      mnDiscDetail.style.display=active?'flex':'none';
+      if(active){
+        overlay.querySelector('#mn-deudor-pct-label').textContent=`-${p}%`;
+        overlay.querySelector('#mn-deudor-total').textContent=`$${(total-Math.round(total*(p/100))).toLocaleString()}`;
+      }
+    };
+    mnDiscCheck.addEventListener('change',updateDiscDetail);
+    mnPctInp.addEventListener('input',updateDiscDetail);
     setTimeout(()=>{if(!nombreExistente)mnInp.focus();},50);
     overlay.querySelector('#mn-deudor-ok').onclick=async()=>{
       const nombre=(mnInp.value||'').trim();
       if(!nombre){mnInp.focus();return;}
-      const conDesc=overlay.querySelector('#mn-deudor-disc').checked;
-      const pct=conDesc?10:0;
-      const descuento=conDesc?Math.round(total*0.1):0;
+      const conDesc=mnDiscCheck.checked;
+      const pct=conDesc?Math.min(99,Math.max(1,Number(mnPctInp.value)||10)):0;
+      const descuento=conDesc?Math.round(total*(pct/100)):0;
       const saldoPendiente=total-descuento;
       document.body.removeChild(overlay);
       await push(ref(db,'orders'),{
@@ -4694,7 +4791,7 @@ window.adminGroupCobrado=async keys=>{
     if(!personName3&&o.personName)personName3=o.personName;
   }
   const existingPm=keys.map(k=>DB.orders[k]?.paymentMethod).find(Boolean)||null;
-  let pm,descuento=0,pct=0;
+  let pm,pmDetail=null,descuento=0,pct=0;
   if(existingPm){
     pm=existingPm;
     const disc=await showDiscountModal(total);
@@ -4702,7 +4799,7 @@ window.adminGroupCobrado=async keys=>{
   } else {
     const res=await showPaymentChoiceModal(null,total);
     if(!res)return;
-    pm=res.pm;descuento=res.descuento||0;pct=res.pct||0;
+    pm=res.pm;pmDetail=res.pmDetail||null;descuento=res.descuento||0;pct=res.pct||0;
   }
   const totalFinal=total-descuento;
   const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
@@ -4710,9 +4807,18 @@ window.adminGroupCobrado=async keys=>{
     await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});
   }
   if(totalFinal>0&&getCajaAbierta()){
-    const concepto=`Venta: ${tableLabel3}${personName3?' · '+personName3:''} (${pmL[pm]||pm})${pct>0?` -${pct}%`:''}`;
     const hoy=new Date().toISOString().slice(0,10);
-    await push(ref(db,'caja'),{tipo:'venta',concepto,monto:totalFinal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,descuento,pct});
+    if(pmDetail&&pmDetail.length>1){
+      // Una línea por medio de pago
+      for(const p of pmDetail){
+        const montoP=Number(p.monto)||0;if(!montoP)continue;
+        const concepto=`Venta: ${tableLabel3}${personName3?' · '+personName3:''} (${pmL[p.pm]||p.pm})${pct>0?` -${pct}%`:''}`;
+        await push(ref(db,'caja'),{tipo:'venta',concepto,monto:montoP,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:p.pm,descuento:0,pct:0});
+      }
+    } else {
+      const concepto=`Venta: ${tableLabel3}${personName3?' · '+personName3:''} (${pmL[pm]||pm})${pct>0?` -${pct}%`:''}`;
+      await push(ref(db,'caja'),{tipo:'venta',concepto,monto:totalFinal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,descuento,pct});
+    }
   }
   render();
 };
@@ -4737,14 +4843,15 @@ window.adminGroupDeudor=async keys=>{
       <div id="deudor-dd-g" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:0.5px solid #e5e7eb;border-radius:8px;z-index:10;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
     </div>
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer;margin-bottom:4px">
-      <input type="checkbox" id="deudor-disc-check" style="width:16px;height:16px;accent-color:#dc2626" onchange="document.getElementById('deudor-disc-detail').style.display=this.checked?'flex':'none'">
-      <span style="font-size:13px;font-weight:600;flex:1">Aplica 10%</span>
-      <span style="font-size:13px;color:#059669;font-weight:600">-$${desc10.toLocaleString()}</span>
+      <input type="checkbox" id="deudor-disc-check" style="width:16px;height:16px;accent-color:#dc2626">
+      <span style="font-size:13px;font-weight:600;flex:1">Descuento</span>
+      <input type="number" id="deudor-disc-pct" min="1" max="99" value="10" style="width:50px;padding:3px 6px;border:0.5px solid #d1d5db;border-radius:6px;font-family:inherit;font-size:14px;font-weight:700;text-align:center">
+      <span style="font-size:13px;font-weight:600">%</span>
     </label>
     <div id="deudor-disc-detail" style="display:none;justify-content:space-between;align-items:center;padding:8px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;margin-bottom:12px;border-top:0.5px solid #bbf7d0">
       <div><div style="font-size:11px;color:#9ca3af">Total original</div><div style="font-size:13px;color:#6b7280;text-decoration:line-through">$${totalBase.toLocaleString()}</div></div>
-      <div style="font-size:12px;color:#dc2626;font-weight:600">-10%</div>
-      <div><div style="font-size:11px;color:#9ca3af;text-align:right">Deuda a registrar</div><div style="font-size:18px;font-weight:700;color:#059669">$${(totalBase-desc10).toLocaleString()}</div></div>
+      <div id="deudor-disc-pct-label" style="font-size:12px;color:#dc2626;font-weight:600">-10%</div>
+      <div><div style="font-size:11px;color:#9ca3af;text-align:right">Deuda a registrar</div><div id="deudor-disc-total" style="font-size:18px;font-weight:700;color:#059669">$${(totalBase-Math.round(totalBase*0.1)).toLocaleString()}</div></div>
     </div>
     <div style="display:flex;gap:8px">
       <button id="deudor-ok-g" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Registrar deuda</button>
@@ -4775,22 +4882,36 @@ window.adminGroupDeudor=async keys=>{
   const cleanup=()=>document.body.removeChild(overlay);
   overlay.querySelector('#deudor-cancel-g').onclick=cleanup;
   overlay.addEventListener('click',e=>{if(e.target===overlay)cleanup();});
+  const discCheck=overlay.querySelector('#deudor-disc-check');
+  const discPct=overlay.querySelector('#deudor-disc-pct');
+  const discDetail=overlay.querySelector('#deudor-disc-detail');
+  const updateDisc=()=>{
+    const active=discCheck.checked;
+    const p=Math.min(99,Math.max(1,Number(discPct.value)||10));
+    discDetail.style.display=active?'flex':'none';
+    if(active){
+      overlay.querySelector('#deudor-disc-pct-label').textContent=`-${p}%`;
+      overlay.querySelector('#deudor-disc-total').textContent=`$${(totalBase-Math.round(totalBase*(p/100))).toLocaleString()}`;
+    }
+  };
+  discCheck.addEventListener('change',updateDisc);
+  discPct.addEventListener('input',updateDisc);
   overlay.querySelector('#deudor-ok-g').onclick=async()=>{
     const nombre=(inp.value||'').trim();
     if(!nombre){inp.focus();return;}
-    const conDesc=overlay.querySelector('#deudor-disc-check').checked;
-    const pct=conDesc?10:0;
-    const descuento=conDesc?desc10:0;
+    const conDesc=discCheck.checked;
+    const pct=conDesc?Math.min(99,Math.max(1,Number(discPct.value)||10)):0;
+    const descuento=conDesc?Math.round(totalBase*(pct/100)):0;
     const saldoPendiente=totalBase-descuento;
     cleanup();
     for(const k of keys){
       const o=DB.orders[k];
       const oTotal=o?(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0):0;
-      const oSaldo=conDesc?Math.round(oTotal*0.9):oTotal;
+      const oDesc=conDesc?Math.round(oTotal*(pct/100)):0;
       await update(ref(db,`orders/${k}`),{
         status:'deudor',deudorNombre:nombre,deudorApellido:'',
-        deudorRegistradoAt:Date.now(),saldoPendiente:oSaldo,
-        descuento:conDesc?Math.round(oTotal*0.1):0,pct,
+        deudorRegistradoAt:Date.now(),saldoPendiente:oTotal-oDesc,
+        descuento:oDesc,pct,
         personName:nombre,orderMode:'individual'
       });
     }
@@ -4867,7 +4988,8 @@ window.updateEditOrderSearch=()=>{
   if(search.length<1){list.style.display='none';list.innerHTML='';return;}
   const allItems=[
     ...Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k,_src:'dishes'})),
-    ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria',emoji:v.emoji||'☕'}))
+    ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria',emoji:v.emoji||'☕'})),
+    ...Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k,_src:'kiosko',emoji:'🏪'}))
   ].filter(d=>!d.unavailable&&d.name.toLowerCase().includes(search));
   const seen=new Set();
   const unique=allItems.filter(d=>{const k=d.name+'|'+d._src;if(seen.has(k))return false;seen.add(k);return true;});
@@ -4875,13 +4997,13 @@ window.updateEditOrderSearch=()=>{
   if(unique.length===0){list.innerHTML='<div style="padding:8px 12px;font-size:13px;color:var(--muted)">Sin resultados</div>';return;}
   list.innerHTML=unique.map(d=>'<div onclick="addItemToEditOrder(\''+d._key+'\',\''+d._src+'\')" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'\'">'+
     '<span style="font-size:16px">'+(d.emoji||'🍽️')+'</span>'+
-    '<div style="flex:1"><div style="font-size:13px;font-weight:500">'+d.name+'</div><div style="font-size:11px;color:var(--muted)">'+(d._src==='cafeteria'?'☕ Cafetería':'🍽 Restaurant')+(d.hasTypes&&(d.types||[]).length>0?' · variantes':'')+'</div></div>'+
+    '<div style="flex:1"><div style="font-size:13px;font-weight:500">'+d.name+'</div><div style="font-size:11px;color:var(--muted)">'+(d._src==='cafeteria'?'☕ Cafetería':d._src==='kiosko'?'🏪 Kiosko':'🍽 Restaurant')+(d.hasTypes&&(d.types||[]).length>0?' · variantes':'')+'</div></div>'+
     '<span style="font-size:13px;font-weight:600;color:var(--accent)">$'+Number(d.price).toLocaleString()+'</span>'+
     '</div>').join('');
 };
 window.addItemToEditOrder=(key,src)=>{
   if(!window._adminEditItems)return;
-  const d=src==='cafeteria'?DB.cafeteriaItems[key]:DB.dishes[key];
+  const d=src==='cafeteria'?DB.cafeteriaItems[key]:src==='kiosko'?DB.kioskItems[key]:DB.dishes[key];
   if(!d)return;
   // Si el plato tiene variantes, no podemos elegirlas aquí — agregar sin variante
   const existing=window._adminEditItems.find(i=>i.name===d.name&&!i.selectedType);
@@ -4985,76 +5107,187 @@ function showDiscountModal(totalBase){
   return new Promise(resolve=>{
     const overlay=document.createElement('div');
     overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
-    const desc10=Math.round(totalBase*0.1);
+    let discActive=false;let pct=10;
+    const render=()=>{
+      const descuento=discActive?Math.round(totalBase*(pct/100)):0;
+      overlay.querySelector('#disc-body').innerHTML=`
+        <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f8f7f4;border-radius:${discActive?'10px 10px 0 0':'10px'};cursor:pointer;margin-bottom:${discActive?'0':'16px'}">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
+            <input type="checkbox" id="disc-check" ${discActive?'checked':''} style="width:18px;height:18px;cursor:pointer;accent-color:var(--brand)">
+            <span style="font-size:14px;font-weight:600">Descuento</span>
+          </label>
+          <div style="display:flex;align-items:center;gap:4px">
+            <input type="number" id="disc-pct" min="1" max="99" value="${pct}" ${!discActive?'disabled':''} style="width:54px;padding:4px 6px;border:0.5px solid ${discActive?'var(--brand)':'#d1d5db'};border-radius:6px;font-family:inherit;font-size:15px;font-weight:700;text-align:center;color:${discActive?'var(--brand)':'#9ca3af'};background:${discActive?'#fff':'#f3f4f6'}">
+            <span style="font-size:14px;font-weight:700;color:${discActive?'var(--brand)':'#9ca3af'}">%</span>
+          </div>
+          ${discActive?`<span style="font-size:13px;color:#dc2626;font-weight:600">-$${descuento.toLocaleString()}</span>`:''}
+        </div>
+        ${discActive?`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;margin-bottom:16px;border-top:0.5px solid #bbf7d0">
+          <div><div style="font-size:11px;color:#9ca3af">Original</div><div style="font-size:13px;color:#6b7280;text-decoration:line-through">$${totalBase.toLocaleString()}</div></div>
+          <div style="font-size:13px;color:#dc2626;font-weight:600">-${pct}%</div>
+          <div><div style="font-size:11px;color:#9ca3af;text-align:right">A cobrar</div><div style="font-size:20px;font-weight:700;color:#059669">$${(totalBase-descuento).toLocaleString()}</div></div>
+        </div>`:''}
+        <div style="display:flex;gap:8px">
+          <button id="disc-cancel" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #e5e7eb;background:transparent;font-size:14px;cursor:pointer;font-family:inherit;color:#6b7280">Sin descuento</button>
+          <button id="disc-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Confirmar</button>
+        </div>`;
+      overlay.querySelector('#disc-check')?.addEventListener('change',e=>{discActive=e.target.checked;const p=overlay.querySelector('#disc-pct');if(p)pct=Number(p.value)||10;render();});
+      overlay.querySelector('#disc-pct')?.addEventListener('change',e=>{pct=Math.min(99,Math.max(1,Number(e.target.value)||10));render();});
+      overlay.querySelector('#disc-ok').onclick=()=>{
+        const descuento=discActive?Math.round(totalBase*(pct/100)):0;
+        document.body.removeChild(overlay);resolve({descuento,pct:discActive?pct:0});
+      };
+      overlay.querySelector('#disc-cancel').onclick=()=>{document.body.removeChild(overlay);resolve({descuento:0,pct:0});};
+    };
     overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:320px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
       <div style="font-size:16px;font-weight:600;margin-bottom:16px">¿Aplicar descuento?</div>
-      <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer;margin-bottom:4px">
-        <input type="checkbox" id="disc-check" style="width:18px;height:18px;cursor:pointer;accent-color:var(--brand)" onchange="document.getElementById('disc-detail').style.display=this.checked?'flex':'none'">
-        <span style="font-size:14px;font-weight:600;flex:1">Aplica 10%</span>
-        <span style="font-size:13px;color:#059669;font-weight:600">-$${desc10.toLocaleString()}</span>
-      </label>
-      <div id="disc-detail" style="display:none;justify-content:space-between;align-items:center;padding:10px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;margin-bottom:16px;border-top:0.5px solid #bbf7d0">
-        <div><div style="font-size:11px;color:#9ca3af">Total original</div><div style="font-size:14px;color:#6b7280;text-decoration:line-through">$${totalBase.toLocaleString()}</div></div>
-        <div style="font-size:13px;color:#dc2626;font-weight:600">-10%</div>
-        <div><div style="font-size:11px;color:#9ca3af;text-align:right">Total a cobrar</div><div style="font-size:20px;font-weight:700;color:#059669">$${(totalBase-desc10).toLocaleString()}</div></div>
-      </div>
-      <div style="display:flex;gap:8px">
-        <button id="disc-cancel" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #e5e7eb;background:transparent;font-size:14px;cursor:pointer;font-family:inherit;color:#6b7280">Sin descuento</button>
-        <button id="disc-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Confirmar</button>
-      </div>
+      <div id="disc-body"></div>
     </div>`;
     document.body.appendChild(overlay);
-    overlay.querySelector('#disc-ok').onclick=()=>{
-      const checked=overlay.querySelector('#disc-check').checked;
-      const pct=checked?10:0;
-      const descuento=checked?desc10:0;
-      document.body.removeChild(overlay);resolve({descuento,pct});
-    };
-    overlay.querySelector('#disc-cancel').onclick=()=>{document.body.removeChild(overlay);resolve({descuento:0,pct:0});};
     overlay.addEventListener('click',e=>{if(e.target===overlay){document.body.removeChild(overlay);resolve({descuento:0,pct:0});}});
+    render();
   });
 }
 function showPaymentChoiceModal(orderKey, totalBase){
   return new Promise(resolve=>{
     const overlay=document.createElement('div');
-    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
     const pms=[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}];
     const showTotal=totalBase!=null&&totalBase>0;
     const _desc10=showTotal?Math.round(totalBase*0.1):0;
-    overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-      <div style="font-size:16px;font-weight:600;margin-bottom:4px">Medio de pago</div>
-      <div style="font-size:13px;color:#6b7280;margin-bottom:12px">Seleccioná el método para registrar el cobro</div>
-      ${showTotal?`<div style="margin-bottom:14px">
-        <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer">
-          <input type="checkbox" id="pm-disc-check" style="width:18px;height:18px;cursor:pointer;accent-color:var(--brand)" onchange="document.getElementById('pm-disc-detail').style.display=this.checked?'flex':'none'">
-          <span style="font-size:14px;font-weight:600;flex:1">Aplica 10%</span>
-          <span style="font-size:13px;color:#059669;font-weight:600">-$${_desc10.toLocaleString()}</span>
-        </label>
-        <div id="pm-disc-detail" style="display:none;justify-content:space-between;align-items:center;padding:10px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;border-top:0.5px solid #bbf7d0">
-          <div><div style="font-size:11px;color:#9ca3af">Total original</div><div style="font-size:14px;color:#6b7280;text-decoration:line-through">$${totalBase.toLocaleString()}</div></div>
-          <div style="font-size:13px;color:#dc2626;font-weight:600">-10%</div>
-          <div><div style="font-size:11px;color:#9ca3af;text-align:right">Total a cobrar</div><div style="font-size:20px;font-weight:700;color:#059669">$${(totalBase-_desc10).toLocaleString()}</div></div>
+
+    // State
+    let descuento=0, pct=0;
+    let discActive=false;
+    let payments=[]; // [{pm, monto}]
+
+    const render=()=>{
+      const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
+      const descMonto=showTotal&&discActive?Math.round(totalBase*(pct/100)):0;
+      descuento=descMonto;
+      const totalCobrar=showTotal?(totalBase-descuento):0;
+      const restante=showTotal?Math.max(0,totalCobrar-totalPagado):0;
+      const pctVal=pct||10;
+
+      overlay.querySelector('#pm-body').innerHTML=`
+        ${showTotal?`<div style="margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f8f7f4;border-radius:${discActive?'10px 10px 0 0':'10px'}">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
+              <input type="checkbox" id="pm-disc-check" ${discActive?'checked':''} style="width:18px;height:18px;cursor:pointer;accent-color:var(--brand)">
+              <span style="font-size:14px;font-weight:600">Descuento</span>
+            </label>
+            <div style="display:flex;align-items:center;gap:4px">
+              <input type="number" id="pm-disc-pct" min="1" max="99" value="${pctVal}" ${!discActive?'disabled':''} style="width:54px;padding:4px 6px;border:0.5px solid ${discActive?'var(--brand)':'#d1d5db'};border-radius:6px;font-family:inherit;font-size:15px;font-weight:700;text-align:center;color:${discActive?'var(--brand)':'#9ca3af'};background:${discActive?'#fff':'#f3f4f6'}">
+              <span style="font-size:14px;font-weight:600;color:${discActive?'var(--brand)':'#9ca3af'}">%</span>
+            </div>
+            ${discActive?`<span style="font-size:13px;color:#dc2626;font-weight:600">-$${descMonto.toLocaleString()}</span>`:''}
+          </div>
+          ${discActive?`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;border-top:0.5px solid #bbf7d0">
+            <div><div style="font-size:11px;color:#9ca3af">Original</div><div style="font-size:13px;color:#6b7280;text-decoration:line-through">$${totalBase.toLocaleString()}</div></div>
+            <div style="font-size:13px;color:#dc2626;font-weight:600">-${pctVal}%</div>
+            <div><div style="font-size:11px;color:#9ca3af;text-align:right">A cobrar</div><div style="font-size:18px;font-weight:700;color:#059669">$${totalCobrar.toLocaleString()}</div></div>
+          </div>`:''}
+        </div>`:''}
+
+        <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:8px">MEDIOS DE PAGO</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+          ${pms.map(p=>`<button data-add-pm="${p.v}" style="padding:7px 10px;border-radius:8px;border:0.5px solid #e5e7eb;background:#fff;font-size:13px;cursor:pointer;font-family:inherit">${p.l}</button>`).join('')}
         </div>
-      </div>`:''}
-      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-        ${pms.map(p=>`<button data-pm="${p.v}" style="padding:10px 14px;border-radius:8px;border:0.5px solid #e5e7eb;background:#fff;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">${p.l}</button>`).join('')}
-      </div>
-      <button id="pm-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid #e5e7eb;background:transparent;font-size:13px;color:#6b7280;cursor:pointer;font-family:inherit">Cancelar</button>
+
+        ${payments.length>0?`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+          ${payments.map((p,i)=>{
+            const pm=pms.find(x=>x.v===p.pm);
+            return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8f7f4;border-radius:8px;border:0.5px solid #e5e7eb">
+              <span style="font-size:13px;flex:1;font-weight:500">${pm?pm.l:p.pm}</span>
+              <span style="font-size:12px;color:#6b7280">$</span>
+              <input type="number" min="0" value="${p.monto||''}" placeholder="${restante>0&&i===payments.length-1?restante:''}" data-pm-idx="${i}"
+                style="width:90px;padding:4px 8px;border:0.5px solid #d1d5db;border-radius:6px;font-family:inherit;font-size:14px;font-weight:600;text-align:right">
+              <button data-rm-pm="${i}" style="width:22px;height:22px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:14px;cursor:pointer;line-height:1">×</button>
+            </div>`;
+          }).join('')}
+        </div>`:''}
+
+        ${showTotal?`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:${restante===0&&payments.length>0?'#f0fdf4':'#fff7ed'};border-radius:8px;margin-bottom:14px;border:0.5px solid ${restante===0&&payments.length>0?'#bbf7d0':'#fed7aa'}">
+          <span style="font-size:13px;font-weight:600;color:#6b7280">Total a cobrar: <strong style="color:#111">$${totalCobrar.toLocaleString()}</strong></span>
+          <span style="font-size:13px;font-weight:600;color:${restante===0&&payments.length>0?'#059669':'#d97706'}">
+            ${restante===0&&payments.length>0?'✓ Completo':`Falta: $${restante.toLocaleString()}`}
+          </span>
+        </div>`:''}
+
+        ${(()=>{const canConfirm=payments.length>0&&(!showTotal||restante===0);return `<button id="pm-confirm" ${!canConfirm?'disabled':''} style="width:100%;padding:11px;border-radius:8px;border:none;background:${canConfirm?'var(--brand)':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${canConfirm?'pointer':'not-allowed'};font-family:inherit;margin-bottom:8px;opacity:${canConfirm?1:0.6}">
+          ${payments.length===0?'Elegí al menos un medio':restante>0?`Falta $${restante.toLocaleString()}`:'Confirmar cobro'}
+        </button>`;})()}
+        <button id="pm-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid #e5e7eb;background:transparent;font-size:13px;color:#6b7280;cursor:pointer;font-family:inherit">Cancelar</button>
+      `;
+
+      // Bind events
+      overlay.querySelector('#pm-disc-check')?.addEventListener('change',e=>{
+        discActive=e.target.checked;
+        const pctInp=overlay.querySelector('#pm-disc-pct');
+        if(pctInp)pct=Number(pctInp.value)||10;
+        render();
+      });
+      overlay.querySelector('#pm-disc-pct')?.addEventListener('change',e=>{
+        pct=Math.min(99,Math.max(1,Number(e.target.value)||10));
+        render();
+      });
+      overlay.querySelector('#pm-disc-pct')?.addEventListener('input',e=>{
+        pct=Math.min(99,Math.max(1,Number(e.target.value)||10));
+        // Actualizar descuento sin re-render completo
+        descuento=showTotal&&discActive?Math.round(totalBase*(pct/100)):0;
+      });
+      overlay.querySelectorAll('[data-add-pm]').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          const pm=btn.dataset.addPm;
+          // Si ya existe ese medio, no duplicar
+          if(!payments.find(p=>p.pm===pm)){
+            // Pre-cargar con el restante si es el primero
+            const totalCobrar2=showTotal?(totalBase-descuento):0;
+            const totalPagado2=payments.reduce((s,p)=>s+Number(p.monto||0),0);
+            const restante2=showTotal?Math.max(0,totalCobrar2-totalPagado2):0;
+            payments.push({pm,monto:restante2>0?restante2:''});
+            render();
+          }
+        });
+      });
+      overlay.querySelectorAll('[data-pm-idx]').forEach(inp=>{
+        inp.addEventListener('input',e=>{
+          payments[parseInt(inp.dataset.pmIdx)].monto=e.target.value;
+          // No re-render para no perder foco, solo actualizar restante label
+        });
+        inp.addEventListener('change',()=>render());
+      });
+      overlay.querySelectorAll('[data-rm-pm]').forEach(btn=>{
+        btn.addEventListener('click',()=>{payments.splice(parseInt(btn.dataset.rmPm),1);render();});
+      });
+      overlay.querySelector('#pm-confirm')?.addEventListener('click',()=>{
+        if(!payments.length)return;
+        if(payments.length>1&&showTotal){
+          const totalCobrar2=totalBase-descuento;
+          const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
+          if(Math.abs(totalPagado-totalCobrar2)>1){
+            alert(`La suma de los medios de pago ($${totalPagado.toLocaleString()}) no coincide con el total a cobrar ($${totalCobrar2.toLocaleString()}). Ajustá los montos.`);
+            return;
+          }
+        }
+        const pm=payments.length===1?payments[0].pm:'mixto';
+        const pmDetail=payments.map(p=>({pm:p.pm,monto:Number(p.monto)||0}));
+        document.body.removeChild(overlay);
+        resolve(showTotal
+          ?{pm,pmDetail,descuento,pct:discActive?pct:0,totalFinal:totalBase-descuento}
+          :{pm,pmDetail});
+      });
+      overlay.querySelector('#pm-cancel')?.addEventListener('click',()=>{document.body.removeChild(overlay);resolve(null);});
+    };
+
+    overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto">
+      <div style="font-size:16px;font-weight:600;margin-bottom:4px">Medio de pago</div>
+      <div style="font-size:13px;color:#6b7280;margin-bottom:14px">Podés elegir más de uno</div>
+      <div id="pm-body"></div>
     </div>`;
     document.body.appendChild(overlay);
-    overlay.querySelectorAll('[data-pm]').forEach(btn=>{
-      btn.addEventListener('mouseover',()=>btn.style.background='#f8f7f4');
-      btn.addEventListener('mouseout',()=>btn.style.background='#fff');
-      btn.addEventListener('click',()=>{
-        const checked=showTotal&&(overlay.querySelector('#pm-disc-check')?.checked||false);
-        const pct=checked?10:0;
-        const descuento=checked?Math.round(totalBase*0.1):0;
-        document.body.removeChild(overlay);
-        resolve(showTotal?{pm:btn.dataset.pm,descuento,pct,totalFinal:totalBase-descuento}:btn.dataset.pm);
-      });
-    });
-    overlay.querySelector('#pm-cancel').addEventListener('click',()=>{document.body.removeChild(overlay);resolve(null);});
     overlay.addEventListener('click',e=>{if(e.target===overlay){document.body.removeChild(overlay);resolve(null);}});
+    render();
   });
 }
 window.markGroupCobrado=async gi=>{
@@ -5335,7 +5568,7 @@ function renderMenuOnly(mc){
       h+=`<button class="cat-tab${C.customerCat===cid?' active':''}${isP?' promo-tab':''}" onclick="setMenuOnlyCat('${cid}')"><span class="cat-emoji">${cat?cat.icon:'🍽'}</span>${cat?cat.label:cid}</button>`;
     });
     h+=`</div><div class="menu-grid">`;
-    const filtered=C.customerCat?allDishes.filter(d=>d.cat===C.customerCat):allDishes;    filtered.forEach(d=>{
+    const filtered=(C.customerCat?allDishes.filter(d=>d.cat===C.customerCat):allDishes).sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));    filtered.forEach(d=>{
       const dishCat=cats.find(c=>c._key===d.cat);
       const isP=dishCat&&dishCat.isPromo&&(d.promoDiscount>0||d.is2x1);
       const fp=dishFinalPrice(d,1);
