@@ -3738,7 +3738,9 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
           ${resta===0&&payments.length>0?'✓ Completo':`Falta: $${resta.toLocaleString()}`}
         </span>
       </div>
-      <button id="cobro-ok" ${payments.length===0?'disabled':''} style="width:100%;padding:11px;border-radius:8px;border:none;background:${payments.length>0?'#059669':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${payments.length>0?'pointer':'default'};font-family:inherit;margin-bottom:8px">Registrar cobro</button>
+      <button id="cobro-ok" ${payments.length===0||resta>0?'disabled':''} style="width:100%;padding:11px;border-radius:8px;border:none;background:${payments.length>0&&resta===0?'#059669':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${payments.length>0&&resta===0?'pointer':'default'};font-family:inherit;margin-bottom:8px">
+        ${payments.length===0?'Elegí al menos un medio':resta>0?`Falta asignar $${resta.toLocaleString()}`:'Registrar cobro'}
+      </button>
       <button id="cobro-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
     </div>`;
 
@@ -5212,8 +5214,9 @@ function showPaymentChoiceModal(orderKey, totalBase){
           </span>
         </div>`:''}
 
-        <button id="pm-confirm" ${payments.length===0?'disabled':''} style="width:100%;padding:11px;border-radius:8px;border:none;background:${payments.length>0?'var(--brand)':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${payments.length>0?'pointer':'default'};font-family:inherit;margin-bottom:8px">
-          ${payments.length>0?'Confirmar cobro':'Elegí al menos un medio'}
+        const canConfirm=payments.length>0&&(!showTotal||restante===0);
+        <button id="pm-confirm" ${!canConfirm?'disabled':''} style="width:100%;padding:11px;border-radius:8px;border:none;background:${canConfirm?'var(--brand)':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${canConfirm?'pointer':'default'};font-family:inherit;margin-bottom:8px">
+          ${payments.length===0?'Elegí al menos un medio':restante>0?`Falta asignar $${restante.toLocaleString()}`:'Confirmar cobro'}
         </button>
         <button id="pm-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid #e5e7eb;background:transparent;font-size:13px;color:#6b7280;cursor:pointer;font-family:inherit">Cancelar</button>
       `;
