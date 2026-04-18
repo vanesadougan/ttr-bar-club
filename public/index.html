@@ -3655,8 +3655,9 @@ function renderDeudoresTab(){
       const dIdx=window._deudorKeys.push(keys)-1;
       if(!window._deudorSaldos)window._deudorSaldos=[];
       window._deudorSaldos[dIdx]=saldoMostrar;
-      h+=`<div style="padding:10px 16px;border-top:0.5px solid var(--border);background:#fafafa">`;
-      h+=`<button onclick="cobrarDeuda(window._deudorKeys[${dIdx}],window._deudorSaldos[${dIdx}])" style="width:100%;padding:10px;border-radius:8px;border:0.5px solid #d97706;background:#fffbeb;color:#92400e;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">$ Pago Parcial/Total</button>`;
+      h+=`<div style="padding:10px 16px;border-top:0.5px solid var(--border);background:#fafafa;display:flex;gap:8px">`;
+      h+=`<button onclick="cobrarDeuda(window._deudorKeys[${dIdx}],window._deudorSaldos[${dIdx}])" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #d97706;background:#fffbeb;color:#92400e;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">$ Pago Parcial/Total</button>`;
+      h+=`<button onclick="imprimirDeuda(${dIdx})" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:18px;cursor:pointer;font-family:inherit" title="Imprimir detalle">🖨️</button>`;
       h+=`</div>`;
       h+=`</div>`;
     });
@@ -3665,6 +3666,38 @@ function renderDeudoresTab(){
   return h;
 }
 
+window.imprimirDeuda=async(dIdx)=>{
+  const keys=window._deudorKeys[dIdx];
+  const saldo=window._deudorSaldos[dIdx];
+  if(!keys||!keys.length)return;
+  // Armar orden sintética con todos los items
+  const orders=keys.map(k=>DB.orders[k]).filter(Boolean);
+  if(!orders.length)return;
+  const first=orders[0];
+  const nombre=(first.deudorNombre||'').trim();
+  const table=DB.tables[first.tableId];
+  const tLabel=table?table.label:(first.tableId==='sinmesa'?'Sin Mesa':(first.tableId||'Mesa'));
+  // Agrupar todos los items
+  const itemMap={};
+  orders.forEach(o=>{
+    (o.items||[]).forEach(i=>{
+      const k=i.name+(i.selectedType?'|'+i.selectedType:'');
+      if(!itemMap[k])itemMap[k]={name:i.name,selectedType:i.selectedType||null,price:i.finalPrice||i.price,qty:0};
+      itemMap[k].qty+=i.qty;
+    });
+  });
+  const syntheticOrder={
+    tableId:first.tableId,
+    personName:nombre,
+    takenBy:null,
+    createdAt:Date.now(),
+    items:Object.values(itemMap).map(i=>({name:i.name,selectedType:i.selectedType,qty:i.qty,finalPrice:i.price,price:i.price})),
+    descuento:0,pct:0,
+    _deudaSaldo:saldo,
+    _esDeuda:true,
+  };
+  await push(ref(db,'reprints'),{orderKey:'__summary__',order:syntheticOrder,tableLabel:`Deuda: ${nombre} · ${tLabel}`,total:saldo,ts:Date.now()});
+};
 window.marcarDeudor=async key=>{
   const o=DB.orders[key];if(!o)return;
   const overlay=document.createElement('div');
@@ -4464,7 +4497,7 @@ window.submitManualOrder=async(modo='pending')=>{
       <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer;margin-bottom:4px">
         <input type="checkbox" id="mn-deudor-disc" style="width:16px;height:16px;accent-color:#dc2626">
         <span style="font-size:13px;font-weight:600;flex:1">Descuento</span>
-        <input type="number" id="mn-deudor-pct" min="1" max="99" value="10" style="width:50px;padding:3px 6px;border:0.5px solid #d1d5db;border-radius:6px;font-family:inherit;font-size:14px;font-weight:700;text-align:center">
+        <input type="number" id="mn-deudor-pct" min="1" max="100" value="10" style="width:50px;padding:3px 6px;border:0.5px solid #d1d5db;border-radius:6px;font-family:inherit;font-size:14px;font-weight:700;text-align:center">
         <span style="font-size:13px;font-weight:600">%</span>
       </label>
       <div id="mn-deudor-disc-detail" style="display:none;justify-content:space-between;align-items:center;padding:8px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;margin-bottom:12px;border-top:0.5px solid #bbf7d0">
@@ -4756,7 +4789,6 @@ window.adminPrintGroup=async keys=>{
   const first=orders[0];
   const table=DB.tables[first.tableId];
   const tLabel=table?table.label:(first.tableId||'Mesa');
-  // Agrupar items
   const itemMap={};
   orders.forEach(o=>{
     (o.items||[]).forEach(i=>{
@@ -4767,9 +4799,13 @@ window.adminPrintGroup=async keys=>{
   });
   const items=Object.values(itemMap);
   const totalBase=items.reduce((s,i)=>s+i.price*i.qty,0);
-  // Mostrar modal de descuento
+  // Pedir descuento
   const {descuento,pct}=await showDiscountModal(totalBase);
   const totalFinal=totalBase-descuento;
+  // Guardar descuento elegido para que cobrar lo use
+  const groupKey=keys.slice().sort().join(',');
+  if(!C._printedDiscount)C._printedDiscount={};
+  C._printedDiscount[groupKey]={descuento,pct,totalBase,totalFinal};
   const syntheticOrder={
     tableId:first.tableId,
     personName:first.orderMode==='individual'?first.personName:null,
@@ -4789,9 +4825,21 @@ window.adminGroupCobrado=async keys=>{
     if(!tableLabel3){const t=DB.tables[o.tableId];tableLabel3=t?t.label:(o.tableId||'Mesa');}
     if(!personName3&&o.personName)personName3=o.personName;
   }
+  // Verificar si ya se imprimió la cuenta con descuento
+  const groupKey=keys.slice().sort().join(',');
+  const savedDisc=(C._printedDiscount||{})[groupKey];
   const existingPm=keys.map(k=>DB.orders[k]?.paymentMethod).find(Boolean)||null;
   let pm,pmDetail=null,descuento=0,pct=0;
-  if(existingPm){
+  if(savedDisc){
+    // Ya se imprimió — usar descuento guardado, solo pedir medio de pago
+    descuento=savedDisc.descuento;pct=savedDisc.pct;
+    const totalConDesc=total-descuento;
+    const res=await showPaymentChoiceModal(null,totalConDesc);
+    if(!res)return;
+    pm=res.pm;pmDetail=res.pmDetail||null;
+    // Limpiar el descuento guardado
+    delete C._printedDiscount[groupKey];
+  } else if(existingPm){
     pm=existingPm;
     const disc=await showDiscountModal(total);
     descuento=disc.descuento;pct=disc.pct;
@@ -4844,7 +4892,7 @@ window.adminGroupDeudor=async keys=>{
     <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer;margin-bottom:4px">
       <input type="checkbox" id="deudor-disc-check" style="width:16px;height:16px;accent-color:#dc2626">
       <span style="font-size:13px;font-weight:600;flex:1">Descuento</span>
-      <input type="number" id="deudor-disc-pct" min="1" max="99" value="10" style="width:50px;padding:3px 6px;border:0.5px solid #d1d5db;border-radius:6px;font-family:inherit;font-size:14px;font-weight:700;text-align:center">
+      <input type="number" id="deudor-disc-pct" min="1" max="100" value="10" style="width:50px;padding:3px 6px;border:0.5px solid #d1d5db;border-radius:6px;font-family:inherit;font-size:14px;font-weight:700;text-align:center">
       <span style="font-size:13px;font-weight:600">%</span>
     </label>
     <div id="deudor-disc-detail" style="display:none;justify-content:space-between;align-items:center;padding:8px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;margin-bottom:12px;border-top:0.5px solid #bbf7d0">
@@ -4899,7 +4947,7 @@ window.adminGroupDeudor=async keys=>{
     const nombre=(inp.value||'').trim();
     if(!nombre){inp.focus();return;}
     const conDesc=discCheck.checked;
-    const pct=conDesc?Math.min(99,Math.max(1,Number(discPct.value)||10)):0;
+    const pct=conDesc?Math.min(100,Math.max(1,Number(discPct.value)||10)):0;
     const descuento=conDesc?Math.round(totalBase*(pct/100)):0;
     const saldoPendiente=totalBase-descuento;
     cleanup();
@@ -5116,7 +5164,7 @@ function showDiscountModal(totalBase){
             <span style="font-size:14px;font-weight:600">Descuento</span>
           </label>
           <div style="display:flex;align-items:center;gap:4px">
-            <input type="number" id="disc-pct" min="1" max="99" value="${pct}" ${!discActive?'disabled':''} style="width:54px;padding:4px 6px;border:0.5px solid ${discActive?'var(--brand)':'#d1d5db'};border-radius:6px;font-family:inherit;font-size:15px;font-weight:700;text-align:center;color:${discActive?'var(--brand)':'#9ca3af'};background:${discActive?'#fff':'#f3f4f6'}">
+            <input type="number" id="disc-pct" min="1" max="100" value="${pct}" ${!discActive?'disabled':''} style="width:54px;padding:4px 6px;border:0.5px solid ${discActive?'var(--brand)':'#d1d5db'};border-radius:6px;font-family:inherit;font-size:15px;font-weight:700;text-align:center;color:${discActive?'var(--brand)':'#9ca3af'};background:${discActive?'#fff':'#f3f4f6'}">
             <span style="font-size:14px;font-weight:700;color:${discActive?'var(--brand)':'#9ca3af'}">%</span>
           </div>
           ${discActive?`<span style="font-size:13px;color:#dc2626;font-weight:600">-$${descuento.toLocaleString()}</span>`:''}
@@ -5131,7 +5179,7 @@ function showDiscountModal(totalBase){
           <button id="disc-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Confirmar</button>
         </div>`;
       overlay.querySelector('#disc-check')?.addEventListener('change',e=>{discActive=e.target.checked;const p=overlay.querySelector('#disc-pct');if(p)pct=Number(p.value)||10;render();});
-      overlay.querySelector('#disc-pct')?.addEventListener('change',e=>{pct=Math.min(99,Math.max(1,Number(e.target.value)||10));render();});
+      overlay.querySelector('#disc-pct')?.addEventListener('change',e=>{pct=Math.min(100,Math.max(1,Number(e.target.value)||10));render();});
       overlay.querySelector('#disc-ok').onclick=()=>{
         const descuento=discActive?Math.round(totalBase*(pct/100)):0;
         document.body.removeChild(overlay);resolve({descuento,pct:discActive?pct:0});
@@ -5176,7 +5224,7 @@ function showPaymentChoiceModal(orderKey, totalBase){
               <span style="font-size:14px;font-weight:600">Descuento</span>
             </label>
             <div style="display:flex;align-items:center;gap:4px">
-              <input type="number" id="pm-disc-pct" min="1" max="99" value="${pctVal}" ${!discActive?'disabled':''} style="width:54px;padding:4px 6px;border:0.5px solid ${discActive?'var(--brand)':'#d1d5db'};border-radius:6px;font-family:inherit;font-size:15px;font-weight:700;text-align:center;color:${discActive?'var(--brand)':'#9ca3af'};background:${discActive?'#fff':'#f3f4f6'}">
+              <input type="number" id="pm-disc-pct" min="1" max="100" value="${pctVal}" ${!discActive?'disabled':''} style="width:54px;padding:4px 6px;border:0.5px solid ${discActive?'var(--brand)':'#d1d5db'};border-radius:6px;font-family:inherit;font-size:15px;font-weight:700;text-align:center;color:${discActive?'var(--brand)':'#9ca3af'};background:${discActive?'#fff':'#f3f4f6'}">
               <span style="font-size:14px;font-weight:600;color:${discActive?'var(--brand)':'#9ca3af'}">%</span>
             </div>
             ${discActive?`<span style="font-size:13px;color:#dc2626;font-weight:600">-$${descMonto.toLocaleString()}</span>`:''}
@@ -5227,11 +5275,11 @@ function showPaymentChoiceModal(orderKey, totalBase){
         render();
       });
       overlay.querySelector('#pm-disc-pct')?.addEventListener('change',e=>{
-        pct=Math.min(99,Math.max(1,Number(e.target.value)||10));
+        pct=Math.min(100,Math.max(1,Number(e.target.value)||10));
         render();
       });
       overlay.querySelector('#pm-disc-pct')?.addEventListener('input',e=>{
-        pct=Math.min(99,Math.max(1,Number(e.target.value)||10));
+        pct=Math.min(100,Math.max(1,Number(e.target.value)||10));
         // Actualizar descuento sin re-render completo
         descuento=showTotal&&discActive?Math.round(totalBase*(pct/100)):0;
       });
