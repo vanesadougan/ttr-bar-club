@@ -3775,6 +3775,14 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
       if(montoInp)montoTotal=Math.max(0,Number(montoInp.value)||0);
       const monto=montoTotal;
       if(!monto||monto<=0)return;
+      // Validar que la suma de medios de pago coincida con el monto
+      if(payments.length>1){
+        const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
+        if(Math.abs(totalPagado-monto)>1){
+          alert(`La suma de los medios de pago ($${totalPagado.toLocaleString()}) no coincide con la cantidad cobrada ($${monto.toLocaleString()}). Ajustá los montos.`);
+          return;
+        }
+      }
       overlay.remove();
       const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
       const nuevoSaldo=Math.max(0,saldoMostrado-monto);
@@ -5252,6 +5260,14 @@ function showPaymentChoiceModal(orderKey, totalBase){
       });
       overlay.querySelector('#pm-confirm')?.addEventListener('click',()=>{
         if(!payments.length)return;
+        if(payments.length>1&&showTotal){
+          const totalCobrar2=totalBase-descuento;
+          const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
+          if(Math.abs(totalPagado-totalCobrar2)>1){
+            alert(`La suma de los medios de pago ($${totalPagado.toLocaleString()}) no coincide con el total a cobrar ($${totalCobrar2.toLocaleString()}). Ajustá los montos.`);
+            return;
+          }
+        }
         const pm=payments.length===1?payments[0].pm:'mixto';
         const pmDetail=payments.map(p=>({pm:p.pm,monto:Number(p.monto)||0}));
         document.body.removeChild(overlay);
