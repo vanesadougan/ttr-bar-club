@@ -5213,10 +5213,9 @@ function showPaymentChoiceModal(orderKey, totalBase){
           </span>
         </div>`:''}
 
-        const canConfirm=payments.length>0&&(!showTotal||restante===0);
-        <button id="pm-confirm" ${!canConfirm?'disabled':''} style="width:100%;padding:11px;border-radius:8px;border:none;background:${canConfirm?'var(--brand)':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${canConfirm?'pointer':'default'};font-family:inherit;margin-bottom:8px">
-          ${payments.length===0?'Elegí al menos un medio':restante>0?`Falta asignar $${restante.toLocaleString()}`:'Confirmar cobro'}
-        </button>
+        ${(()=>{const canConfirm=payments.length>0&&(!showTotal||restante===0);return `<button id="pm-confirm" ${!canConfirm?'disabled':''} style="width:100%;padding:11px;border-radius:8px;border:none;background:${canConfirm?'var(--brand)':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${canConfirm?'pointer':'not-allowed'};font-family:inherit;margin-bottom:8px;opacity:${canConfirm?1:0.6}">
+          ${payments.length===0?'Elegí al menos un medio':restante>0?`Falta $${restante.toLocaleString()}`:'Confirmar cobro'}
+        </button>`;})()}
         <button id="pm-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid #e5e7eb;background:transparent;font-size:13px;color:#6b7280;cursor:pointer;font-family:inherit">Cancelar</button>
       `;
 
