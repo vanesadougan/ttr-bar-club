@@ -4847,10 +4847,11 @@ window.adminGroupCobrado=async keys=>{
   if(grupoDisc){
     descuento=grupoDisc._grupoDescuento||0;
     pct=grupoDisc._grupoPct||0;
-    const totalConDesc=total-descuento;
-    const res=await showPaymentChoiceModal(null,totalConDesc);
+    // Pasar total original al modal con descuento pre-cargado
+    const res=await showPaymentChoiceModal(null,total,{descuento,pct});
     if(!res)return;
     pm=res.pm;pmDetail=res.pmDetail||null;
+    descuento=res.descuento||descuento;pct=res.pct||pct;
   } else if(existingPm){
     pm=existingPm;
     const disc=await showDiscountModal(total);
@@ -5207,7 +5208,7 @@ function showDiscountModal(totalBase){
     render();
   });
 }
-function showPaymentChoiceModal(orderKey, totalBase){
+function showPaymentChoiceModal(orderKey, totalBase, preDiscount){
   return new Promise(resolve=>{
     const overlay=document.createElement('div');
     overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
@@ -5215,10 +5216,11 @@ function showPaymentChoiceModal(orderKey, totalBase){
     const showTotal=totalBase!=null&&totalBase>0;
     const _desc10=showTotal?Math.round(totalBase*0.1):0;
 
-    // State
-    let descuento=0, pct=0;
-    let discActive=false;
-    let payments=[]; // [{pm, monto}]
+    // State — pre-cargar descuento si viene del grupo
+    let descuento=preDiscount?preDiscount.descuento:0;
+    let pct=preDiscount?preDiscount.pct:10;
+    let discActive=preDiscount&&preDiscount.descuento>0;
+    let payments=[];
 
     const render=()=>{
       const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
