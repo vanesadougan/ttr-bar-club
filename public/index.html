@@ -291,7 +291,7 @@ let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}
 // Customer flow state (local only)
 let C = {
   mode:'admin', adminTab:'orders', waiterStep:'select', waiterId:null, waiterName:'', waiterTableId:null, waiterOrderMode:null, waiterPersonName:'', waiterCart:{}, waiterCustDishId:null, waiterCafCustId:null, waiterMenuSection:'platos', waiterCat:null, waiterCafCat:null, waiterSearch:'', waiterPayMesa:null, waiterPayMethod:null,
-  cajaModal:null, cajaGastoTipo:'proveedor', cajaMonto:'', cajaDesc:'', cajaInicial:'',
+  cajaModal:null, cajaGastoTipo:'proveedor', cajaGastoPm:'efectivo', cajaMonto:'', cajaDesc:'', cajaInicial:'',
   customerStep:'mesa', customerTableId:null,
   orderMode:null, customerName:'', customerNameInput:'',
   customerCat:'todos', customerMenuSection:'platos', cart:{}, custDishId:null,
@@ -831,6 +831,9 @@ function renderCajaTab(){
       const cats=[{v:'proveedor',l:'🏪 Gasto proveedor'},{v:'personal',l:'👥 Pago personal'}];
       cats.forEach(c=>{const sel=(C.cajaGastoTipo||'')==c.v;h+=`<button onclick="setCajaGastoTipo('${c.v}')" style="padding:10px;border-radius:8px;border:0.5px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'#fff5f7':'var(--card)'};color:${sel?'var(--accent)':'var(--text)'};font-size:13px;font-weight:${sel?'600':'400'};cursor:pointer;font-family:inherit">${c.l}</button>`;});
       h+=`</div>`;
+      h+=`<div style="margin-bottom:10px"><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Medio de pago</label><div style="display:flex;gap:8px">`;
+      [{v:'efectivo',l:'💵 Efectivo'},{v:'mercadopago',l:'📱 Mercado Pago'},{v:'transferencia',l:'🏦 Transferencia'}].forEach(p=>{const sel=(C.cajaGastoPm||'efectivo')===p.v;h+=`<button onclick="setCajaGastoPm('${p.v}')" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid ${sel?'var(--brand)':'var(--border)'};background:${sel?'var(--brand)':'var(--card)'};color:${sel?'#fff':'var(--text)'};font-size:12px;font-weight:${sel?'600':'400'};cursor:pointer;font-family:inherit">${p.l}</button>`;});
+      h+=`</div></div>`;
       h+=`<div class="two-col"><div class="form-group" style="margin-bottom:10px"><label>Monto ($)</label><input type="number" min="0" placeholder="0" id="caja-monto"></div>`;
       h+=`<div class="form-group" style="margin-bottom:10px"><label>Descripción <span style="font-size:11px;color:var(--muted)">(opcional)</span></label><input placeholder="Ej: Verdulería, Sueldo..." id="caja-desc"></div></div>`;
       h+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="cajaGuardarGasto()">Guardar gasto</button><button class="btn btn-ghost" onclick="cajaCancelarModal()">Cancelar</button></div>`;
@@ -898,8 +901,9 @@ window.cajaConfirmarApertura=async()=>{
   C.cajaModal=null;render();
 };
 // Gasto
-window.cajaGasto=()=>{C.cajaModal='gasto';C.cajaGastoTipo='proveedor';C.cajaMonto='';C.cajaDesc='';render();};
+window.cajaGasto=()=>{C.cajaModal='gasto';C.cajaGastoTipo='proveedor';C.cajaGastoPm='efectivo';C.cajaMonto='';C.cajaDesc='';render();};
 window.setCajaGastoTipo=t=>{C.cajaGastoTipo=t;render();};
+window.setCajaGastoPm=t=>{C.cajaGastoPm=t;render();};
 window.cajaGuardarGasto=async()=>{
   const montoInp=document.getElementById('caja-monto');
   const descInp=document.getElementById('caja-desc');
@@ -907,10 +911,11 @@ window.cajaGuardarGasto=async()=>{
   const desc=(descInp?descInp.value:'').trim();
   if(!monto||monto<=0){alert('Ingresá un monto mayor a 0');return;}
   const tipo=C.cajaGastoTipo||'proveedor';
+  const pm=C.cajaGastoPm||'efectivo';
   const concepto=tipo==='personal'?'Pago personal':'Gasto proveedor';
   const hoy=new Date().toISOString().slice(0,10);
-  await push(ref(db,'caja'),{tipo,concepto,monto:-monto,fecha:hoy,ts:Date.now(),desc});
-  C.cajaModal=null;C.cajaMonto='';C.cajaDesc='';render();
+  await push(ref(db,'caja'),{tipo,concepto,monto:-monto,fecha:hoy,ts:Date.now(),desc,paymentMethod:pm});
+  C.cajaModal=null;C.cajaMonto='';C.cajaDesc='';C.cajaGastoPm='efectivo';render();
 };
 window.cajaCancelarModal=()=>{C.cajaModal=null;render();};
 
@@ -3387,7 +3392,9 @@ function renderOrdersTab(){
       const isBilled=pgOrders.every(o=>o.status==='billed');
 
       if(personList.length>1||pg.personName){
-        const addBtn=pg.personName?`<button onclick="event.stopPropagation();addOrderToIndividual('${tg.tableId||''}','${(pg.personName||'').replace(/'/g,"\\'")}') " title="Agregar pedido a ${pg.personName}" style="margin-left:auto;width:22px;height:22px;border-radius:50%;border:none;background:#3b82f6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>`:'';
+        const addBtn=pg.personName
+          ?`<button onclick="event.stopPropagation();addOrderToIndividual('${tg.tableId||''}','${(pg.personName||'').replace(/'/g,"\\'")}') " title="Agregar pedido a ${pg.personName}" style="margin-left:auto;width:22px;height:22px;border-radius:50%;border:none;background:#3b82f6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>`
+          :`<button onclick="event.stopPropagation();addOrderToGeneral('${tg.tableId||''}')" title="Agregar pedido general" style="margin-left:auto;width:22px;height:22px;border-radius:50%;border:none;background:#3b82f6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>`;
         h+=`<div style="padding:6px 14px;background:#f0f4ff;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:600;color:#1e40af;display:flex;align-items:center">👤 ${pg.personName||'General'}${addBtn}</div>`;
       }
 
@@ -3465,7 +3472,7 @@ function renderOrdersTab(){
         h+=`<div style="padding:8px 14px;background:#faf5ff;border-top:0.5px solid #e9d5ff;display:flex;align-items:center;justify-content:space-between"><span style="font-size:12px;color:#7c3aed;font-weight:500">⚡ Pide cuenta${pm?' · '+(pmLabels[pm]||pm):''}</span><div style="display:flex;gap:6px"><button onclick="adminGroupCobrado(window._pgKeys[${_pgIdx}])" style="padding:4px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrar ✓</button></div></div>`;
       } else if(canCobrar){
         const _pgIdx=window._pgKeys.push(allKeys)-1;
-        h+=`<div style="padding:8px 14px;border-top:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:600;color:var(--accent)">$${pgTotal.toLocaleString()}</span><div style="display:flex;gap:6px"><button onclick="adminGroupCobrado(window._pgKeys[${_pgIdx}])" style="padding:4px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrar ✓</button><button onclick="adminGroupDeudor(window._pgKeys[${_pgIdx}])" style="padding:4px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor</button></div></div>`;
+        h+=`<div style="padding:8px 14px;border-top:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:600;color:var(--accent)">$${pgTotal.toLocaleString()}</span><div style="display:flex;gap:6px"><button onclick="adminPrintGroup(window._pgKeys[${_pgIdx}])" style="padding:4px 10px;font-size:12px;border-radius:6px;border:0.5px solid var(--border);color:var(--muted);background:var(--bg);cursor:pointer;font-family:inherit">🖨️</button><button onclick="adminGroupCobrado(window._pgKeys[${_pgIdx}])" style="padding:4px 10px;font-size:12px;border-radius:6px;border:0.5px solid #5b21b6;color:#5b21b6;background:#ede9fe;cursor:pointer;font-family:inherit">Cobrar ✓</button><button onclick="adminGroupDeudor(window._pgKeys[${_pgIdx}])" style="padding:4px 10px;font-size:12px;border-radius:6px;border:0.5px solid #dc2626;color:#dc2626;background:#fef2f2;cursor:pointer;font-family:inherit">💳 Deudor</button></div></div>`;
       } else if(hasPending||hasPreparing){
         h+=`<div style="padding:8px 14px;border-top:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between"><span style="font-size:13px;font-weight:600;color:var(--accent)">$${pgTotal.toLocaleString()}</span><span style="font-size:11px;color:var(--muted)">⏳ Esperando entrega</span></div>`;
       }
@@ -3509,6 +3516,7 @@ function renderClientesTab(){
     clientes.forEach(c=>{
       h+=`<div style="display:flex;align-items:center;padding:12px 16px;border-bottom:0.5px solid var(--border)">
         <div style="flex:1;font-size:14px;font-weight:500">👤 ${c.nombre}</div>
+        <button onclick="editCliente('${c._key}','${c.nombre.replace(/'/g,"\\'")}') " style="width:28px;height:28px;border-radius:50%;border:none;background:#dbeafe;color:#1e40af;font-size:13px;cursor:pointer;line-height:1;margin-right:6px">✏️</button>
         <button onclick="deleteCliente('${c._key}')" style="width:28px;height:28px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:14px;cursor:pointer;line-height:1">✕</button>
       </div>`;
     });
@@ -3528,6 +3536,32 @@ window.addCliente=async()=>{
 window.deleteCliente=async key=>{
   if(!confirm('¿Eliminar este cliente?'))return;
   await remove(ref(db,`clientes/${key}`));
+};
+window.editCliente=(key,nombreActual)=>{
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="font-size:16px;font-weight:600;margin-bottom:14px">✏️ Editar cliente</div>
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Nombre</label>
+      <input id="edit-cliente-inp" value="${nombreActual}" style="font-size:16px" autocomplete="off">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button id="edit-cliente-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
+      <button onclick="this.closest('[style*=fixed]').remove()" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit;color:var(--muted)">Cancelar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  const inp=overlay.querySelector('#edit-cliente-inp');
+  setTimeout(()=>{inp.focus();inp.select();},50);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  overlay.querySelector('#edit-cliente-ok').onclick=async()=>{
+    const nombre=(inp.value||'').trim();
+    if(!nombre){inp.focus();return;}
+    await update(ref(db,`clientes/${key}`),{nombre});
+    overlay.remove();
+  };
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')overlay.querySelector('#edit-cliente-ok').click();});
 };
 function renderDeudoresTab(){
   window._deudorKeys=[];
@@ -3838,7 +3872,7 @@ function renderHistoryTab(){
       h+=`<div class="order-time">${dateStr}</div>`;
       h+=`</div>`;
       h+=`<div class="order-items-text">`;
-      (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <em>(${i.selectedType})</em>`:''}<br>`;});
+      (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:''}<br>`;});
       h+=`</div>`;
       h+=`<div class="order-footer"><span class="status status-cobrado">Cobrado</span>`;
       if(pm)h+=`<span style="font-size:12px;color:var(--muted)">${pmLabels[pm]||pm}</span>`;
@@ -3848,13 +3882,16 @@ function renderHistoryTab(){
       const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
       const kioskChip=o.isKiosko?`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">🏪 Kiosko</span>`:'';
       const waiterChip=o.takenBy?`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px;font-weight:500">👩 ${o.takenBy}</span>`:'';
+      const descuento=o.descuento||0;const pct=o.pct||0;
+      const totalFinal=total-descuento;
       h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${o.isKiosko?kioskChip:tableLabel(o.tableId)+chip}${waiterChip}</div><div class="order-time">${dateStr}</div></div>`;
       h+=`<div class="order-items-text">`;
-      (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}<br>`;});
+      (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:''}${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}<br>`;});
       h+=`</div>`;
+      if(descuento>0)h+=`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#059669"><span>Descuento ${pct}%</span><span>-$${descuento.toLocaleString()}</span></div>`;
       h+=`<div class="order-footer"><span class="status status-cobrado">Cobrado</span>`;
       if(pm)h+=`<span style="font-size:12px;color:var(--muted)">${pmLabels[pm]||pm}</span>`;
-      h+=`<span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span></div></div>`;
+      h+=`<span style="font-weight:600;font-size:14px">$${totalFinal.toLocaleString()}</span></div></div>`;
     }
   });
   return h+`</div>`;
@@ -4180,6 +4217,12 @@ window.addOrderToIndividual=(tableId,personName)=>{
   render();
   setTimeout(()=>document.getElementById('manual-search')?.focus(),100);
 };
+window.addOrderToGeneral=(tableId)=>{
+  C.manualOrder={tableId,orderMode:'general',personName:'',items:[]};
+  C.manualOrderSearch='';C.manualOrderPicker=null;
+  render();
+  setTimeout(()=>document.getElementById('manual-search')?.focus(),100);
+};
 window.startManualOrder=()=>{
   if(C.manualOrder){C.manualOrder=null;}
   else{
@@ -4227,6 +4270,7 @@ window.updateManualSearch=()=>{
     if(d.unavailable)return false;
     if(d.name.toLowerCase().includes(search))return true;
     // Buscar por código de barras
+    if(d.barcode&&String(d.barcode).includes(search))return true;
     if(d.barcodes&&d.barcodes.some(b=>String(b).includes(search)))return true;
     if(d.types&&d.types.some(t=>t.barcodes&&t.barcodes.some(b=>String(b).includes(search))))return true;
     return false;
@@ -4617,6 +4661,36 @@ window.toggleOrderExpand=tableId=>{
   C._ordersExpanded[tableId]=!C._ordersExpanded[tableId];
   render();
 };
+window.adminPrintGroup=async keys=>{
+  const orders=keys.map(k=>DB.orders[k]).filter(Boolean);
+  if(!orders.length)return;
+  const first=orders[0];
+  const table=DB.tables[first.tableId];
+  const tLabel=table?table.label:(first.tableId||'Mesa');
+  // Agrupar items
+  const itemMap={};
+  orders.forEach(o=>{
+    (o.items||[]).forEach(i=>{
+      const key=i.name+(i.selectedType?'|'+i.selectedType:'');
+      if(!itemMap[key])itemMap[key]={name:i.name,selectedType:i.selectedType||null,price:i.finalPrice||i.price,qty:0};
+      itemMap[key].qty+=i.qty;
+    });
+  });
+  const items=Object.values(itemMap);
+  const totalBase=items.reduce((s,i)=>s+i.price*i.qty,0);
+  // Mostrar modal de descuento
+  const {descuento,pct}=await showDiscountModal(totalBase);
+  const totalFinal=totalBase-descuento;
+  const syntheticOrder={
+    tableId:first.tableId,
+    personName:first.orderMode==='individual'?first.personName:null,
+    takenBy:first.takenBy||null,
+    createdAt:Date.now(),
+    items:items.map(i=>({name:i.name,selectedType:i.selectedType,qty:i.qty,finalPrice:i.price,price:i.price})),
+    descuento,pct,totalFinal,
+  };
+  await push(ref(db,'reprints'),{orderKey:'__summary__',order:syntheticOrder,tableLabel:tLabel,total:totalFinal,ts:Date.now()});
+};
 window.adminGroupCobrado=async keys=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
   let total=0;let tableLabel3='';let personName3='';
@@ -4800,7 +4874,8 @@ window.updateEditOrderSearch=()=>{
   if(search.length<1){list.style.display='none';list.innerHTML='';return;}
   const allItems=[
     ...Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k,_src:'dishes'})),
-    ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria',emoji:v.emoji||'☕'}))
+    ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria',emoji:v.emoji||'☕'})),
+    ...Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k,_src:'kiosko',emoji:'🏪'}))
   ].filter(d=>!d.unavailable&&d.name.toLowerCase().includes(search));
   const seen=new Set();
   const unique=allItems.filter(d=>{const k=d.name+'|'+d._src;if(seen.has(k))return false;seen.add(k);return true;});
@@ -4808,13 +4883,13 @@ window.updateEditOrderSearch=()=>{
   if(unique.length===0){list.innerHTML='<div style="padding:8px 12px;font-size:13px;color:var(--muted)">Sin resultados</div>';return;}
   list.innerHTML=unique.map(d=>'<div onclick="addItemToEditOrder(\''+d._key+'\',\''+d._src+'\')" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'\'">'+
     '<span style="font-size:16px">'+(d.emoji||'🍽️')+'</span>'+
-    '<div style="flex:1"><div style="font-size:13px;font-weight:500">'+d.name+'</div><div style="font-size:11px;color:var(--muted)">'+(d._src==='cafeteria'?'☕ Cafetería':'🍽 Restaurant')+(d.hasTypes&&(d.types||[]).length>0?' · variantes':'')+'</div></div>'+
+    '<div style="flex:1"><div style="font-size:13px;font-weight:500">'+d.name+'</div><div style="font-size:11px;color:var(--muted)">'+(d._src==='cafeteria'?'☕ Cafetería':d._src==='kiosko'?'🏪 Kiosko':'🍽 Restaurant')+(d.hasTypes&&(d.types||[]).length>0?' · variantes':'')+'</div></div>'+
     '<span style="font-size:13px;font-weight:600;color:var(--accent)">$'+Number(d.price).toLocaleString()+'</span>'+
     '</div>').join('');
 };
 window.addItemToEditOrder=(key,src)=>{
   if(!window._adminEditItems)return;
-  const d=src==='cafeteria'?DB.cafeteriaItems[key]:DB.dishes[key];
+  const d=src==='cafeteria'?DB.cafeteriaItems[key]:src==='kiosko'?DB.kioskItems[key]:DB.dishes[key];
   if(!d)return;
   // Si el plato tiene variantes, no podemos elegirlas aquí — agregar sin variante
   const existing=window._adminEditItems.find(i=>i.name===d.name&&!i.selectedType);
@@ -4950,44 +5025,135 @@ function showDiscountModal(totalBase){
 function showPaymentChoiceModal(orderKey, totalBase){
   return new Promise(resolve=>{
     const overlay=document.createElement('div');
-    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
     const pms=[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}];
     const showTotal=totalBase!=null&&totalBase>0;
     const _desc10=showTotal?Math.round(totalBase*0.1):0;
-    overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-      <div style="font-size:16px;font-weight:600;margin-bottom:4px">Medio de pago</div>
-      <div style="font-size:13px;color:#6b7280;margin-bottom:12px">Seleccioná el método para registrar el cobro</div>
-      ${showTotal?`<div style="margin-bottom:14px">
-        <label style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer">
-          <input type="checkbox" id="pm-disc-check" style="width:18px;height:18px;cursor:pointer;accent-color:var(--brand)" onchange="document.getElementById('pm-disc-detail').style.display=this.checked?'flex':'none'">
-          <span style="font-size:14px;font-weight:600;flex:1">Aplica 10%</span>
-          <span style="font-size:13px;color:#059669;font-weight:600">-$${_desc10.toLocaleString()}</span>
-        </label>
-        <div id="pm-disc-detail" style="display:none;justify-content:space-between;align-items:center;padding:10px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;border-top:0.5px solid #bbf7d0">
-          <div><div style="font-size:11px;color:#9ca3af">Total original</div><div style="font-size:14px;color:#6b7280;text-decoration:line-through">$${totalBase.toLocaleString()}</div></div>
-          <div style="font-size:13px;color:#dc2626;font-weight:600">-10%</div>
-          <div><div style="font-size:11px;color:#9ca3af;text-align:right">Total a cobrar</div><div style="font-size:20px;font-weight:700;color:#059669">$${(totalBase-_desc10).toLocaleString()}</div></div>
+
+    // State
+    let descuento=0, pct=0;
+    let discActive=false;
+    let payments=[]; // [{pm, monto}]
+
+    const render=()=>{
+      const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
+      const descMonto=showTotal&&discActive?Math.round(totalBase*(pct/100)):0;
+      descuento=descMonto;
+      const totalCobrar=showTotal?(totalBase-descuento):0;
+      const restante=showTotal?Math.max(0,totalCobrar-totalPagado):0;
+      const pctVal=pct||10;
+
+      overlay.querySelector('#pm-body').innerHTML=`
+        ${showTotal?`<div style="margin-bottom:14px">
+          <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#f8f7f4;border-radius:${discActive?'10px 10px 0 0':'10px'}">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
+              <input type="checkbox" id="pm-disc-check" ${discActive?'checked':''} style="width:18px;height:18px;cursor:pointer;accent-color:var(--brand)">
+              <span style="font-size:14px;font-weight:600">Descuento</span>
+            </label>
+            <div style="display:flex;align-items:center;gap:4px">
+              <input type="number" id="pm-disc-pct" min="1" max="99" value="${pctVal}" ${!discActive?'disabled':''} style="width:54px;padding:4px 6px;border:0.5px solid ${discActive?'var(--brand)':'#d1d5db'};border-radius:6px;font-family:inherit;font-size:15px;font-weight:700;text-align:center;color:${discActive?'var(--brand)':'#9ca3af'};background:${discActive?'#fff':'#f3f4f6'}">
+              <span style="font-size:14px;font-weight:600;color:${discActive?'var(--brand)':'#9ca3af'}">%</span>
+            </div>
+            ${discActive?`<span style="font-size:13px;color:#dc2626;font-weight:600">-$${descMonto.toLocaleString()}</span>`:''}
+          </div>
+          ${discActive?`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;border-top:0.5px solid #bbf7d0">
+            <div><div style="font-size:11px;color:#9ca3af">Original</div><div style="font-size:13px;color:#6b7280;text-decoration:line-through">$${totalBase.toLocaleString()}</div></div>
+            <div style="font-size:13px;color:#dc2626;font-weight:600">-${pctVal}%</div>
+            <div><div style="font-size:11px;color:#9ca3af;text-align:right">A cobrar</div><div style="font-size:18px;font-weight:700;color:#059669">$${totalCobrar.toLocaleString()}</div></div>
+          </div>`:''}
+        </div>`:''}
+
+        <div style="font-size:12px;font-weight:600;color:#6b7280;margin-bottom:8px">MEDIOS DE PAGO</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+          ${pms.map(p=>`<button data-add-pm="${p.v}" style="padding:7px 10px;border-radius:8px;border:0.5px solid #e5e7eb;background:#fff;font-size:13px;cursor:pointer;font-family:inherit">${p.l}</button>`).join('')}
         </div>
-      </div>`:''}
-      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-        ${pms.map(p=>`<button data-pm="${p.v}" style="padding:10px 14px;border-radius:8px;border:0.5px solid #e5e7eb;background:#fff;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;text-align:left">${p.l}</button>`).join('')}
-      </div>
-      <button id="pm-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid #e5e7eb;background:transparent;font-size:13px;color:#6b7280;cursor:pointer;font-family:inherit">Cancelar</button>
+
+        ${payments.length>0?`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
+          ${payments.map((p,i)=>{
+            const pm=pms.find(x=>x.v===p.pm);
+            return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8f7f4;border-radius:8px;border:0.5px solid #e5e7eb">
+              <span style="font-size:13px;flex:1;font-weight:500">${pm?pm.l:p.pm}</span>
+              <span style="font-size:12px;color:#6b7280">$</span>
+              <input type="number" min="0" value="${p.monto||''}" placeholder="${restante>0&&i===payments.length-1?restante:''}" data-pm-idx="${i}"
+                style="width:90px;padding:4px 8px;border:0.5px solid #d1d5db;border-radius:6px;font-family:inherit;font-size:14px;font-weight:600;text-align:right">
+              <button data-rm-pm="${i}" style="width:22px;height:22px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:14px;cursor:pointer;line-height:1">×</button>
+            </div>`;
+          }).join('')}
+        </div>`:''}
+
+        ${showTotal?`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:${restante===0&&payments.length>0?'#f0fdf4':'#fff7ed'};border-radius:8px;margin-bottom:14px;border:0.5px solid ${restante===0&&payments.length>0?'#bbf7d0':'#fed7aa'}">
+          <span style="font-size:13px;font-weight:600;color:#6b7280">Total a cobrar: <strong style="color:#111">$${totalCobrar.toLocaleString()}</strong></span>
+          <span style="font-size:13px;font-weight:600;color:${restante===0&&payments.length>0?'#059669':'#d97706'}">
+            ${restante===0&&payments.length>0?'✓ Completo':`Falta: $${restante.toLocaleString()}`}
+          </span>
+        </div>`:''}
+
+        <button id="pm-confirm" ${payments.length===0?'disabled':''} style="width:100%;padding:11px;border-radius:8px;border:none;background:${payments.length>0?'var(--brand)':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${payments.length>0?'pointer':'default'};font-family:inherit;margin-bottom:8px">
+          ${payments.length>0?'Confirmar cobro':'Elegí al menos un medio'}
+        </button>
+        <button id="pm-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid #e5e7eb;background:transparent;font-size:13px;color:#6b7280;cursor:pointer;font-family:inherit">Cancelar</button>
+      `;
+
+      // Bind events
+      overlay.querySelector('#pm-disc-check')?.addEventListener('change',e=>{
+        discActive=e.target.checked;
+        const pctInp=overlay.querySelector('#pm-disc-pct');
+        if(pctInp)pct=Number(pctInp.value)||10;
+        render();
+      });
+      overlay.querySelector('#pm-disc-pct')?.addEventListener('change',e=>{
+        pct=Math.min(99,Math.max(1,Number(e.target.value)||10));
+        render();
+      });
+      overlay.querySelector('#pm-disc-pct')?.addEventListener('input',e=>{
+        pct=Math.min(99,Math.max(1,Number(e.target.value)||10));
+        // Actualizar descuento sin re-render completo
+        descuento=showTotal&&discActive?Math.round(totalBase*(pct/100)):0;
+      });
+      overlay.querySelectorAll('[data-add-pm]').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          const pm=btn.dataset.addPm;
+          // Si ya existe ese medio, no duplicar
+          if(!payments.find(p=>p.pm===pm)){
+            // Pre-cargar con el restante si es el primero
+            const totalCobrar2=showTotal?(totalBase-descuento):0;
+            const totalPagado2=payments.reduce((s,p)=>s+Number(p.monto||0),0);
+            const restante2=showTotal?Math.max(0,totalCobrar2-totalPagado2):0;
+            payments.push({pm,monto:restante2>0?restante2:''});
+            render();
+          }
+        });
+      });
+      overlay.querySelectorAll('[data-pm-idx]').forEach(inp=>{
+        inp.addEventListener('input',e=>{
+          payments[parseInt(inp.dataset.pmIdx)].monto=e.target.value;
+          // No re-render para no perder foco, solo actualizar restante label
+        });
+        inp.addEventListener('change',()=>render());
+      });
+      overlay.querySelectorAll('[data-rm-pm]').forEach(btn=>{
+        btn.addEventListener('click',()=>{payments.splice(parseInt(btn.dataset.rmPm),1);render();});
+      });
+      overlay.querySelector('#pm-confirm')?.addEventListener('click',()=>{
+        if(!payments.length)return;
+        const pm=payments.length===1?payments[0].pm:'mixto';
+        const pmDetail=payments.map(p=>({pm:p.pm,monto:Number(p.monto)||0}));
+        document.body.removeChild(overlay);
+        resolve(showTotal
+          ?{pm,pmDetail,descuento,pct:discActive?pct:0,totalFinal:totalBase-descuento}
+          :{pm,pmDetail});
+      });
+      overlay.querySelector('#pm-cancel')?.addEventListener('click',()=>{document.body.removeChild(overlay);resolve(null);});
+    };
+
+    overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto">
+      <div style="font-size:16px;font-weight:600;margin-bottom:4px">Medio de pago</div>
+      <div style="font-size:13px;color:#6b7280;margin-bottom:14px">Podés elegir más de uno</div>
+      <div id="pm-body"></div>
     </div>`;
     document.body.appendChild(overlay);
-    overlay.querySelectorAll('[data-pm]').forEach(btn=>{
-      btn.addEventListener('mouseover',()=>btn.style.background='#f8f7f4');
-      btn.addEventListener('mouseout',()=>btn.style.background='#fff');
-      btn.addEventListener('click',()=>{
-        const checked=showTotal&&(overlay.querySelector('#pm-disc-check')?.checked||false);
-        const pct=checked?10:0;
-        const descuento=checked?Math.round(totalBase*0.1):0;
-        document.body.removeChild(overlay);
-        resolve(showTotal?{pm:btn.dataset.pm,descuento,pct,totalFinal:totalBase-descuento}:btn.dataset.pm);
-      });
-    });
-    overlay.querySelector('#pm-cancel').addEventListener('click',()=>{document.body.removeChild(overlay);resolve(null);});
     overlay.addEventListener('click',e=>{if(e.target===overlay){document.body.removeChild(overlay);resolve(null);}});
+    render();
   });
 }
 window.markGroupCobrado=async gi=>{
@@ -5268,7 +5434,7 @@ function renderMenuOnly(mc){
       h+=`<button class="cat-tab${C.customerCat===cid?' active':''}${isP?' promo-tab':''}" onclick="setMenuOnlyCat('${cid}')"><span class="cat-emoji">${cat?cat.icon:'🍽'}</span>${cat?cat.label:cid}</button>`;
     });
     h+=`</div><div class="menu-grid">`;
-    const filtered=C.customerCat?allDishes.filter(d=>d.cat===C.customerCat):allDishes;    filtered.forEach(d=>{
+    const filtered=(C.customerCat?allDishes.filter(d=>d.cat===C.customerCat):allDishes).sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));    filtered.forEach(d=>{
       const dishCat=cats.find(c=>c._key===d.cat);
       const isP=dishCat&&dishCat.isPromo&&(d.promoDiscount>0||d.is2x1);
       const fp=dishFinalPrice(d,1);
