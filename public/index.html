@@ -3704,6 +3704,7 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
   const pms=[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}];
   let payments=[];
   let montoTotal=saldoMostrado;
+  const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
   document.body.appendChild(overlay);
 
