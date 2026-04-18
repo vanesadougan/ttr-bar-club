@@ -3398,7 +3398,7 @@ function renderOrdersTab(){
       const allKeys=pgOrders.map(o=>o._key);
       const isBilled=pgOrders.every(o=>o.status==='billed');
 
-      if(personList.length>1||pg.personName){
+      if(personList.length>1||pg.personName||!pg.personName){
         const addBtn=pg.personName
           ?`<button onclick="event.stopPropagation();addOrderToIndividual('${tg.tableId||''}','${(pg.personName||'').replace(/'/g,"\\'")}') " title="Agregar pedido a ${pg.personName}" style="margin-left:auto;width:22px;height:22px;border-radius:50%;border:none;background:#3b82f6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>`
           :`<button onclick="event.stopPropagation();addOrderToGeneral('${tg.tableId||''}')" title="Agregar pedido general" style="margin-left:auto;width:22px;height:22px;border-radius:50%;border:none;background:#3b82f6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>`;
@@ -3704,8 +3704,6 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
   const pms=[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}];
   let payments=[];
   let montoTotal=saldoMostrado;
-
-  const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
   document.body.appendChild(overlay);
 
@@ -3743,9 +3741,11 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
       <button id="cobro-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
     </div>`;
 
+    overlay.querySelector('#cobro-monto')?.addEventListener('input',e=>{
+      montoTotal=Math.max(0,Number(e.target.value)||0);
+    });
     overlay.querySelector('#cobro-monto')?.addEventListener('change',e=>{
       montoTotal=Math.max(0,Number(e.target.value)||0);
-      // Actualizar último payment con restante
       renderOverlay();
     });
     overlay.querySelectorAll('[data-add-pm]').forEach(btn=>{
