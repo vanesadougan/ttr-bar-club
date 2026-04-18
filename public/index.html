@@ -3404,7 +3404,8 @@ function renderOrdersTab(){
       const pgTotalConDesc=pgTotal-grupoDescuento;
 
       if(personList.length>1||pg.personName||!pg.personName){
-        const discBtn=`<button onclick="event.stopPropagation();setGrupoDescuento(${JSON.stringify(allKeys)})" title="Descuento" style="width:22px;height:22px;border-radius:50%;border:none;background:${grupoDescuento>0?'#059669':'#e5e7eb'};color:${grupoDescuento>0?'#fff':'#6b7280'};font-size:10px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">%</button>`;
+        const _discIdx=window._pgKeys.push(allKeys)-1;
+        const discBtn=`<button onclick="event.stopPropagation();setGrupoDescuento(window._pgKeys[${_discIdx}])" title="Descuento" style="width:22px;height:22px;border-radius:50%;border:none;background:${grupoDescuento>0?'#059669':'#e5e7eb'};color:${grupoDescuento>0?'#fff':'#6b7280'};font-size:10px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">%</button>`;
         const addBtn=pg.personName
           ?`<button onclick="event.stopPropagation();addOrderToIndividual('${tg.tableId||''}','${(pg.personName||'').replace(/'/g,"\\'")}') " title="Agregar pedido a ${pg.personName}" style="width:22px;height:22px;border-radius:50%;border:none;background:#3b82f6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>`
           :`<button onclick="event.stopPropagation();addOrderToGeneral('${tg.tableId||''}')" title="Agregar pedido general" style="width:22px;height:22px;border-radius:50%;border:none;background:#3b82f6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>`;
@@ -4829,6 +4830,7 @@ window.adminPrintGroup=async keys=>{
     descuento,pct,totalFinal,
   };
   await push(ref(db,'reprints'),{orderKey:'__summary__',order:syntheticOrder,tableLabel:tLabel,total:totalFinal,ts:Date.now()});
+  showNotif('order','🖨️ Enviado a imprimir',`${tLabel}${descuento>0?` · -${pct}%`:''} · $${totalFinal.toLocaleString()}`);
 };
 window.adminGroupCobrado=async keys=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
