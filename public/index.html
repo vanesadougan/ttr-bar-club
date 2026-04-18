@@ -3751,6 +3751,9 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
     });
     overlay.querySelectorAll('[data-add-pm]').forEach(btn=>{
       btn.addEventListener('click',()=>{
+        // Leer el monto actual del input en el momento del click
+        const montoInp=overlay.querySelector('#cobro-monto');
+        if(montoInp)montoTotal=Math.max(0,Number(montoInp.value)||0);
         if(!payments.find(p=>p.pm===btn.dataset.addPm)){
           const pagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
           const resta=Math.max(0,montoTotal-pagado);
@@ -3768,6 +3771,8 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
     });
     overlay.querySelector('#cobro-ok')?.addEventListener('click',async()=>{
       if(!payments.length)return;
+      const montoInp=overlay.querySelector('#cobro-monto');
+      if(montoInp)montoTotal=Math.max(0,Number(montoInp.value)||0);
       const monto=montoTotal;
       if(!monto||monto<=0)return;
       overlay.remove();
