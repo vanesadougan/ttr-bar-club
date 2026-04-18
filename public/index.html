@@ -4806,6 +4806,7 @@ window.adminPrintGroup=async keys=>{
   const groupKey=keys.slice().sort().join(',');
   if(!C._printedDiscount)C._printedDiscount={};
   C._printedDiscount[groupKey]={descuento,pct,totalBase,totalFinal};
+  console.log('Descuento guardado para groupKey:', groupKey, {descuento,pct});
   const syntheticOrder={
     tableId:first.tableId,
     personName:first.orderMode==='individual'?first.personName:null,
@@ -4828,6 +4829,7 @@ window.adminGroupCobrado=async keys=>{
   // Verificar si ya se imprimió la cuenta con descuento
   const groupKey=keys.slice().sort().join(',');
   const savedDisc=(C._printedDiscount||{})[groupKey];
+  console.log('groupKey al cobrar:', groupKey, 'savedDisc:', savedDisc, 'C._printedDiscount:', C._printedDiscount);
   const existingPm=keys.map(k=>DB.orders[k]?.paymentMethod).find(Boolean)||null;
   let pm,pmDetail=null,descuento=0,pct=0;
   if(savedDisc){
