@@ -1597,6 +1597,7 @@ window.waiterMarkCobrado=async tableId=>{
   let finalPm=pm;let pmDetail=null;let descuento=0;let pct=0;
   if(finalPm){
     const disc=await showDiscountModal(total);
+    if(!disc)return;
     descuento=disc.descuento;pct=disc.pct;
   } else {
     const res=await showPaymentChoiceModal(null,total);
@@ -4798,9 +4799,10 @@ window.setGrupoDescuento=async(keys)=>{
   const total=orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
   const existing=orders.find(o=>o._grupoDescuento!=null);
   const preDisc=existing?{descuento:existing._grupoDescuento,pct:existing._grupoPct}:null;
-  const {descuento,pct}=await showDiscountModal(total,preDisc);
+  const disc=await showDiscountModal(total,preDisc);
+  if(!disc)return;
   for(const k of keys){
-    await update(ref(db,`orders/${k}`),{_grupoDescuento:descuento,_grupoPct:pct});
+    await update(ref(db,`orders/${k}`),{_grupoDescuento:disc.descuento,_grupoPct:disc.pct});
   }
 };
 window.adminPrintGroup=async keys=>{
@@ -4857,6 +4859,7 @@ window.adminGroupCobrado=async keys=>{
   } else if(existingPm){
     pm=existingPm;
     const disc=await showDiscountModal(total);
+    if(!disc)return;
     descuento=disc.descuento;pct=disc.pct;
   } else {
     const res=await showPaymentChoiceModal(null,total);
@@ -5204,14 +5207,14 @@ function showDiscountModal(totalBase, preDiscount){
         const descuento=discActive?Math.round(totalBase*(pct/100)):0;
         document.body.removeChild(overlay);resolve({descuento,pct:discActive?pct:0});
       };
-      overlay.querySelector('#disc-cancel').onclick=()=>{document.body.removeChild(overlay);resolve({descuento:0,pct:0});};
+      overlay.querySelector('#disc-cancel').onclick=()=>{document.body.removeChild(overlay);resolve(null);};
     };
     overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:320px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
       <div style="font-size:16px;font-weight:600;margin-bottom:16px">¿Aplicar descuento?</div>
       <div id="disc-body"></div>
     </div>`;
     document.body.appendChild(overlay);
-    overlay.addEventListener('click',e=>{if(e.target===overlay){document.body.removeChild(overlay);resolve({descuento:0,pct:0});}});
+    overlay.addEventListener('click',e=>{if(e.target===overlay){document.body.removeChild(overlay);resolve(null);}});
     render();
   });
 }
