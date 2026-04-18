@@ -4655,9 +4655,34 @@ window.toggleOrderExpand=tableId=>{
   render();
 };
 window.adminPrintGroup=async keys=>{
-  for(const k of keys){
-    await push(ref(db,'reprints'),{orderKey:k,ts:Date.now()});
-  }
+  const orders=keys.map(k=>DB.orders[k]).filter(Boolean);
+  if(!orders.length)return;
+  const first=orders[0];
+  const table=DB.tables[first.tableId];
+  const tLabel=table?table.label:(first.tableId||'Mesa');
+  // Agrupar items
+  const itemMap={};
+  orders.forEach(o=>{
+    (o.items||[]).forEach(i=>{
+      const key=i.name+(i.selectedType?'|'+i.selectedType:'');
+      if(!itemMap[key])itemMap[key]={name:i.name,selectedType:i.selectedType||null,price:i.finalPrice||i.price,qty:0};
+      itemMap[key].qty+=i.qty;
+    });
+  });
+  const items=Object.values(itemMap);
+  const totalBase=items.reduce((s,i)=>s+i.price*i.qty,0);
+  // Mostrar modal de descuento
+  const {descuento,pct}=await showDiscountModal(totalBase);
+  const totalFinal=totalBase-descuento;
+  const syntheticOrder={
+    tableId:first.tableId,
+    personName:first.orderMode==='individual'?first.personName:null,
+    takenBy:first.takenBy||null,
+    createdAt:Date.now(),
+    items:items.map(i=>({name:i.name,selectedType:i.selectedType,qty:i.qty,finalPrice:i.price,price:i.price})),
+    descuento,pct,totalFinal,
+  };
+  await push(ref(db,'reprints'),{orderKey:'__summary__',order:syntheticOrder,tableLabel:tLabel,total:totalFinal,ts:Date.now()});
 };
 window.adminGroupCobrado=async keys=>{
   if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
