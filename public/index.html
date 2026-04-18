@@ -4548,7 +4548,7 @@ window.submitManualOrder=async(modo='pending')=>{
     const mnPctInp=overlay.querySelector('#mn-deudor-pct');
     const updateDiscDetail=()=>{
       const active=mnDiscCheck.checked;
-      const p=Math.min(99,Math.max(1,Number(mnPctInp.value)||10));
+      const p=Math.min(100,Math.max(1,Number(mnPctInp.value)||10));
       mnDiscDetail.style.display=active?'flex':'none';
       if(active){
         overlay.querySelector('#mn-deudor-pct-label').textContent=`-${p}%`;
@@ -4562,7 +4562,7 @@ window.submitManualOrder=async(modo='pending')=>{
       const nombre=(mnInp.value||'').trim();
       if(!nombre){mnInp.focus();return;}
       const conDesc=mnDiscCheck.checked;
-      const pct=conDesc?Math.min(99,Math.max(1,Number(mnPctInp.value)||10)):0;
+      const pct=conDesc?Math.min(100,Math.max(1,Number(mnPctInp.value)||10)):0;
       const descuento=conDesc?Math.round(total*(pct/100)):0;
       const saldoPendiente=total-descuento;
       document.body.removeChild(overlay);
@@ -4796,7 +4796,9 @@ window.toggleOrderExpand=tableId=>{
 window.setGrupoDescuento=async(keys)=>{
   const orders=keys.map(k=>DB.orders[k]).filter(Boolean);
   const total=orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
-  const {descuento,pct}=await showDiscountModal(total);
+  const existing=orders.find(o=>o._grupoDescuento!=null);
+  const preDisc=existing?{descuento:existing._grupoDescuento,pct:existing._grupoPct}:null;
+  const {descuento,pct}=await showDiscountModal(total,preDisc);
   for(const k of keys){
     await update(ref(db,`orders/${k}`),{_grupoDescuento:descuento,_grupoPct:pct});
   }
@@ -4951,7 +4953,7 @@ window.adminGroupDeudor=async keys=>{
   const discDetail=overlay.querySelector('#deudor-disc-detail');
   const updateDisc=()=>{
     const active=discCheck.checked;
-    const p=Math.min(99,Math.max(1,Number(discPct.value)||10));
+    const p=Math.min(100,Math.max(1,Number(discPct.value)||10));
     discDetail.style.display=active?'flex':'none';
     if(active){
       overlay.querySelector('#deudor-disc-pct-label').textContent=`-${p}%`;
@@ -5167,11 +5169,12 @@ window.clearHistory=async()=>{
   await Promise.all(cobradoKeys.map(k=>remove(ref(db,`orders/${k}`))));
 };
 // Modal para elegir medio de pago (retorna Promise<string|null>)
-function showDiscountModal(totalBase){
+function showDiscountModal(totalBase, preDiscount){
   return new Promise(resolve=>{
     const overlay=document.createElement('div');
     overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
-    let discActive=false;let pct=10;
+    let discActive=preDiscount&&preDiscount.descuento>0;
+    let pct=preDiscount?preDiscount.pct:10;
     const render=()=>{
       const descuento=discActive?Math.round(totalBase*(pct/100)):0;
       overlay.querySelector('#disc-body').innerHTML=`
