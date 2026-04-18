@@ -4799,14 +4799,12 @@ window.adminPrintGroup=async keys=>{
   });
   const items=Object.values(itemMap);
   const totalBase=items.reduce((s,i)=>s+i.price*i.qty,0);
-  // Pedir descuento
   const {descuento,pct}=await showDiscountModal(totalBase);
   const totalFinal=totalBase-descuento;
-  // Guardar descuento elegido para que cobrar lo use
-  const groupKey=keys.slice().sort().join(',');
-  if(!window._printedDiscount)window._printedDiscount={};
-  window._printedDiscount[groupKey]={descuento,pct,totalBase,totalFinal};
-  console.log('Descuento guardado:', groupKey, {descuento,pct}, window._printedDiscount);
+  // Guardar descuento en todos los pedidos del grupo
+  for(const k of keys){
+    await update(ref(db,`orders/${k}`),{_descuentoImpreso:descuento,_pctImpreso:pct});
+  }
   const syntheticOrder={
     tableId:first.tableId,
     personName:first.orderMode==='individual'?first.personName:null,
@@ -4827,20 +4825,22 @@ window.adminGroupCobrado=async keys=>{
     if(!personName3&&o.personName)personName3=o.personName;
   }
   // Verificar si ya se imprimió la cuenta con descuento
-  const groupKey=keys.slice().sort().join(',');
-  const savedDisc=(window._printedDiscount||{})[groupKey];
-  console.log('groupKey al cobrar:', groupKey, 'savedDisc:', savedDisc);
+  // Leer descuento guardado al imprimir desde Firebase
+  const savedDisc=keys.map(k=>DB.orders[k]).find(o=>o&&o._descuentoImpreso!=null);
   const existingPm=keys.map(k=>DB.orders[k]?.paymentMethod).find(Boolean)||null;
   let pm,pmDetail=null,descuento=0,pct=0;
   if(savedDisc){
-    // Ya se imprimió — usar descuento guardado, solo pedir medio de pago
-    descuento=savedDisc.descuento;pct=savedDisc.pct;
+    // Ya se imprimió con descuento — solo pedir medio de pago
+    descuento=savedDisc._descuentoImpreso||0;
+    pct=savedDisc._pctImpreso||0;
     const totalConDesc=total-descuento;
     const res=await showPaymentChoiceModal(null,totalConDesc);
     if(!res)return;
     pm=res.pm;pmDetail=res.pmDetail||null;
-    // Limpiar el descuento guardado
-    delete window._printedDiscount[groupKey];
+    // Limpiar campo temporal de Firebase
+    for(const k of keys){
+      await update(ref(db,`orders/${k}`),{_descuentoImpreso:null,_pctImpreso:null});
+    }
   } else if(existingPm){
     pm=existingPm;
     const disc=await showDiscountModal(total);
