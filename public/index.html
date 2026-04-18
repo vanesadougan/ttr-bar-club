@@ -1061,6 +1061,7 @@ window.waiterPinKey=key=>{
 window.selectWaiter=(id,name)=>{C.waiterId=id;C.waiterName=name;C.waiterStep='mesas';render();};
 
 function renderWaiterMesasScreen(mc){
+  if(!window._pgKeys)window._pgKeys=[];
   const myOrders=Object.entries(DB.orders)
     .map(([k,v])=>({...v,_key:k}))
     .filter(o=>o.status!=='cobrado'&&o.status!=='deudor')
