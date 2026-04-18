@@ -1212,24 +1212,53 @@ function renderWaiterMesasScreen(mc){
 
       if(isShowingPayPicker){
         const selPm=C.waiterPayMethod||null;
+        // Leer descuento del grupo
+        const grupoDiscW=orders.find(o=>o._grupoDescuento!=null);
+        const grupoDescW=grupoDiscW?grupoDiscW._grupoDescuento:0;
+        const grupoPctW=grupoDiscW?grupoDiscW._grupoPct:0;
+        const totalConDescW=totalMesa-grupoDescW;
+        const allKeysW=orders.map(o=>o._key);
+        const _wIdx=window._pgKeys.push(allKeysW)-1;
         h+=`<div style="margin-top:12px;padding:12px;background:#f8f7f4;border-radius:10px;border:0.5px solid var(--border)">`;
-        h+=`<div style="font-size:13px;font-weight:600;margin-bottom:10px">Medio de pago</div>`;
+        h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">`;
+        h+=`<div style="font-size:13px;font-weight:600">Medio de pago</div>`;
+        h+=`<button onclick="setGrupoDescuento(window._pgKeys[${_wIdx}])" style="padding:4px 10px;border-radius:6px;border:0.5px solid ${grupoDescW>0?'#059669':'var(--border)'};background:${grupoDescW>0?'#d1fae5':'var(--card)'};color:${grupoDescW>0?'#065f46':'var(--muted)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">% ${grupoDescW>0?`-${grupoPctW}%`:'Desc.'}</button>`;
+        h+=`</div>`;
+        if(grupoDescW>0){
+          h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#f0fdf4;border-radius:8px;margin-bottom:10px">`;
+          h+=`<span style="font-size:12px;color:#6b7280">Total con ${grupoPctW}%:</span>`;
+          h+=`<span style="font-size:16px;font-weight:700;color:#059669">$${totalConDescW.toLocaleString()}</span>`;
+          h+=`</div>`;
+        }
         h+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">`;
-        ['efectivo','debito','credito','transferencia','mercadopago'].forEach(pm=>{
+        ['efectivo','debito','credito','transferencia','mercadopago','mixto'].forEach(pm=>{
           const sel=selPm===pm;
-          h+=`<button onclick="waiterSelectPayMethod('${pm}')" style="padding:8px 10px;border-radius:8px;border:0.5px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'#fff5f7':'var(--card)'};color:${sel?'var(--accent)':'var(--text)'};font-size:12px;font-weight:${sel?'600':'400'};cursor:pointer;font-family:inherit;text-align:left">${pmLabels[pm]}</button>`;
+          const lbl={efectivo:'💵 Efectivo',credito:'💳 Crédito',debito:'💳 Débito',transferencia:'📱 Transferencia',mercadopago:'📱 Mercado Pago',mixto:'🔀 Mixto'}[pm];
+          h+=`<button onclick="waiterSelectPayMethod('${pm}')" style="padding:8px 10px;border-radius:8px;border:0.5px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'#fff5f7':'var(--card)'};color:${sel?'var(--accent)':'var(--text)'};font-size:12px;font-weight:${sel?'600':'400'};cursor:pointer;font-family:inherit;text-align:left">${lbl}</button>`;
         });
         h+=`</div>`;
         h+=`<div style="display:flex;gap:6px">`;
         h+=`<button class="btn btn-primary" onclick="waiterRequestBill('${tableId}')" ${selPm?'':'disabled style="opacity:.4"'}>Pedir cuenta ✓</button>`;
+        h+=`<button onclick="waiterPrintCuenta('${tableId}')" style="padding:6px 12px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--muted);font-size:14px;cursor:pointer;font-family:inherit">🖨️</button>`;
         h+=`<button class="btn btn-ghost btn-sm" onclick="waiterCancelPayPicker()">Cancelar</button>`;
         h+=`</div></div>`;
       } else if(hasBilled){
         const pm=orders.find(o=>o.paymentMethod)?.paymentMethod;
-        h+=`<div style="margin-top:10px;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">`;
+        const grupoDiscW2=orders.find(o=>o._grupoDescuento!=null);
+        const grupoDescW2=grupoDiscW2?grupoDiscW2._grupoDescuento:0;
+        const grupoPctW2=grupoDiscW2?grupoDiscW2._grupoPct:0;
+        const totalConDescW2=totalMesa-grupoDescW2;
+        const allKeysW2=orders.map(o=>o._key);
+        const _wIdx2=window._pgKeys.push(allKeysW2)-1;
+        h+=`<div style="margin-top:10px">`;
+        h+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">`;
         h+=`<span style="font-size:12px;color:#5b21b6;font-weight:500">💜 Cuenta pedida${pm?' · '+pmLabels[pm]:''}</span>`;
-        h+=`<button onclick="waiterMarkCobrado('${tableId}')" style="padding:6px 14px;border-radius:8px;border:0.5px solid #065f46;background:#d1fae5;color:#065f46;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrar ✓</button>`;
+        if(grupoDescW2>0) h+=`<span style="font-size:12px;color:#059669;font-weight:600">$${totalConDescW2.toLocaleString()} (-${grupoPctW2}%)</span>`;
         h+=`</div>`;
+        h+=`<div style="display:flex;gap:6px">`;
+        h+=`<button onclick="waiterMarkCobrado('${tableId}')" style="flex:1;padding:6px 14px;border-radius:8px;border:0.5px solid #065f46;background:#d1fae5;color:#065f46;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrar ✓</button>`;
+        h+=`<button onclick="waiterPrintCuenta('${tableId}')" style="padding:6px 12px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--muted);font-size:14px;cursor:pointer;font-family:inherit">🖨️</button>`;
+        h+=`</div></div>`;
       } else {
         if(hasPendingOrPrep){
           h+=`<div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:#fef3c7;border:0.5px solid #fcd34d;font-size:12px;color:#92400e;text-align:center">⏳ Hay pedidos sin entregar</div>`;
@@ -1576,6 +1605,31 @@ window.showWaiterCartSheet=()=>{
 window.waiterOpenPayPicker=tableId=>{C.waiterPayMesa=tableId;C.waiterPayMethod=null;render();};
 window.waiterCancelPayPicker=()=>{C.waiterPayMesa=null;C.waiterPayMethod=null;render();};
 window.waiterSelectPayMethod=pm=>{C.waiterPayMethod=pm;render();};
+window.waiterPrintCuenta=async tableId=>{
+  const orders=Object.values(DB.orders).filter(o=>o.tableId===tableId&&o.status!=='cobrado'&&o.status!=='deudor');
+  if(!orders.length)return;
+  const table=DB.tables[tableId];
+  const tLabel=table?table.label:tableId;
+  const itemMap={};
+  orders.forEach(o=>(o.items||[]).forEach(i=>{
+    const k=i.name+(i.selectedType?'|'+i.selectedType:'');
+    if(!itemMap[k])itemMap[k]={name:i.name,selectedType:i.selectedType||null,price:i.finalPrice||i.price,qty:0};
+    itemMap[k].qty+=i.qty;
+  }));
+  const items=Object.values(itemMap);
+  const totalBase=items.reduce((s,i)=>s+i.price*i.qty,0);
+  const grupoDisc=orders.find(o=>o._grupoDescuento!=null);
+  const descuento=grupoDisc?grupoDisc._grupoDescuento:0;
+  const pct=grupoDisc?grupoDisc._grupoPct:0;
+  const totalFinal=totalBase-descuento;
+  const syntheticOrder={
+    tableId,personName:null,takenBy:null,createdAt:Date.now(),
+    items:items.map(i=>({name:i.name,selectedType:i.selectedType,qty:i.qty,finalPrice:i.price,price:i.price})),
+    descuento,pct,totalFinal,
+  };
+  await push(ref(db,'reprints'),{orderKey:'__summary__',order:syntheticOrder,tableLabel:tLabel,total:totalFinal,ts:Date.now()});
+  showNotif('order','🖨️ Enviado a imprimir',`${tLabel}${descuento>0?` · -${pct}%`:''} · $${totalFinal.toLocaleString()}`);
+};
 window.waiterConfirmEntrega=async keys=>{
   for(const k of keys){
     await update(ref(db,`orders/${k}`),{readyAt:null});
@@ -1594,15 +1648,19 @@ window.waiterMarkCobrado=async tableId=>{
   const orders=Object.entries(DB.orders).filter(([,o])=>o.tableId===tableId&&(o.status==='billed'||o.status==='delivered'||o.status==='pending')&&o.status!=='deudor');
   const total=orders.reduce((s,[,o])=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
   const pm=orders.find(([,o])=>o.paymentMethod)?.[1]?.paymentMethod||C.waiterPayMethod||null;
+  const grupoDisc=orders.map(([,o])=>o).find(o=>o._grupoDescuento!=null);
+  const preDisc=grupoDisc?{descuento:grupoDisc._grupoDescuento,pct:grupoDisc._grupoPct}:null;
   let finalPm=pm;let pmDetail=null;let descuento=0;let pct=0;
-  if(finalPm){
-    const disc=await showDiscountModal(total);
-    if(!disc)return;
-    descuento=disc.descuento;pct=disc.pct;
-  } else {
-    const res=await showPaymentChoiceModal(null,total);
+  if(pm==='mixto'||!pm){
+    // Pagar con modal completo (con descuento pre-cargado si existe)
+    const res=await showPaymentChoiceModal(null,total,preDisc);
     if(!res)return;
     finalPm=res.pm;pmDetail=res.pmDetail||null;descuento=res.descuento||0;pct=res.pct||0;
+  } else {
+    // Ya tiene medio de pago — solo descuento
+    const disc=await showDiscountModal(total,preDisc);
+    if(!disc)return;
+    descuento=disc.descuento;pct=disc.pct;
   }
   const totalFinal=total-descuento;
   for(const [k] of orders){
