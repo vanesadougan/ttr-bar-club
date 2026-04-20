@@ -735,27 +735,28 @@ function renderWaitersAdminTab(){
   let formH='<div class="card"><div class="card-title">'+(C.editingWaiter?'✏️ Editar moza/mozo':'+ Agregar moza/mozo')+'</div>';
   formH+='<div class="form-group"><label>Nombre</label><input placeholder="Ej: María, Juan..." value="'+(fw.name||'')+'" oninput="uWaiter(\'name\',this.value)"></div>';
   formH+='<div class="form-group"><label>PIN <span style="font-size:11px;font-weight:400;color:var(--muted)">(4 dígitos)</span></label><input type="password" maxlength="4" placeholder="'+(C.editingWaiter&&fw.pin?'Dejá vacío para no cambiar':'Ej: 1234')+'" value="" oninput="uWaiter(\'pin\',this.value.replace(/\\D/g,\'\').slice(0,4))"><div style="font-size:11px;color:var(--muted);margin-top:3px">'+(C.editingWaiter&&fw.pin?'El PIN actual está guardado. Solo completá si querés cambiarlo.':'')+'</div></div>';
+  formH+=`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border);margin-bottom:12px;cursor:pointer" onclick="uWaiter('isLeader',!${!!fw.isLeader});render()"><label class="toggle-switch" style="pointer-events:none"><input type="checkbox" ${fw.isLeader?'checked':''} style="pointer-events:none"><span class="toggle-slider"></span></label><div><div style="font-size:13px;font-weight:600">⭐ Moza líder</div><div style="font-size:11px;color:var(--muted)">Puede eliminar deudas y cambiar roles</div></div></div>`;
   formH+='<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="'+(C.editingWaiter?'saveEditWaiter()':'addWaiter()') +'">'+(C.editingWaiter?'Guardar':'Agregar')+'</button>'+(C.editingWaiter?'<button class="btn btn-ghost" onclick="cancelEditWaiter()">Cancelar</button>':'')+'</div></div>';
   let listH='<div class="card"><div class="card-title">Mozas/Mozos ('+waiters.length+')</div><div style="display:flex;flex-direction:column;gap:8px">';
   if(waiters.length===0){listH+='<div class="empty-state">No hay mozas/mozos cargados</div>';}
   waiters.forEach(w=>{
-    listH+=`<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)"><div style="width:36px;height:36px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${(w.name||'?')[0].toUpperCase()}</div><div style="flex:1"><div style="font-size:14px;font-weight:500">${w.name}</div><div style="font-size:11px;color:var(--muted)">PIN: ${w.pin?'••••':'sin PIN'}</div></div><div class="row-btns"><button class="btn btn-ghost btn-sm" onclick="editWaiter('${w._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteWaiter('${w._key}')">✕</button></div></div>`;
+    const leaderBadge=w.isLeader?`<span style="font-size:10px;background:#fef9c3;color:#854d0e;padding:1px 6px;border-radius:4px;font-weight:600">⭐ Líder</span>`:'';
+    listH+=`<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px;border:0.5px solid ${w.isLeader?'#fcd34d':'var(--border)'}"><div style="width:36px;height:36px;border-radius:50%;background:${w.isLeader?'#d97706':'var(--brand)'};color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${(w.name||'?')[0].toUpperCase()}</div><div style="flex:1"><div style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:500">${w.name}${leaderBadge}</div><div style="font-size:11px;color:var(--muted)">PIN: ${w.pin?'••••':'sin PIN'}</div></div><div class="row-btns"><button class="btn btn-ghost btn-sm" onclick="editWaiter('${w._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteWaiter('${w._key}')">✕</button></div></div>`;
   });
   listH+='</div></div>';
   return`<div class="admin-grid">${formH}${listH}</div>`;
 }
 window.uWaiter=(field,val)=>{const o=C.editingWaiter||(C.newWaiter=C.newWaiter||{name:'',pin:''});o[field]=val;};
-window.addWaiter=()=>{const d=C.newWaiter||{};if(!d.name||!d.name.trim()){alert('Ingresá el nombre');return;}if(!d.pin||String(d.pin).length!==4){alert('Ingresá un PIN de 4 dígitos');return;}push(ref(db,'waiters'),{name:d.name.trim(),pin:String(d.pin)});C.newWaiter={name:'',pin:''};render();};
+window.addWaiter=()=>{const d=C.newWaiter||{};if(!d.name||!d.name.trim()){alert('Ingresá el nombre');return;}if(!d.pin||String(d.pin).length!==4){alert('Ingresá un PIN de 4 dígitos');return;}push(ref(db,'waiters'),{name:d.name.trim(),pin:String(d.pin),isLeader:!!d.isLeader});C.newWaiter={name:'',pin:''};render();};
 window.editWaiter=key=>{C.editingWaiter={...DB.waiters[key],_key:key};render();};
 window.saveEditWaiter=()=>{
   const {_key,...data}=C.editingWaiter;
-  // Si no ingresó nuevo PIN, conservar el existente
   const existingPin=DB.waiters[_key]?.pin||'';
   const newPin=data.pin?String(data.pin):'';
   if(newPin&&newPin.length!==4){alert('El PIN debe tener exactamente 4 dígitos');return;}
   const finalPin=newPin||existingPin;
   if(!finalPin){alert('Ingresá un PIN de 4 dígitos');return;}
-  set(ref(db,`waiters/${_key}`),{...data,pin:finalPin});
+  set(ref(db,`waiters/${_key}`),{...data,pin:finalPin,isLeader:!!data.isLeader});
   C.editingWaiter=null;render();
 };
 window.cancelEditWaiter=()=>{C.editingWaiter=null;render();};
@@ -1026,8 +1027,90 @@ function renderWaiterSelectScreen(mc){
       ).join('')}
     </div>
     <div style="margin-top:2rem;font-size:11px;color:#9ca3af;letter-spacing:.03em">© 2026 SolDougan</div>
+    <button onclick="waiterManageRoles()" style="margin-top:12px;padding:6px 14px;border-radius:8px;border:0.5px solid #e5e7eb;background:transparent;font-size:12px;color:#9ca3af;cursor:pointer;font-family:inherit">⭐ Gestionar roles</button>
   </div></div>`;
 }
+window.waiterManageRoles=()=>{
+  const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  const leaders=waiters.filter(w=>w.isLeader);
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  let step='pin'; // 'pin' → 'manage'
+  let leaderWaiter=null;
+  let pinInput='';
+
+  const renderOverlay=()=>{
+    if(step==='pin'){
+      const dots='●'.repeat(pinInput.length)+'○'.repeat(4-pinInput.length);
+      overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:280px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
+        <div style="font-size:32px;margin-bottom:8px">⭐</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">Gestionar roles</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Ingresá el PIN de una moza líder</div>
+        <div style="font-size:28px;letter-spacing:14px;color:var(--brand);margin-bottom:16px">${dots}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">
+          ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>k===''?'<div></div>':`<button data-key="${k}" style="padding:14px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);font-size:20px;font-weight:600;cursor:pointer;font-family:inherit">${k}</button>`).join('')}
+        </div>
+        <button id="mr-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>`;
+      overlay.querySelector('#mr-cancel').onclick=()=>overlay.remove();
+      overlay.querySelectorAll('[data-key]').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          const k=btn.dataset.key;
+          if(k==='⌫'){pinInput=pinInput.slice(0,-1);renderOverlay();return;}
+          if(pinInput.length>=4)return;
+          pinInput+=k;
+          if(pinInput.length===4){
+            const found=leaders.find(w=>String(w.pin)===pinInput);
+            if(!found){
+              pinInput='';
+              const msg=overlay.querySelector('div[style*="letter-spacing"]');
+              if(msg)msg.style.color='#dc2626';
+              setTimeout(()=>renderOverlay(),800);
+            } else {
+              leaderWaiter=found;step='manage';renderOverlay();
+            }
+          } else {renderOverlay();}
+        });
+      });
+    } else {
+      // Manage step
+      overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">⭐ Roles — ${leaderWaiter.name}</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Tocá para cambiar el rol de cada moza</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+          ${waiters.map(w=>`<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-radius:8px;border:0.5px solid ${w.isLeader?'#fcd34d':'var(--border)'}">
+            <div style="flex:1"><div style="font-size:14px;font-weight:500">${w.name}</div><div style="font-size:11px;color:${w.isLeader?'#d97706':'var(--muted)'}">${w.isLeader?'⭐ Líder':'Moza común'}</div></div>
+            <button data-waiter="${w._key}" data-leader="${w.isLeader?'1':'0'}" style="padding:6px 12px;border-radius:6px;border:0.5px solid ${w.isLeader?'#d97706':'var(--border)'};background:${w.isLeader?'#fef3c7':'var(--card)'};color:${w.isLeader?'#92400e':'var(--muted)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">${w.isLeader?'Quitar líder':'Hacer líder'}</button>
+          </div>`).join('')}
+        </div>
+        <button id="mr-close" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cerrar</button>
+      </div>`;
+      overlay.querySelector('#mr-close').onclick=()=>overlay.remove();
+      overlay.querySelectorAll('[data-waiter]').forEach(btn=>{
+        btn.addEventListener('click',async()=>{
+          const wKey=btn.dataset.waiter;
+          const isLeader=btn.dataset.leader==='1';
+          const w=DB.waiters[wKey];if(!w)return;
+          await update(ref(db,`waiters/${wKey}`),{isLeader:!isLeader});
+          // Refrescar
+          renderOverlay();
+        });
+      });
+    }
+  };
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  if(leaders.length===0){
+    overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:280px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
+      <div style="font-size:32px;margin-bottom:8px">⚠️</div>
+      <div style="font-size:14px;font-weight:600;margin-bottom:8px">No hay mozas líderes</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:14px">El administrador debe asignar al menos una moza líder desde el panel admin.</div>
+      <button onclick="this.closest('[style*=fixed]').remove()" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;cursor:pointer;font-family:inherit">Cerrar</button>
+    </div>`;
+  } else {
+    renderOverlay();
+  }
+};
 window.waiterPinKey=key=>{
   if(!C._waiterPinInput) C._waiterPinInput='';
   if(key==='⌫'){
@@ -3742,8 +3825,6 @@ function renderDeudoresTab(){
 }
 
 window.eliminarDeuda=async(keys)=>{
-  // Pedir PIN antes de eliminar
-  const PIN_ELIMINAR='1234'; // Cambiá este PIN
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
   let pinInput='';
@@ -3771,10 +3852,12 @@ window.eliminarDeuda=async(keys)=>{
         pinInput+=k;
         if(pinInput.length===4){
           const waiters=Object.values(DB.waiters||{});
-          const adminPin=waiters.find(w=>String(w.pin)===pinInput);
-          if(!adminPin&&pinInput!==PIN_ELIMINAR){
-            pinInput='';renderPin('PIN incorrecto');
-            setTimeout(()=>renderPin(),1200);
+          const leaderMatch=waiters.find(w=>w.isLeader&&String(w.pin)===pinInput);
+          if(!leaderMatch){
+            pinInput='';
+            const hasLeaders=waiters.some(w=>w.isLeader);
+            renderPin(hasLeaders?'PIN incorrecto. Solo mozas líderes pueden eliminar deudas.':'No hay mozas líderes configuradas. Pedile al admin que asigne una.');
+            setTimeout(()=>renderPin(),2000);
             return;
           }
           overlay.remove();
