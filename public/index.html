@@ -3900,14 +3900,29 @@ window.agregarDeudaVieja=()=>{
         style="width:100%;padding:10px 12px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:16px;font-family:inherit;box-sizing:border-box">
       <div id="dv-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:0.5px solid #e5e7eb;border-radius:8px;z-index:10;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
     </div>
-    <div class="form-group" style="margin-bottom:14px">
+    <div class="form-group" style="margin-bottom:12px">
       <label>Monto de la deuda ($) <span style="color:var(--danger)">*</span></label>
       <input id="dv-monto" type="number" min="1" placeholder="0"
         style="width:100%;padding:10px 12px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:18px;font-weight:700;font-family:inherit;text-align:center;box-sizing:border-box">
     </div>
-    <div class="form-group" style="margin-bottom:14px">
+    <div class="form-group" style="margin-bottom:12px">
       <label>Descripción <span style="font-size:11px;font-weight:400;color:var(--muted)">(opcional)</span></label>
       <input id="dv-desc" placeholder="Ej: Cena 15/04..." style="width:100%;padding:8px 12px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer" id="dv-disc-row">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1">
+          <input type="checkbox" id="dv-disc-check" style="width:16px;height:16px;accent-color:#dc2626">
+          <span style="font-size:13px;font-weight:600">Descuento</span>
+        </label>
+        <input type="number" id="dv-disc-pct" min="1" max="100" value="10" disabled style="width:50px;padding:3px 6px;border:0.5px solid #d1d5db;border-radius:6px;font-family:inherit;font-size:14px;font-weight:700;text-align:center;color:#9ca3af;background:#f3f4f6">
+        <span id="dv-disc-pct-label" style="font-size:14px;font-weight:700;color:#9ca3af">%</span>
+      </div>
+      <div id="dv-disc-detail" style="display:none;justify-content:space-between;align-items:center;padding:8px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;border-top:0.5px solid #bbf7d0">
+        <div><div style="font-size:11px;color:#9ca3af">Original</div><div id="dv-orig" style="font-size:13px;color:#6b7280;text-decoration:line-through">$0</div></div>
+        <div id="dv-pct-show" style="font-size:12px;color:#dc2626;font-weight:600">-10%</div>
+        <div><div style="font-size:11px;color:#9ca3af;text-align:right">A registrar</div><div id="dv-final" style="font-size:18px;font-weight:700;color:#059669">$0</div></div>
+      </div>
     </div>
     <div style="display:flex;gap:8px">
       <button id="dv-ok" style="flex:1;padding:11px;border-radius:8px;border:none;background:#dc2626;color:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Registrar deuda</button>
@@ -3932,12 +3947,43 @@ window.agregarDeudaVieja=()=>{
   inp.addEventListener('input',()=>{const q=inp.value.toLowerCase();showDD(q?clientesList.filter(n=>n.toLowerCase().includes(q)):clientesList);});
   inp.addEventListener('focus',()=>{if(!inp.value)showDD(clientesList);});
   setTimeout(()=>inp.focus(),50);
+
+  // Discount logic
+  const dvCheck=overlay.querySelector('#dv-disc-check');
+  const dvPct=overlay.querySelector('#dv-disc-pct');
+  const dvDetail=overlay.querySelector('#dv-disc-detail');
+  const dvPctLabel=overlay.querySelector('#dv-disc-pct-label');
+  const updateDiscDetail=()=>{
+    const active=dvCheck.checked;
+    const p=Math.min(100,Math.max(1,Number(dvPct.value)||10));
+    const monto=Number(overlay.querySelector('#dv-monto').value)||0;
+    dvPct.disabled=!active;
+    dvPct.style.color=active?'var(--brand)':'#9ca3af';
+    dvPct.style.background=active?'#fff':'#f3f4f6';
+    dvPct.style.borderColor=active?'var(--brand)':'#d1d5db';
+    dvPctLabel.style.color=active?'var(--brand)':'#9ca3af';
+    dvDetail.style.display=active?'flex':'none';
+    if(active&&monto>0){
+      const desc=Math.round(monto*(p/100));
+      overlay.querySelector('#dv-orig').textContent=`$${monto.toLocaleString()}`;
+      overlay.querySelector('#dv-pct-show').textContent=`-${p}%`;
+      overlay.querySelector('#dv-final').textContent=`$${(monto-desc).toLocaleString()}`;
+    }
+  };
+  dvCheck.addEventListener('change',updateDiscDetail);
+  dvPct.addEventListener('input',updateDiscDetail);
+  overlay.querySelector('#dv-monto').addEventListener('input',updateDiscDetail);
+
   overlay.querySelector('#dv-ok').onclick=async()=>{
     const nombre=(inp.value||'').trim();
     const monto=Number(overlay.querySelector('#dv-monto').value)||0;
     const desc=(overlay.querySelector('#dv-desc').value||'').trim();
     if(!nombre){inp.focus();inp.style.borderColor='#dc2626';return;}
     if(!monto||monto<=0){overlay.querySelector('#dv-monto').focus();return;}
+    const conDesc=dvCheck.checked;
+    const pct=conDesc?Math.min(100,Math.max(1,Number(dvPct.value)||10)):0;
+    const descuento=conDesc?Math.round(monto*(pct/100)):0;
+    const saldoPendiente=monto-descuento;
     const item={name:desc||'Deuda vieja',qty:1,price:monto,finalPrice:monto,excluded:[],selectedType:null};
     await push(ref(db,'orders'),{
       tableId:'sinmesa',
@@ -3949,8 +3995,8 @@ window.agregarDeudaVieja=()=>{
       deudorApellido:'',
       createdAt:Date.now(),
       time:nowStr(),
-      saldoPendiente:monto,
-      descuento:0,pct:0,
+      saldoPendiente,
+      descuento,pct,
       manualEntry:true,
       _deudaVieja:true,
     });
