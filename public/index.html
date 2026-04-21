@@ -1380,6 +1380,8 @@ function renderWaiterSelectScreen(mc){
   if(waiters.length===0){
     if(firstLoad){
       mc.innerHTML=`<div class="content"><div class="mode-screen"><div class="spinner"></div><div style="font-size:14px;color:var(--muted);margin-top:12px">Cargando...</div></div></div>`;
+    } else {
+      mc.innerHTML=`<div class="content"><div class="mode-screen"><div style="font-size:48px">👩‍🍳</div><div style="font-size:18px;font-weight:500;margin-top:12px">No hay mozas/mozos cargados</div><div style="font-size:14px;color:var(--muted);margin-top:4px">El admin debe agregar el personal primero</div></div></div>`;
     }
     return;
   }
@@ -1517,7 +1519,7 @@ window.waiterPinKey=key=>{
 window.selectWaiter=(id,name)=>{C.waiterId=id;C.waiterName=name;C.waiterStep='mesas';render();};
 
 function renderWaiterMesasScreen(mc){
-  if(!window._pgKeys)window._pgKeys=[];
+  if(!window._pgKeys)window._pgKeys=[];window._wqKeys=[];
   const myOrders=Object.entries(DB.orders)
     .map(([k,v])=>({...v,_key:k}))
     .filter(o=>o.status!=='cobrado'&&o.status!=='deudor')
@@ -1598,7 +1600,7 @@ function renderWaiterMesasScreen(mc){
             if(!pMap[k])pMap[k]={name:item.name,type:item.selectedType||null,qty:0,statuses:{},excl:item.excluded||[]};
             pMap[k].qty+=item.qty;pMap[k].statuses[o.status]=(pMap[k].statuses[o.status]||0)+item.qty;
           }));
-          const pgIdx=window._pgKeys.push([tableId,person,isGeneral?'general':'individual'])-1;
+          const pgIdx=window._wqKeys.push([tableId,person,isGeneral?'general':'individual'])-1;
           h+=`<div style="margin-bottom:8px">`;
           h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;padding:4px 6px;background:#f0f4ff;border-radius:6px">`;
           h+=`<span style="font-size:12px;font-weight:600;color:#1e40af">👤 ${person}</span>`;
@@ -1620,7 +1622,7 @@ function renderWaiterMesasScreen(mc){
         });
       } else {
         // Agrupar por moza cuando hay varias — con botón + Agregar al inicio
-        const generalIdx=window._pgKeys.push([tableId,'','general'])-1;
+        const generalIdx=window._wqKeys.push([tableId,'','general'])-1;
         h+=`<div style="display:flex;justify-content:flex-end;margin-bottom:6px">
           <button onclick="waiterAddForPerson(${generalIdx})" style="padding:3px 10px;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar</button>
         </div>`;
@@ -1780,7 +1782,7 @@ function renderWaiterModeChoice(mc){
 }
 window.waiterChooseMode=mode=>{C.waiterOrderMode=mode;if(mode==='individual')C.waiterStep='nameInput';else{C.waiterPersonName='';C.waiterStep='menu';}render();};
 window.waiterAddForPerson=(pgIdx)=>{
-  const info=window._pgKeys[pgIdx];
+  const info=window._wqKeys[pgIdx];
   if(!info)return;
   const [tableId,personName,orderMode]=info;
   openWaiterQuickOrderModal(tableId,personName||'',orderMode||'general');
