@@ -1586,7 +1586,8 @@ function renderWaiterMesasScreen(mc){
       if(readyCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">✅ ${readyCt} listo${readyCt!==1?'s':''}</span>`;
       if(delivNormalCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">✓ ${delivNormalCt} entregado${delivNormalCt!==1?'s':''}</span>`;
       h+=`</div></div>`;
-      // No agregar global en header — va por persona/grupo abajo
+      h+=`<button class="btn btn-primary btn-sm" onclick="waiterAddQuick('${tableId}')">+ Agregar</button>`;
+      h+=`</div>`;
 
       // ── Items ──
       if(isIndiv){
