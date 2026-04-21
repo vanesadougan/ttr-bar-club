@@ -675,7 +675,7 @@ function renderAdmin(){
     menu:'🍽 Menú',
     orders:`📋 Pedidos${pc>0?` <span class="badge">${pc}</span>`:''}`,
     history:'📜 Historial',
-    deudores:`💳 Deudores${Object.values(DB.orders).filter(o=>o.status==='deudor').length>0?` <span class="badge">${Object.values(DB.orders).filter(o=>o.status==='deudor').length}</span>`:''}`,
+    deudores:`💳 Deudores${(()=>{const names=new Set(Object.values(DB.orders).filter(o=>o.status==='deudor').map(o=>(o.deudorNombre||o.personName||'?').trim()));return names.size>0?` <span class="badge">${names.size}</span>`:''})()}`,
     caja:'💰 Caja',
     stock:'📦 Stock',
     ratings:'⭐ Calificaciones',
@@ -758,6 +758,9 @@ function renderWaitersAdminTab(){
 }
 window.toggleWaiterLeader=()=>{const o=C.editingWaiter||(C.newWaiter=C.newWaiter||{name:'',pin:''});o.isLeader=!o.isLeader;render();};
 window.uWaiter=(field,val)=>{const o=C.editingWaiter||(C.newWaiter=C.newWaiter||{name:'',pin:''});o[field]=val;};
+window.addPromoSlot=()=>{const f=C.editingDish||C.newDish;if(!f)return;if(!f.promoSlots)f.promoSlots=[];f.promoSlots.push({qty:1,cat:''});renderOrModal();};
+window.removePromoSlot=(i)=>{const f=C.editingDish||C.newDish;if(!f||!f.promoSlots)return;f.promoSlots.splice(i,1);renderOrModal();};
+window.updatePromoSlot=(i,field,val)=>{const f=C.editingDish||C.newDish;if(!f||!f.promoSlots)return;f.promoSlots[i][field]=val;renderOrModal();};
 window.addWaiter=()=>{const d=C.newWaiter||{};if(!d.name||!d.name.trim()){alert('Ingresá el nombre');return;}if(!d.pin||String(d.pin).length!==4){alert('Ingresá un PIN de 4 dígitos');return;}push(ref(db,'waiters'),{name:d.name.trim(),pin:String(d.pin),isLeader:!!d.isLeader});C.newWaiter={name:'',pin:''};render();};
 window.editWaiter=key=>{C.editingWaiter={...DB.waiters[key],_key:key};render();};
 window.saveEditWaiter=()=>{
@@ -1186,6 +1189,16 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
   };
 
   const tryAddItem=(d)=>{
+    // Promo con slots
+    if(d.isPromoSlots&&(d.promoSlots||[]).length>0){
+      openPromoSlotsModal(d,(name,price,promoKey)=>{
+        const existing=mo.items.find(i=>i._promoKey===promoKey);
+        if(existing){existing.qty++;}
+        else{mo.items.push({name,qty:1,price,finalPrice:price,selectedType:null,excluded:[],_promoKey:promoKey,emoji:'🎁'});}
+        search='';renderModal();
+      });
+      return;
+    }
     // Mitad y mitad
     if(d.isMitadMitad&&d.mitadMitadCat){
       openMitadModal(d,(name,price,mitadKey)=>{
@@ -5026,7 +5039,36 @@ window.openDishAdvModal=()=>{
     }
     b+='</div>';
 
-    // Personalización
+    // Promo con slots
+    const openPromoSlots=sec2.promoSlots||false;
+    const isPS=f2.isPromoSlots||false;
+    const pSlots=f2.promoSlots||[];
+    b+='<div style="padding:14px 20px;border-bottom:0.5px solid var(--border)">';
+    b+='<div class="form-section-header" onclick="toggleDishSection(\'promoSlots\');window._renderDishAdvBody&&window._renderDishAdvBody()" style="padding:0;margin-bottom:'+(openPromoSlots?'10':'0')+'px">';
+    b+='<span>🎁 Promo con elección'+(isPS?' <span style="font-size:11px;background:#fce7f3;color:#be185d;padding:1px 7px;border-radius:10px">Activo</span>':'')+'</span><span>'+(openPromoSlots?'▲':'▼')+'</span></div>';
+    if(openPromoSlots){
+      b+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><span style="font-size:12px;color:var(--muted)">El cliente elige ítems de categorías</span><label class="toggle-switch"><input type="checkbox" '+(isPS?'checked':'')+' onchange="uF(\'dish\',\'isPromoSlots\',this.checked);window._renderDishAdvBody&&window._renderDishAdvBody()"><span class="toggle-slider"></span></label></div>';
+      if(isPS){
+        const allCatsPS=getCats();
+        if(pSlots.length>0){
+          b+='<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">';
+          pSlots.forEach((slot,si)=>{
+            const slotCat=allCatsPS.find(c=>c._key===slot.cat);
+            b+=`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)">
+              <input type="number" min="1" max="20" value="${slot.qty||1}" onchange="updatePromoSlot(${si},'qty',Number(this.value))" style="width:50px;padding:4px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;text-align:center">
+              <select onchange="updatePromoSlot(${si},'cat',this.value)" style="flex:1;padding:4px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px">
+                <option value="">— Categoría —</option>
+                ${allCatsPS.map(c=>`<option value="${c._key}"${slot.cat===c._key?' selected':''}>${c.icon} ${c.label}</option>`).join('')}
+              </select>
+              <button onclick="removePromoSlot(${si})" style="width:24px;height:24px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:14px;cursor:pointer;line-height:1">×</button>
+            </div>`;
+          });
+          b+='</div>';
+        }
+        b+='<button onclick="addPromoSlot()" style="width:100%;padding:7px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar grupo</button>';
+      }
+    }
+    b+='</div>';
     const openIngs=sec2.ings||false;
     b+='<div style="padding:14px 20px;border-bottom:0.5px solid var(--border)">';
     b+='<div class="form-section-header" onclick="toggleDishSection(\'ings\');window._renderDishAdvBody&&window._renderDishAdvBody()" style="padding:0;margin-bottom:'+(openIngs?'10':'0')+'px">';
@@ -5184,6 +5226,101 @@ window.updateManualSearch=()=>{
 };
 
 // Al seleccionar un item: si tiene variantes o ingredientes, abrir picker; si no, agregar directo
+function openPromoSlotsModal(d, onConfirm){
+  // Build slot state: for each slot, track selections [{dishKey, name, qty}]
+  const slots=(d.promoSlots||[]).filter(s=>s.cat&&s.qty>0);
+  if(!slots.length){onConfirm(d.name,Number(d.price)||0,'promo|'+d._key);return;}
+  const selections=slots.map(s=>({cat:s.cat,total:s.qty,chosen:[]})); // chosen: [{key,name,qty}]
+  let currentSlot=0;
+
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
+
+  const render=()=>{
+    const slot=slots[currentSlot];
+    const sel=selections[currentSlot];
+    const cat=getCats().find(c=>c._key===slot.cat);
+    const opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(dd=>dd.cat===slot.cat&&!dd.unavailable).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+    const chosenTotal=sel.chosen.reduce((s,c)=>s+c.qty,0);
+    const remaining=sel.total-chosenTotal;
+
+    overlay.innerHTML=`<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:85vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)">
+      <div style="padding:14px 18px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+        <div>
+          <div style="font-size:15px;font-weight:700">🎁 ${d.name}</div>
+          <div style="font-size:12px;color:var(--muted)">Grupo ${currentSlot+1} de ${slots.length}: elegí ${sel.total} ${cat?cat.label:'ítems'}</div>
+        </div>
+        <button id="ps-cancel" style="border:none;background:var(--bg);border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;color:var(--muted)">✕</button>
+      </div>
+
+      <!-- Selected summary -->
+      ${sel.chosen.length>0?`<div style="padding:8px 18px;background:#f0f7ff;border-bottom:0.5px solid var(--border);flex-shrink:0;display:flex;flex-wrap:wrap;gap:6px">
+        ${sel.chosen.map((c,ci)=>`<div style="display:flex;align-items:center;gap:4px;background:#dbeafe;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:600;color:#1e40af">
+          ${c.name} ×${c.qty}
+          <button data-rm="${ci}" style="border:none;background:none;color:#1e40af;font-size:14px;cursor:pointer;line-height:1;padding:0 0 0 2px">×</button>
+        </div>`).join('')}
+        <span style="font-size:12px;color:${remaining===0?'#059669':'#d97706'};font-weight:600;align-self:center">
+          ${remaining===0?'✓ Completo':`Faltan ${remaining}`}
+        </span>
+      </div>`:''}
+
+      <!-- Options -->
+      <div style="overflow-y:auto;flex:1;padding:8px 18px;display:flex;flex-direction:column;gap:6px">
+        ${opts.map(dd=>`<button class="ps-opt" data-key="${dd._key}" data-name="${dd.name.replace(/"/g,'&quot;')}" ${remaining===0?'disabled style="opacity:.5"':''} style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);cursor:pointer;font-size:14px;font-family:inherit">
+          <span>${dd.name}</span>
+          <span style="color:var(--accent);font-size:12px">+ agregar</span>
+        </button>`).join('')}
+      </div>
+
+      <!-- Footer -->
+      <div style="padding:12px 18px;border-top:0.5px solid var(--border);flex-shrink:0;display:flex;gap:8px">
+        ${currentSlot>0?`<button id="ps-back" style="padding:10px 14px;border-radius:10px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">← Atrás</button>`:''}
+        <button id="ps-next" ${remaining!==0?'disabled':''} style="flex:1;padding:12px;border-radius:10px;border:none;background:${remaining===0?'var(--brand)':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${remaining===0?'pointer':'not-allowed'};font-family:inherit;opacity:${remaining===0?1:.6}">
+          ${currentSlot<slots.length-1?'Siguiente →':'✓ Confirmar promo'}
+        </button>
+      </div>
+    </div>`;
+
+    overlay.querySelector('#ps-cancel').onclick=()=>overlay.remove();
+    overlay.querySelector('#ps-back')?.addEventListener('click',()=>{currentSlot--;render();});
+    overlay.querySelector('#ps-next')?.addEventListener('click',()=>{
+      if(remaining!==0)return;
+      if(currentSlot<slots.length-1){currentSlot++;render();}
+      else{
+        // Build name and key
+        const parts=selections.map((sel,si)=>{
+          const cat=getCats().find(c=>c._key===slots[si].cat);
+          return sel.chosen.map(c=>`${c.name}×${c.qty}`).join(', ');
+        });
+        const name=`${d.name} (${parts.join(' + ')})`;
+        const key=`promo|${d._key}|`+selections.map(s=>s.chosen.map(c=>`${c.key}×${c.qty}`).join(',')).join('|');
+        overlay.remove();
+        onConfirm(name,Number(d.price)||0,key);
+      }
+    });
+    overlay.querySelectorAll('.ps-opt').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const key=btn.dataset.key;const name=btn.dataset.name;
+        const existing=sel.chosen.find(c=>c.key===key);
+        if(existing){existing.qty++;}
+        else{sel.chosen.push({key,name,qty:1});}
+        render();
+      });
+    });
+    overlay.querySelectorAll('[data-rm]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const ci=+btn.dataset.rm;
+        if(sel.chosen[ci].qty>1){sel.chosen[ci].qty--;}
+        else{sel.chosen.splice(ci,1);}
+        render();
+      });
+    });
+  };
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  render();
+}
 function openMitadModal(d, onConfirm){
   const opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(dd=>dd.cat===d.mitadMitadCat&&!dd.unavailable).sort((a,b)=>a.name.localeCompare(b.name,'es'));
   let mitad1=null,mitad2=null,step=1;
@@ -5247,6 +5384,17 @@ function openMitadModal(d, onConfirm){
 window.selectManualItem=(key,src,scannedBarcode)=>{
   const d=src==='cafeteria'?DB.cafeteriaItems[key]:src==='kiosko'?DB.kioskItems[key]:DB.dishes[key];
   if(!d)return;
+  // Promo con slots
+  if(d.isPromoSlots&&(d.promoSlots||[]).length>0){
+    openPromoSlotsModal(d,(name,price,promoKey)=>{
+      if(!C.manualOrder)return;
+      const existing=C.manualOrder.items.find(i=>i._promoKey===promoKey);
+      if(existing){existing.qty++;}
+      else{C.manualOrder.items.push({_key:key,_promoKey:promoKey,name,price,qty:1,isCafeteria:false,isKiosko:false,emoji:'🎁',selectedType:null,excluded:[]});}
+      C.manualOrderSearch='';render();
+    });
+    return;
+  }
   // Mitad y mitad
   if(d.isMitadMitad&&d.mitadMitadCat){
     openMitadModal(d,(name,price,mitadKey)=>{
