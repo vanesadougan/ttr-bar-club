@@ -921,7 +921,7 @@ window.cajaConfirmarApertura=async()=>{
     tipo:'apertura',
     concepto:monto>0?'Saldo inicial':'Apertura de caja',
     monto:monto>0?monto:0,
-    fecha:hoy,ts:Date.now(),desc:''
+    fecha:hoy,ts:Date.now(),desc:'',paymentMethod:'efectivo'
   });
   C.cajaModal=null;render();
 };
@@ -3833,6 +3833,7 @@ function renderDeudoresTab(){
       h+=`<div style="text-align:right">
         <div style="font-size:20px;font-weight:700;color:#dc2626">$${saldoMostrar.toLocaleString()}</div>
         ${pagadoParcial>0?`<div style="font-size:11px;color:#059669">Ya pagó $${pagadoParcial.toLocaleString()}</div>`:''}
+        ${pagadoParcial>0?`<div style="font-size:10px;color:var(--muted)">Total deuda $${totalOriginal.toLocaleString()}</div>`:''}
       </div>`;
       h+=`</div>`;
 
