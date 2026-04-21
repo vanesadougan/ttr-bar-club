@@ -1186,6 +1186,16 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
   };
 
   const tryAddItem=(d)=>{
+    // Mitad y mitad
+    if(d.isMitadMitad&&d.mitadMitadCat){
+      openMitadModal(d,(name,price,mitadKey)=>{
+        const existing=mo.items.find(i=>i._mitadKey===mitadKey);
+        if(existing){existing.qty++;}
+        else{mo.items.push({name,qty:1,price,finalPrice:price,selectedType:null,excluded:[],_mitadKey:mitadKey,emoji:'🍕'});}
+        search='';renderModal();
+      });
+      return;
+    }
     // types puede ser array de strings ['Carne','Pollo'] o de objetos [{name,price}]
     const rawTypes=d.types||[];
     const validTypes=rawTypes.map(t=>typeof t==='string'?{name:t,price:d.price}:t).filter(t=>t&&t.name);
@@ -5174,9 +5184,80 @@ window.updateManualSearch=()=>{
 };
 
 // Al seleccionar un item: si tiene variantes o ingredientes, abrir picker; si no, agregar directo
+function openMitadModal(d, onConfirm){
+  const opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(dd=>dd.cat===d.mitadMitadCat&&!dd.unavailable).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+  let mitad1=null,mitad2=null,step=1;
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
+  const render=()=>{
+    const m1=opts.find(dd=>dd._key===mitad1);
+    const m2=opts.find(dd=>dd._key===mitad2);
+    overlay.innerHTML=`<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:80vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)">
+      <div style="padding:14px 18px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+        <div style="font-size:15px;font-weight:700">🍕 ${d.name} — Mitad y mitad</div>
+        <button id="mm-cancel" style="border:none;background:var(--bg);border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;color:var(--muted)">✕</button>
+      </div>
+      <div style="display:flex;gap:10px;padding:12px 18px;background:#f8f7f4;border-bottom:0.5px solid var(--border);flex-shrink:0">
+        <div style="flex:1;padding:8px 12px;border-radius:8px;border:1.5px solid ${mitad1?'var(--brand)':'var(--border)'};background:${mitad1?'#f0f7ff':'var(--card)'}">
+          <div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase">1° mitad</div>
+          <div style="font-size:13px;font-weight:600;margin-top:2px">${m1?m1.name:'—'}</div>
+        </div>
+        <div style="flex:1;padding:8px 12px;border-radius:8px;border:1.5px solid ${mitad2?'var(--brand)':'var(--border)'};background:${mitad2?'#f0f7ff':'var(--card)'}">
+          <div style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase">2° mitad</div>
+          <div style="font-size:13px;font-weight:600;margin-top:2px">${m2?m2.name:'—'}</div>
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:var(--muted);padding:10px 18px 6px;flex-shrink:0">Elegí la ${step===1?'primera':'segunda'} mitad:</div>
+      <div style="overflow-y:auto;flex:1;padding:0 18px 12px;display:flex;flex-direction:column;gap:6px">
+        ${opts.map(dd=>{
+          const sel=(step===1&&mitad1===dd._key)||(step===2&&mitad2===dd._key);
+          return `<button class="mm-opt" data-key="${dd._key}" style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:8px;border:1.5px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'#fff5f7':'var(--card)'};cursor:pointer;font-size:14px;font-family:inherit"><span style="font-weight:${sel?600:400}">${dd.name}</span><span style="color:var(--accent);font-weight:600">$${Number(dd.price).toLocaleString()}</span></button>`;
+        }).join('')}
+      </div>
+      <div style="padding:12px 18px;border-top:0.5px solid var(--border);flex-shrink:0">
+        <button id="mm-confirm" ${mitad1&&mitad2?'':'disabled'} style="width:100%;padding:12px;border-radius:10px;border:none;background:${mitad1&&mitad2?'var(--brand)':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${mitad1&&mitad2?'pointer':'not-allowed'};font-family:inherit;opacity:${mitad1&&mitad2?1:.6}">
+          Agregar${mitad1&&mitad2?` · $${Math.max(Number(opts.find(dd=>dd._key===mitad1)?.price||0),Number(opts.find(dd=>dd._key===mitad2)?.price||0)).toLocaleString()}`:''}
+        </button>
+      </div>
+    </div>`;
+    overlay.querySelector('#mm-cancel').onclick=()=>overlay.remove();
+    overlay.querySelectorAll('.mm-opt').forEach(btn=>{
+      btn.onclick=()=>{
+        const k=btn.dataset.key;
+        if(step===1){mitad1=k;step=2;}
+        else{mitad2=k;}
+        render();
+      };
+    });
+    overlay.querySelector('#mm-confirm')?.addEventListener('click',()=>{
+      if(!mitad1||!mitad2){alert('Elegí las dos mitades');return;}
+      const d1=opts.find(dd=>dd._key===mitad1);
+      const d2=opts.find(dd=>dd._key===mitad2);
+      const price=Math.max(Number(d1.price),Number(d2.price));
+      const name=`${d.name} — ${d1.name} / ${d2.name}`;
+      const mitadKey=`mitad|${d._key}|${mitad1}|${mitad2}`;
+      overlay.remove();
+      onConfirm(name,price,mitadKey);
+    });
+  };
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  render();
+}
 window.selectManualItem=(key,src,scannedBarcode)=>{
   const d=src==='cafeteria'?DB.cafeteriaItems[key]:src==='kiosko'?DB.kioskItems[key]:DB.dishes[key];
   if(!d)return;
+  // Mitad y mitad
+  if(d.isMitadMitad&&d.mitadMitadCat){
+    openMitadModal(d,(name,price,mitadKey)=>{
+      if(!C.manualOrder)return;
+      const existing=C.manualOrder.items.find(i=>i._mitadKey===mitadKey);
+      if(existing){existing.qty++;}
+      else{C.manualOrder.items.push({_key:key,_mitadKey:mitadKey,name,price,qty:1,isCafeteria:false,isKiosko:false,emoji:'🍕',selectedType:null,excluded:[]});}
+      C.manualOrderSearch='';render();
+    });
+    return;
+  }
   // Si se escaneó un barcode, buscar si coincide con una variante específica
   if(scannedBarcode&&d.hasTypes&&(d.types||[]).length>0){
     const bc=String(scannedBarcode);
