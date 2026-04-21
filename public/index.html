@@ -1663,81 +1663,90 @@ function renderWaiterMesasScreen(mc){
         });
       }
 
-      // ── Total + acciones de cobro ──
-      const allBilled=orders.every(o=>o.status==='billed'||o.status==='cobrado');
-      const hasBilled=orders.some(o=>o.status==='billed');
+      // ── Cobro por persona/grupo (igual que admin) ──
+      const personGroups={};
+      orders.forEach(o=>{
+        const pKey=o.orderMode==='individual'?(o.personName||'General'):'General';
+        if(!personGroups[pKey])personGroups[pKey]={personName:o.orderMode==='individual'?o.personName:null,orders:[]};
+        personGroups[pKey].orders.push(o);
+      });
+
+      // Entregar si hay listos
       const hasReady=orders.some(o=>o.status==='delivered'&&o.readyAt);
-      const hasPendingOrPrep=orders.some(o=>o.status==='pending'||o.status==='preparing');
-      const isShowingPayPicker=C.waiterPayMesa===tableId;
-      const pmLabels={efectivo:'💵 Efectivo',credito:'💳 Crédito',debito:'💳 Débito',transferencia:'📱 Transferencia',mercadopago:'📱 Mercado Pago'};
-
-      h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border)">`;
-      h+=`<span style="font-size:13px;color:var(--muted)">Total</span>`;
-      h+=`<span style="font-size:16px;font-weight:700;color:var(--accent)">$${totalMesa.toLocaleString()}</span>`;
-      h+=`</div>`;
-
-      // Botón entregar si cocina marcó listo
-      if(hasReady && !hasBilled){
+      if(hasReady){
         const readyOrderKeys=orders.filter(o=>o.status==='delivered'&&o.readyAt).map(o=>o._key);
         h+=`<button onclick="waiterConfirmEntrega(${JSON.stringify(readyOrderKeys)})" style="margin-top:10px;width:100%;padding:10px;border-radius:8px;border:none;background:#10b981;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">🛎 Confirmar entrega</button>`;
       }
 
-      if(isShowingPayPicker){
-        const selPm=C.waiterPayMethod||null;
-        // Leer descuento del grupo
-        const grupoDiscW=orders.find(o=>o._grupoDescuento!=null);
-        const grupoDescW=grupoDiscW?grupoDiscW._grupoDescuento:0;
-        const grupoPctW=grupoDiscW?grupoDiscW._grupoPct:0;
-        const totalConDescW=totalMesa-grupoDescW;
-        const allKeysW=orders.map(o=>o._key);
-        const _wIdx=window._pgKeys.push(allKeysW)-1;
-        h+=`<div style="margin-top:12px;padding:12px;background:#f8f7f4;border-radius:10px;border:0.5px solid var(--border)">`;
-        h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">`;
-        h+=`<div style="font-size:13px;font-weight:600">Medio de pago</div>`;
-        h+=`<button onclick="setGrupoDescuento(window._pgKeys[${_wIdx}])" style="padding:4px 10px;border-radius:6px;border:0.5px solid ${grupoDescW>0?'#059669':'var(--border)'};background:${grupoDescW>0?'#d1fae5':'var(--card)'};color:${grupoDescW>0?'#065f46':'var(--muted)'};font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">% ${grupoDescW>0?`-${grupoPctW}%`:'Desc.'}</button>`;
-        h+=`</div>`;
-        if(grupoDescW>0){
-          h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:#f0fdf4;border-radius:8px;margin-bottom:10px">`;
-          h+=`<span style="font-size:12px;color:#6b7280">Total con ${grupoPctW}%:</span>`;
-          h+=`<span style="font-size:16px;font-weight:700;color:#059669">$${totalConDescW.toLocaleString()}</span>`;
+      Object.entries(personGroups).forEach(([pKey,pg])=>{
+        const pgOrders=pg.orders;
+        const allKeys=pgOrders.map(o=>o._key);
+        const pgTotal=pgOrders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
+        const hasPendingOrPrep=pgOrders.some(o=>o.status==='pending'||o.status==='preparing');
+        const isBilled=pgOrders.every(o=>o.status==='billed');
+        const canCobrar=!hasPendingOrPrep&&!isBilled;
+        const grupoDisc=pgOrders.find(o=>o._grupoDescuento!=null);
+        const grupoDesc=grupoDisc?grupoDisc._grupoDescuento:0;
+        const grupoPct=grupoDisc?grupoDisc._grupoPct:0;
+        const pgTotalConDesc=pgTotal-grupoDesc;
+        const isShowingPicker=C.waiterPayMesa===tableId+'|'+pKey;
+        const _wIdx=window._pgKeys.push(allKeys)-1;
+
+        const totalDisplay=grupoDesc>0
+          ?`<div style="display:flex;align-items:center;gap:4px"><span style="font-size:11px;text-decoration:line-through;color:var(--muted)">$${pgTotal.toLocaleString()}</span><span style="font-size:13px;font-weight:700;color:#059669">$${pgTotalConDesc.toLocaleString()}</span><span style="font-size:10px;background:#d1fae5;color:#065f46;padding:1px 4px;border-radius:4px">-${grupoPct}%</span></div>`
+          :`<span style="font-size:13px;font-weight:600;color:var(--accent)">$${pgTotal.toLocaleString()}</span>`;
+
+        // Header de grupo (solo si hay más de un grupo)
+        const multiGrupo=Object.keys(personGroups).length>1;
+        if(multiGrupo){
+          h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:4px 6px;background:#f0f4ff;border-radius:6px;border-top:0.5px solid var(--border)">`;
+          h+=`<span style="font-size:12px;font-weight:600;color:#1e40af">👤 ${pKey}</span>`;
+          h+=totalDisplay;
+          h+=`</div>`;
+        } else {
+          h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;padding-top:10px;border-top:0.5px solid var(--border)">`;
+          h+=`<span style="font-size:13px;color:var(--muted)">Total</span>`;
+          h+=totalDisplay;
           h+=`</div>`;
         }
-        h+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">`;
-        ['efectivo','debito','credito','transferencia','mercadopago','mixto'].forEach(pm=>{
-          const sel=selPm===pm;
-          const lbl={efectivo:'💵 Efectivo',credito:'💳 Crédito',debito:'💳 Débito',transferencia:'📱 Transferencia',mercadopago:'📱 Mercado Pago',mixto:'🔀 Mixto'}[pm];
-          h+=`<button onclick="waiterSelectPayMethod('${pm}')" style="padding:8px 10px;border-radius:8px;border:0.5px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'#fff5f7':'var(--card)'};color:${sel?'var(--accent)':'var(--text)'};font-size:12px;font-weight:${sel?'600':'400'};cursor:pointer;font-family:inherit;text-align:left">${lbl}</button>`;
-        });
-        h+=`</div>`;
-        h+=`<div style="display:flex;gap:6px">`;
-        h+=`<button class="btn btn-primary" onclick="waiterRequestBill('${tableId}')" ${selPm?'':'disabled style="opacity:.4"'}>Pedir cuenta ✓</button>`;
-        h+=`<button onclick="waiterPrintCuenta('${tableId}')" style="padding:6px 12px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--muted);font-size:14px;cursor:pointer;font-family:inherit">🖨️</button>`;
-        h+=`<button class="btn btn-ghost btn-sm" onclick="waiterCancelPayPicker()">Cancelar</button>`;
-        h+=`</div></div>`;
-      } else if(hasBilled){
-        const pm=orders.find(o=>o.paymentMethod)?.paymentMethod;
-        const grupoDiscW2=orders.find(o=>o._grupoDescuento!=null);
-        const grupoDescW2=grupoDiscW2?grupoDiscW2._grupoDescuento:0;
-        const grupoPctW2=grupoDiscW2?grupoDiscW2._grupoPct:0;
-        const totalConDescW2=totalMesa-grupoDescW2;
-        const allKeysW2=orders.map(o=>o._key);
-        const _wIdx2=window._pgKeys.push(allKeysW2)-1;
-        h+=`<div style="margin-top:10px">`;
-        h+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:8px">`;
-        h+=`<span style="font-size:12px;color:#5b21b6;font-weight:500">💜 Cuenta pedida${pm?' · '+pmLabels[pm]:''}</span>`;
-        if(grupoDescW2>0) h+=`<span style="font-size:12px;color:#059669;font-weight:600">$${totalConDescW2.toLocaleString()} (-${grupoPctW2}%)</span>`;
-        h+=`</div>`;
-        h+=`<div style="display:flex;gap:6px">`;
-        h+=`<button onclick="waiterMarkCobrado('${tableId}')" style="flex:1;padding:6px 14px;border-radius:8px;border:0.5px solid #065f46;background:#d1fae5;color:#065f46;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrar ✓</button>`;
-        h+=`<button onclick="waiterPrintCuenta('${tableId}')" style="padding:6px 12px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--muted);font-size:14px;cursor:pointer;font-family:inherit">🖨️</button>`;
-        h+=`</div></div>`;
-      } else {
-        if(hasPendingOrPrep){
-          h+=`<div style="margin-top:10px;padding:8px 12px;border-radius:8px;background:#fef3c7;border:0.5px solid #fcd34d;font-size:12px;color:#92400e;text-align:center">⏳ Hay pedidos sin entregar</div>`;
-        } else {
-          h+=`<button onclick="waiterOpenPayPicker('${tableId}')" style="margin-top:10px;width:100%;padding:8px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit">💜 Pedir cuenta</button>`;
+
+        if(isShowingPicker){
+          const selPm=C.waiterPayMethod||null;
+          h+=`<div style="margin-top:8px;padding:12px;background:#f8f7f4;border-radius:10px;border:0.5px solid var(--border)">`;
+          h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">`;
+          h+=`<div style="font-size:13px;font-weight:600">Medio de pago</div>`;
+          h+=`<button onclick="setGrupoDescuento(window._pgKeys[${_wIdx}])" style="padding:3px 8px;border-radius:6px;border:0.5px solid ${grupoDesc>0?'#059669':'var(--border)'};background:${grupoDesc>0?'#d1fae5':'var(--card)'};color:${grupoDesc>0?'#065f46':'var(--muted)'};font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">% ${grupoDesc>0?`-${grupoPct}%`:'Desc.'}</button>`;
+          h+=`</div>`;
+          if(grupoDesc>0){
+            h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:#f0fdf4;border-radius:8px;margin-bottom:10px"><span style="font-size:12px;color:#6b7280">Con ${grupoPct}%:</span><span style="font-size:15px;font-weight:700;color:#059669">$${pgTotalConDesc.toLocaleString()}</span></div>`;
+          }
+          h+=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">`;
+          ['efectivo','debito','credito','transferencia','mercadopago','mixto'].forEach(pm=>{
+            const sel=selPm===pm;
+            const lbl={efectivo:'💵 Efectivo',credito:'💳 Crédito',debito:'💳 Débito',transferencia:'📱 Transferencia',mercadopago:'📱 Mercado Pago',mixto:'🔀 Mixto'}[pm];
+            h+=`<button onclick="waiterSelectPayMethod('${pm}')" style="padding:8px 10px;border-radius:8px;border:0.5px solid ${sel?'var(--accent)':'var(--border)'};background:${sel?'#fff5f7':'var(--card)'};color:${sel?'var(--accent)':'var(--text)'};font-size:12px;font-weight:${sel?'600':'400'};cursor:pointer;font-family:inherit;text-align:left">${lbl}</button>`;
+          });
+          h+=`</div>`;
+          h+=`<div style="display:flex;gap:6px">`;
+          h+=`<button class="btn btn-primary" onclick="waiterRequestBillGroup(window._pgKeys[${_wIdx}],'${tableId}','${pKey.replace(/'/g,"\\'")}')\" ${selPm?'':'disabled style="opacity:.4"'}>Pedir cuenta ✓</button>`;
+          h+=`<button onclick="waiterPrintCuentaGroup(window._pgKeys[${_wIdx}],'${tableId}')" style="padding:6px 12px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--muted);font-size:14px;cursor:pointer;font-family:inherit">🖨️</button>`;
+          h+=`<button class="btn btn-ghost btn-sm" onclick="waiterCancelPayPicker()">Cancelar</button>`;
+          h+=`</div></div>`;
+        } else if(isBilled){
+          const pm=pgOrders.find(o=>o.paymentMethod)?.paymentMethod;
+          const pmLabels={efectivo:'💵 Ef.',credito:'💳 Créd.',debito:'💳 Déb.',transferencia:'📱 Trans.',mercadopago:'📱 MP',mixto:'🔀 Mixto'};
+          h+=`<div style="margin-top:6px;display:flex;gap:6px">`;
+          h+=`<button onclick="waiterMarkCobradoGroup(window._pgKeys[${_wIdx}])" style="flex:1;padding:6px 10px;border-radius:8px;border:0.5px solid #065f46;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">Cobrar ✓${pm?' · '+(pmLabels[pm]||pm):''}</button>`;
+          h+=`<button onclick="waiterPrintCuentaGroup(window._pgKeys[${_wIdx}],'${tableId}')" style="padding:6px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);color:var(--muted);font-size:14px;cursor:pointer;font-family:inherit">🖨️</button>`;
+          h+=`</div>`;
+        } else if(canCobrar){
+          h+=`<div style="margin-top:6px;display:flex;gap:6px">`;
+          h+=`<button onclick="C.waiterPayMesa='${tableId}|${pKey.replace(/'/g,"\\'")}';C.waiterPayMethod=null;render()" style="flex:1;padding:6px 10px;border-radius:8px;border:0.5px solid #5b21b6;background:#ede9fe;color:#5b21b6;font-size:12px;font-weight:500;cursor:pointer;font-family:inherit">💜 Pedir cuenta</button>`;
+          h+=`</div>`;
+        } else if(hasPendingOrPrep){
+          h+=`<div style="margin-top:6px;padding:6px 10px;border-radius:8px;background:#fef3c7;border:0.5px solid #fcd34d;font-size:11px;color:#92400e;text-align:center">⏳ Pendiente de entrega</div>`;
         }
-      }
+      });
 
       h+=`</div>`;
     });
@@ -2089,6 +2098,68 @@ window.showWaiterCartSheet=()=>{
 window.waiterOpenPayPicker=tableId=>{C.waiterPayMesa=tableId;C.waiterPayMethod=null;render();};
 window.waiterCancelPayPicker=()=>{C.waiterPayMesa=null;C.waiterPayMethod=null;render();};
 window.waiterSelectPayMethod=pm=>{C.waiterPayMethod=pm;render();};
+window.waiterRequestBillGroup=async(keys,tableId,pKey)=>{
+  if(!C.waiterPayMethod){alert('Seleccioná el medio de pago');return;}
+  const pm=C.waiterPayMethod;
+  for(const k of keys){
+    await update(ref(db,`orders/${k}`),{status:'billed',billRequested:true,paymentMethod:pm});
+  }
+  C.waiterPayMesa=null;C.waiterPayMethod=null;render();
+};
+window.waiterMarkCobradoGroup=async(keys)=>{
+  if(!getCajaAbierta()){alert('La caja está cerrada.');return;}
+  let total=0;let tableLabel='';let personName='';
+  for(const k of keys){
+    const o=DB.orders[k];if(!o)continue;
+    total+=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+    if(!tableLabel){const t=DB.tables[o.tableId];tableLabel=t?t.label:(o.tableId||'Mesa');}
+    if(!personName&&o.personName)personName=o.personName;
+  }
+  const grupoDisc=keys.map(k=>DB.orders[k]).find(o=>o&&o._grupoDescuento!=null);
+  const preDisc=grupoDisc?{descuento:grupoDisc._grupoDescuento||0,pct:grupoDisc._grupoPct||0}:null;
+  const existingPm=keys.map(k=>DB.orders[k]?.paymentMethod).find(Boolean)||null;
+  const res=await showPaymentChoiceModal(null,total,preDisc,existingPm);
+  if(!res)return;
+  const pm=res.pm;const pmDetail=res.pmDetail||null;const descuento=res.descuento||0;const pct=res.pct||0;
+  const totalFinal=total-descuento;
+  const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+  for(const k of keys){
+    await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});
+  }
+  if(getCajaAbierta()&&totalFinal>0){
+    const hoy=new Date().toISOString().slice(0,10);
+    if(pmDetail&&pmDetail.length>1){
+      for(const p of pmDetail){
+        const montoP=Number(p.monto)||0;if(!montoP)continue;
+        await push(ref(db,'caja'),{tipo:'venta',concepto:`${tableLabel}${personName?' · '+personName:''} (${pmL[p.pm]||p.pm})${pct>0?` -${pct}%`:''}`,monto:montoP,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:p.pm});
+      }
+    } else {
+      await push(ref(db,'caja'),{tipo:'venta',concepto:`${tableLabel}${personName?' · '+personName:''} (${pmL[pm]||pm})${pct>0?` -${pct}%`:''}`,monto:totalFinal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,descuento,pct});
+    }
+  }
+  render();
+};
+window.waiterPrintCuentaGroup=async(keys,tableId)=>{
+  const orders=keys.map(k=>DB.orders[k]).filter(Boolean);
+  if(!orders.length)return;
+  const table=DB.tables[tableId];
+  const tLabel=table?table.label:tableId;
+  const itemMap={};
+  orders.forEach(o=>(o.items||[]).forEach(i=>{
+    const k=i.name+(i.selectedType?'|'+i.selectedType:'');
+    if(!itemMap[k])itemMap[k]={name:i.name,selectedType:i.selectedType||null,price:i.finalPrice||i.price,qty:0};
+    itemMap[k].qty+=i.qty;
+  }));
+  const items=Object.values(itemMap);
+  const totalBase=items.reduce((s,i)=>s+i.price*i.qty,0);
+  const grupoDisc=orders.find(o=>o._grupoDescuento!=null);
+  const descuento=grupoDisc?grupoDisc._grupoDescuento:0;
+  const pct=grupoDisc?grupoDisc._grupoPct:0;
+  const totalFinal=totalBase-descuento;
+  const syntheticOrder={tableId,personName:orders[0]?.personName||null,takenBy:null,createdAt:Date.now(),items:items.map(i=>({name:i.name,selectedType:i.selectedType,qty:i.qty,finalPrice:i.price,price:i.price})),descuento,pct,totalFinal};
+  await push(ref(db,'reprints'),{orderKey:'__summary__',order:syntheticOrder,tableLabel:tLabel,total:totalFinal,ts:Date.now()});
+  showNotif('order','🖨️ Enviado a imprimir',`${tLabel}${descuento>0?` · -${pct}%`:''} · $${totalFinal.toLocaleString()}`);
+};
 window.waiterPrintCuenta=async tableId=>{
   const orders=Object.values(DB.orders).filter(o=>o.tableId===tableId&&o.status!=='cobrado'&&o.status!=='deudor');
   if(!orders.length)return;
