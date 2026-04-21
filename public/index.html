@@ -5293,7 +5293,7 @@ function openPromoSlotsModal(d, onConfirm){
       <!-- Selected summary -->
       ${sel.chosen.length>0?`<div style="padding:8px 18px;background:#f0f7ff;border-bottom:0.5px solid var(--border);flex-shrink:0;display:flex;flex-wrap:wrap;gap:6px">
         ${sel.chosen.map((c,ci)=>`<div style="display:flex;align-items:center;gap:4px;background:#dbeafe;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:600;color:#1e40af">
-          ${c.name} ×${c.qty}
+          <span>${c.baseName||c.name} ×${c.qty}${c.excluded&&c.excluded.length?`<span style="font-size:10px;color:#b45309;font-weight:500;margin-left:3px">sin:${c.excluded.join(',')}</span>`:''}</span>
           <button data-rm="${ci}" style="border:none;background:none;color:#1e40af;font-size:14px;cursor:pointer;line-height:1;padding:0 0 0 2px">×</button>
         </div>`).join('')}
         <span style="font-size:12px;color:${remaining===0?'#059669':'#d97706'};font-weight:600;align-self:center">
@@ -5349,12 +5349,13 @@ function openPromoSlotsModal(d, onConfirm){
         const isCustom=dd.customizable&&(dd.ingredients||[]).length>0;
 
         const addToSlot=(itemName,typeName,excluded=[])=>{
-          let displayName=typeName?`${dd.name} (${typeName})`:dd.name;
+          const baseName=typeName?`${dd.name} (${typeName})`:dd.name;
+          let displayName=baseName;
           if(excluded.length>0)displayName+=` sin: ${excluded.join(', ')}`;
           const slotKey=key+(typeName?`|${typeName}`:'')+(!excluded.length?'':`|SIN:${excluded.join(',')}`);
           const existing=sel.chosen.find(c=>c.key===slotKey);
           if(existing){existing.qty++;}
-          else{sel.chosen.push({key:slotKey,name:displayName,excluded,qty:1});}
+          else{sel.chosen.push({key:slotKey,name:displayName,baseName,excluded,qty:1});}
           render();
         };
 
