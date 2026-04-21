@@ -1189,6 +1189,7 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
     const validTypes=(d.types||[]).filter(t=>t&&t.name);
     const hasTypes=(d.hasTypes||validTypes.length>0)&&validTypes.length>0;
     const isCustom=d.customizable&&(d.ingredients||[]).length>0;
+    console.log('tryAddItem:', d.name, 'hasTypes:', hasTypes, 'types:', d.types, 'validTypes:', validTypes, 'isCustom:', isCustom);
     if(hasTypes){picker={d:({...d,types:validTypes}),selectedType:null};search='';renderModal();return;}
     if(isCustom){openWqmCustomizer(d);return;}
     addItem(d,null,[]);
