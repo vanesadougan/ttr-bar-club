@@ -1136,7 +1136,7 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
     ${picker?`<div style="padding:12px 18px;background:#f8f7f4;border-bottom:0.5px solid var(--border);flex-shrink:0">
       <div style="font-size:13px;font-weight:600;margin-bottom:8px">Elegí la variante de <strong>${picker.d.name}</strong></div>
       <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
-        ${(picker.d.types||[]).map(t=>`<button class="wqm-type-btn" data-type="${t.name.replace(/"/g,'&quot;')}" data-price="${Number(t.price)||Number(picker.d.price)||0}"
+        ${(picker.d.types||[]).filter(t=>t&&t.name).map(t=>`<button class="wqm-type-btn" data-type="${t.name.replace(/"/g,'&quot;')}" data-price="${Number(t.price)||Number(picker.d.price)||0}"
           style="padding:9px 14px;border-radius:8px;border:1.5px solid ${picker.selectedType===t.name?'var(--brand)':'var(--border)'};background:${picker.selectedType===t.name?'#f0f7ff':'var(--card)'};font-size:13px;font-weight:${picker.selectedType===t.name?700:400};cursor:pointer;font-family:inherit">
           ${t.name} · $${(Number(t.price)||Number(picker.d.price)||0).toLocaleString()}
         </button>`).join('')}
@@ -1196,7 +1196,8 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
   };
 
   const openWqmCustomizer=(d)=>{
-    // Simple customizer: show ingredients as toggles
+    // ingredients puede ser array de strings o de objetos {name:...}
+    const ings=(d.ingredients||[]).map(i=>typeof i==='string'?i:(i.name||String(i))).filter(Boolean);
     let excluded=new Set();
     const custOverlay=document.createElement('div');
     custOverlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
@@ -1205,7 +1206,7 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
         <div style="font-size:15px;font-weight:700;margin-bottom:4px">Personalizar ${d.name}</div>
         <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Desactivá lo que no querés</div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-          ${(d.ingredients||[]).map(ing=>{const ex=excluded.has(ing);return `<button class="cust-ing" data-ing="${ing}" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:8px;border:1.5px solid ${ex?'#dc2626':'var(--border)'};background:${ex?'#fef2f2':'var(--card)'};cursor:pointer;font-size:14px;font-family:inherit">
+          ${ings.map(ing=>{const ex=excluded.has(ing);return `<button class="cust-ing" data-ing="${ing.replace(/"/g,'&quot;')}" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:8px;border:1.5px solid ${ex?'#dc2626':'var(--border)'};background:${ex?'#fef2f2':'var(--card)'};cursor:pointer;font-size:14px;font-family:inherit">
             <span style="color:${ex?'#dc2626':'var(--text)'}">${ex?'✗ SIN ':''} ${ing}</span>
             <span style="font-size:18px">${ex?'❌':'✓'}</span>
           </button>`;}).join('')}
