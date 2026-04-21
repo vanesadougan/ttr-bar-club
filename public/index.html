@@ -3370,9 +3370,9 @@ function renderOrdersTab(){
         </div>
       </div>`:'<div style="font-size:13px;color:var(--muted);margin-bottom:12px;text-align:center;padding:12px 0">Buscá y agregá items al pedido ↑</div>'}
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button onclick="submitManualOrder('pending')" ${canConfirm?'':'disabled'} style="flex:1;min-width:120px;padding:11px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${canConfirm?1:.45}">📋 Confirmar pedido</button>
-        <button onclick="submitManualOrder('cobrado')" ${canConfirm?'':'disabled'} style="flex:1;min-width:120px;padding:11px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${canConfirm?1:.45}">💵 Cobrar</button>
-        <button onclick="submitManualOrder('deudor')" ${canConfirm?'':'disabled'} style="flex:1;min-width:120px;padding:11px;border-radius:8px;border:0.5px solid #dc2626;background:#fef2f2;color:#dc2626;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${canConfirm?1:.45}">💳 Deudor</button>
+        <button id="manual-confirm-btn" onclick="submitManualOrder('pending')" ${canConfirm?'':'disabled'} style="flex:1;min-width:120px;padding:11px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${canConfirm?1:.45}">📋 Confirmar pedido</button>
+        <button id="manual-cobrar-btn" onclick="submitManualOrder('cobrado')" ${canConfirm?'':'disabled'} style="flex:1;min-width:120px;padding:11px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${canConfirm?1:.45}">💵 Cobrar</button>
+        <button id="manual-deudor-btn" onclick="submitManualOrder('deudor')" ${canConfirm?'':'disabled'} style="flex:1;min-width:120px;padding:11px;border-radius:8px;border:0.5px solid #dc2626;background:#fef2f2;color:#dc2626;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;opacity:${canConfirm?1:.45}">💳 Deudor</button>
       </div>
     </div>`;
   }
@@ -4673,6 +4673,16 @@ window.cancelManualOrder=()=>{C.manualOrder=null;C.manualOrderSearch='';C.manual
 window.updateManualOrder=(field,val)=>{if(!C.manualOrder)return;C.manualOrder[field]=val;render();};
 window.manualNombreInput=val=>{
   if(C.manualOrder)C.manualOrder.personName=val;
+  // Actualizar botones en tiempo real sin re-render completo
+  const hasItems=(C.manualOrder?.items||[]).length>0;
+  const canConfirm=hasItems&&val.trim().length>0;
+  ['manual-confirm-btn','manual-cobrar-btn','manual-deudor-btn'].forEach(id=>{
+    const btn=document.getElementById(id);
+    if(!btn)return;
+    btn.disabled=!canConfirm;
+    btn.style.opacity=canConfirm?'1':'0.4';
+    btn.style.cursor=canConfirm?'pointer':'not-allowed';
+  });
   const dd=document.getElementById('clientes-dropdown');if(!dd)return;
   const q=val.toLowerCase().trim();
   const clientes=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
@@ -4685,6 +4695,8 @@ window.selectCliente=nombre=>{
   if(C.manualOrder)C.manualOrder.personName=nombre;
   const inp=document.getElementById('manual-nombre');if(inp)inp.value=nombre;
   const dd=document.getElementById('clientes-dropdown');if(dd)dd.style.display='none';
+  // Actualizar botones
+  manualNombreInput(nombre);
 };
 // Cerrar dropdown al hacer click fuera
 document.addEventListener('click',e=>{if(!e.target.closest('#manual-nombre')&&!e.target.closest('#clientes-dropdown')){const dd=document.getElementById('clientes-dropdown');if(dd)dd.style.display='none';}});
@@ -4705,12 +4717,27 @@ window.updateManualSearch=()=>{
   ].filter(d=>{
     if(d.unavailable)return false;
     if(d.name.toLowerCase().includes(search))return true;
-    // Buscar por código de barras
     if(d.barcode&&String(d.barcode).includes(search))return true;
     if(d.barcodes&&d.barcodes.some(b=>String(b).includes(search)))return true;
     if(d.types&&d.types.some(t=>t.barcodes&&t.barcodes.some(b=>String(b).includes(search))))return true;
     return false;
   });
+  // Si el search parece un código de barras (solo números, ≥4 chars) y hay exactamente un resultado
+  // que tiene una variante que coincide exactamente → agregar directo sin picker
+  const looksLikeBarcode=/^\d{4,}$/.test(search);
+  if(looksLikeBarcode&&allItems.length===1){
+    const d=allItems[0];
+    if(d.types&&d.types.length>0){
+      const matchType=d.types.find(t=>t.barcodes&&t.barcodes.some(b=>String(b)===search));
+      if(matchType){
+        // Variante identificada exactamente → agregar sin picker
+        if(inp){inp.value='';C.manualOrderSearch='';}
+        list.style.display='none';list.innerHTML='';
+        addItemToManualOrder(d._key,d._src,matchType.name,new Set());
+        return;
+      }
+    }
+  }
   // Deduplicar por nombre+src
   const seen=new Set();
   const unique=allItems.filter(d=>{const k=d.name+'|'+d._src;if(seen.has(k))return false;seen.add(k);return true;});
@@ -4720,7 +4747,7 @@ window.updateManualSearch=()=>{
     return;
   }
   const srcLabel={cafeteria:'☕ Cafetería',kiosko:'🏪 Kiosko',dishes:'🍽 Restaurant'};
-  list.innerHTML=unique.map(d=>`<div onclick="selectManualItem('${d._key}','${d._src}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+  list.innerHTML=unique.map(d=>`<div onclick="selectManualItem('${d._key}','${d._src}','${search}')" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
     <span style="font-size:18px">${d.emoji||'🍽️'}</span>
     <div style="flex:1"><div style="font-size:14px;font-weight:500">${d.name}</div><div style="font-size:12px;color:var(--muted)">${srcLabel[d._src]||''}${d.hasTypes&&(d.types||[]).length>0?' · variantes':''}${d.customizable&&(d.ingredients||[]).length>0?' · personalizable':''}</div></div>
     <span style="font-size:14px;font-weight:600;color:var(--accent)">$${Number(d.price).toLocaleString()}</span>
@@ -4728,9 +4755,22 @@ window.updateManualSearch=()=>{
 };
 
 // Al seleccionar un item: si tiene variantes o ingredientes, abrir picker; si no, agregar directo
-window.selectManualItem=(key,src)=>{
+window.selectManualItem=(key,src,scannedBarcode)=>{
   const d=src==='cafeteria'?DB.cafeteriaItems[key]:src==='kiosko'?DB.kioskItems[key]:DB.dishes[key];
   if(!d)return;
+  // Si se escaneó un barcode, buscar si coincide con una variante específica
+  if(scannedBarcode&&d.hasTypes&&(d.types||[]).length>0){
+    const bc=String(scannedBarcode);
+    const matchType=d.types.find(t=>t.barcodes&&t.barcodes.some(b=>String(b)===bc));
+    if(matchType){
+      addItemToManualOrder(key,src,matchType.name,new Set());
+      const inp=document.getElementById('manual-search');
+      const list=document.getElementById('manual-search-results');
+      if(inp){inp.value='';C.manualOrderSearch='';}
+      if(list){list.style.display='none';list.innerHTML='';}
+      return;
+    }
+  }
   const needsPicker=(d.hasTypes&&(d.types||[]).length>0)||(d.customizable&&(d.ingredients||[]).length>0);
   if(needsPicker){
     C.manualOrderPicker={key,src,selectedType:null,excluded:new Set()};
