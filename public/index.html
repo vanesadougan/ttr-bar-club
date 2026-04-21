@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>TTR Bar Club</title>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#1a1a2e">
@@ -6369,7 +6369,7 @@ window.showWaiterModal=()=>{
     <div style="font-size:22px;text-align:center;margin-bottom:4px">🛎</div>
     <div style="font-size:16px;font-weight:600;text-align:center;margin-bottom:4px">Llamar al mozo</div>
     <div style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:14px">¿Necesitás algo en particular?</div>
-    <textarea id="waiter-msg" placeholder="Ej: Traeme la cuenta, necesito servilletas... (opcional)" style="width:100%;min-height:72px;padding:10px;border:0.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;resize:none;box-sizing:border-box;outline:none;background:var(--bg)"></textarea>
+    <textarea id="waiter-msg" placeholder="Ej: Traeme la cuenta, necesito servilletas... (opcional)" style="width:100%;min-height:72px;padding:10px;border:0.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:16px;resize:none;box-sizing:border-box;outline:none;background:var(--bg)"></textarea>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button onclick="document.getElementById('waiter-modal').remove()" style="flex:1;padding:13px;border-radius:10px;border:0.5px solid var(--border);background:transparent;font-family:inherit;font-size:14px;cursor:pointer;color:var(--muted)">Cancelar</button>
       <button onclick="confirmCallWaiter()" style="flex:2;padding:13px;border-radius:10px;border:none;background:var(--brand);color:#fff;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">Llamar al mozo</button>
@@ -6377,7 +6377,6 @@ window.showWaiterModal=()=>{
   </div>`;
   document.body.appendChild(overlay);
   overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
-  setTimeout(()=>document.getElementById('waiter-msg')?.focus(),100);
 };
 window.confirmCallWaiter=()=>{
   const msg=(document.getElementById('waiter-msg')?.value||'').trim();
@@ -6691,7 +6690,7 @@ window.showCartSheet=()=>{
   overlay.innerHTML=`<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:85vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 12px;border-bottom:0.5px solid var(--border)">
       <div style="font-size:15px;font-weight:600">${isIndividual?C.customerName:'Pedido mesa'} <span style="font-size:13px;font-weight:400;color:var(--muted);margin-left:4px">${ct} ítem${ct!==1?'s':''}</span></div>
-      <button onclick="document.getElementById('cart-sheet').remove()" style="border:none;background:var(--bg);border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted)">✕</button>
+      <button onclick="document.getElementById('cart-sheet').remove();const f=document.getElementById('fab-waiter');if(f)f.style.display='flex'" style="border:none;background:var(--bg);border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted)">✕</button>
     </div>
     <div style="overflow-y:auto;flex:1;padding:4px 0">${itemsH}</div>
     <div style="padding:14px 18px;border-top:0.5px solid var(--border)">
@@ -6704,7 +6703,9 @@ window.showCartSheet=()=>{
     </div>
   </div>`;
   document.body.appendChild(overlay);
-  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  overlay.addEventListener('click',e=>{if(e.target===overlay){overlay.remove();const f=document.getElementById('fab-waiter');if(f)f.style.display='flex';}});
+  // Hide FAB while cart sheet is open
+  const fabEl=document.getElementById('fab-waiter');if(fabEl)fabEl.style.display='none';
 };
 window.quickAddCaf=id=>{if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};C.cart[id].qty+=1;refreshMenuRenderWithScroll();if(document.getElementById('cart-sheet'))showCartSheet();};
 window.removeFromCartCaf=id=>{if(C.cart[id]){if(C.cart[id].qty>1)C.cart[id].qty--;else delete C.cart[id];}refreshMenuRenderWithScroll();if(document.getElementById('cart-sheet'))showCartSheet();};
@@ -7064,7 +7065,30 @@ function updateTopbarCart(){
   const show=isCustomer||isWaiter;
   cartEl.style.display=show?'block':'none';
   const waiterBtn=document.getElementById('topbar-waiter-btn');
-  if(waiterBtn)waiterBtn.style.display=(isCustomer&&!isMenuRoute)?'block':'none';
+  if(waiterBtn)waiterBtn.style.display='none'; // replaced by floating button
+
+  // Botón flotante para llamar al mozo
+  let fab=document.getElementById('fab-waiter');
+  if(isCustomer&&!isMenuRoute){
+    if(!fab){
+      fab=document.createElement('button');
+      fab.id='fab-waiter';
+      fab.onclick=()=>callWaiter();
+      fab.innerHTML=`<span style="font-size:28px;line-height:1">🛎</span><span style="font-size:11px;font-weight:700;letter-spacing:.02em;margin-top:2px">MOZO</span>`;
+      fab.style.cssText=`position:fixed;bottom:88px;left:18px;z-index:1000;width:64px;height:64px;border-radius:50%;border:none;background:#f59e0b;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;cursor:pointer;box-shadow:0 4px 16px rgba(245,158,11,.5);font-family:inherit;padding:0;animation:fab-pulse 2.5s ease-in-out infinite`;
+      // Add pulse animation if not already present
+      if(!document.getElementById('fab-style')){
+        const style=document.createElement('style');
+        style.id='fab-style';
+        style.textContent=`@keyframes fab-pulse{0%,100%{box-shadow:0 4px 16px rgba(245,158,11,.5),0 0 0 0 rgba(245,158,11,.3)}50%{box-shadow:0 4px 16px rgba(245,158,11,.5),0 0 0 10px rgba(245,158,11,0)}}`;
+        document.head.appendChild(style);
+      }
+      document.body.appendChild(fab);
+    }
+    fab.style.display='flex';
+  } else {
+    if(fab)fab.style.display='none';
+  }
   if(show){
     const ct=isWaiter?waiterCartCount():cartCount();
     countEl.textContent=ct;
