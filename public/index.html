@@ -5268,24 +5268,12 @@ window.adminGroupCobrado=async keys=>{
   const grupoDisc=keys.map(k=>DB.orders[k]).find(o=>o&&o._grupoDescuento!=null);
   const existingPm=keys.map(k=>DB.orders[k]?.paymentMethod).find(Boolean)||null;
   let pm,pmDetail=null,descuento=0,pct=0;
-  if(grupoDisc){
-    descuento=grupoDisc._grupoDescuento||0;
-    pct=grupoDisc._grupoPct||0;
-    // Pasar total original al modal con descuento pre-cargado
-    const res=await showPaymentChoiceModal(null,total,{descuento,pct});
-    if(!res)return;
-    pm=res.pm;pmDetail=res.pmDetail||null;
-    descuento=res.descuento||descuento;pct=res.pct||pct;
-  } else if(existingPm){
-    pm=existingPm;
-    const disc=await showDiscountModal(total);
-    if(!disc)return;
-    descuento=disc.descuento;pct=disc.pct;
-  } else {
-    const res=await showPaymentChoiceModal(null,total);
-    if(!res)return;
-    pm=res.pm;pmDetail=res.pmDetail||null;descuento=res.descuento||0;pct=res.pct||0;
-  }
+  // Siempre mostrar el modal completo con medio de pago
+  // Si hay descuento del grupo, pre-cargarlo; si hay medio de pago existente, pre-cargarlo
+  const preDisc=grupoDisc?{descuento:grupoDisc._grupoDescuento||0,pct:grupoDisc._grupoPct||0}:null;
+  const res=await showPaymentChoiceModal(null,total,preDisc,existingPm);
+  if(!res)return;
+  pm=res.pm;pmDetail=res.pmDetail||null;descuento=res.descuento||0;pct=res.pct||0;
   const totalFinal=total-descuento;
   const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
   for(const k of keys){
@@ -5638,7 +5626,7 @@ function showDiscountModal(totalBase, preDiscount){
     render();
   });
 }
-function showPaymentChoiceModal(orderKey, totalBase, preDiscount){
+function showPaymentChoiceModal(orderKey, totalBase, preDiscount, existingPm){
   return new Promise(resolve=>{
     const overlay=document.createElement('div');
     overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
@@ -5646,11 +5634,12 @@ function showPaymentChoiceModal(orderKey, totalBase, preDiscount){
     const showTotal=totalBase!=null&&totalBase>0;
     const _desc10=showTotal?Math.round(totalBase*0.1):0;
 
-    // State — pre-cargar descuento si viene del grupo
+    // State — pre-cargar descuento y medio de pago si vienen
     let descuento=preDiscount?preDiscount.descuento:0;
     let pct=preDiscount?preDiscount.pct:10;
     let discActive=preDiscount&&preDiscount.descuento>0;
-    let payments=[];
+    // Pre-cargar el medio de pago existente si lo hay
+    let payments=existingPm&&existingPm!=='mixto'?[{pm:existingPm,monto:showTotal?(totalBase-descuento):0}]:[];
 
     const render=()=>{
       const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
@@ -6784,14 +6773,12 @@ window.goToBill=()=>{
 
 window.confirmBill=()=>{
   if(!C.survey.paymentMethod){alert('Seleccioná el medio de pago');return;}
-  const pm=C.survey.paymentMethod;
+  const pm=C.survey.paymentMethod==='mixto'?'mixto':C.survey.paymentMethod;
   const billCutoff=Date.now()-18*60*60*1000;
-  // mark billed + save payment method in Firebase
   Object.entries(DB.orders).forEach(([k,o])=>{
     if(o.tableId===C.customerTableId&&o.status!=='cobrado'&&(o.createdAt||0)>=billCutoff)
       update(ref(db,`orders/${k}`),{status:'billed',billRequested:true,paymentMethod:pm});
   });
-  // build survey items
   const cats=getCats();
   const noRatingCatKeys=new Set(cats.filter(c=>c.noRating).map(c=>c._key));
   const seen={};
@@ -6813,6 +6800,7 @@ function renderPaymentScreen(mc){
     {id:'debito',label:'Tarjeta de débito',icon:'💳'},
     {id:'transferencia',label:'Transferencia',icon:'📲'},
     {id:'mercadopago',label:'Mercado Pago',icon:'🔵'},
+    {id:'mixto',label:'Más de un medio',icon:'🔀'},
   ];
   const selPay=C.survey.paymentMethod||null;
   // Resumen de la cuenta
