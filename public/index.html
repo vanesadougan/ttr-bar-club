@@ -1284,6 +1284,17 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
     // Nombre
     const nombreInp=overlay.querySelector('#wqm-nombre');
     const nombreDd=overlay.querySelector('#wqm-nombre-dd');
+    const bindClienteClicks=()=>{
+      overlay.querySelectorAll('.wqm-cliente').forEach(el=>{
+        el.onclick=()=>{
+          mo.personName=el.dataset.nombre;
+          if(nombreInp)nombreInp.value=el.dataset.nombre;
+          if(nombreDd)nombreDd.style.display='none';
+          const btn=overlay.querySelector('#wqm-confirm');
+          if(btn&&mo.items.length>0){btn.disabled=false;btn.style.opacity=1;btn.style.background='var(--brand)';}
+        };
+      });
+    };
     if(nombreInp){
       nombreInp.addEventListener('input',e=>{
         mo.personName=e.target.value;
@@ -1303,18 +1314,6 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
       document.addEventListener('click',e=>{if(nombreDd&&!nombreInp.contains(e.target)&&!nombreDd.contains(e.target))nombreDd.style.display='none';},{once:false});
       bindClienteClicks();
     }
-
-    const bindClienteClicks=()=>{
-      overlay.querySelectorAll('.wqm-cliente').forEach(el=>{
-        el.onclick=()=>{
-          mo.personName=el.dataset.nombre;
-          if(nombreInp)nombreInp.value=el.dataset.nombre;
-          if(nombreDd)nombreDd.style.display='none';
-          const btn=overlay.querySelector('#wqm-confirm');
-          if(btn&&mo.items.length>0){btn.disabled=false;btn.style.opacity=1;btn.style.background='var(--brand)';}
-        };
-      });
-    };
 
     // Search
     const searchInp=overlay.querySelector('#wqm-search');
