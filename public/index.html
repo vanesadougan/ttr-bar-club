@@ -1182,7 +1182,7 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
     const price=typeName?(Number(typeObj?.price)||Number(d.price)||0):Number(d.price)||0;
     const existing=mo.items.find(i=>i.name===d.name&&(i.selectedType||null)===(typeName||null)&&!(i.excluded&&i.excluded.length));
     if(existing&&!excluded.length){existing.qty++;}
-    else{mo.items.push({name:d.name,qty:1,price,finalPrice:price,selectedType:typeName||null,excluded,isCafeteria:d._src==='cafeteria'});}
+    else{mo.items.push({name:d.name,qty:1,price,finalPrice:price,selectedType:typeName||null,excluded,isCafeteria:d._src==='cafeteria',isKiosko:d._src==='kiosko'});}
   };
 
   const tryAddItem=(d)=>{
@@ -1239,6 +1239,7 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
     const results=[];
     [...Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k,_src:'dishes'})),
      ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria'})),
+     ...Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k,_src:'kiosko',emoji:'🏪'})),
     ].forEach(d=>{
       if(d.unavailable)return;
       if(d.name.toLowerCase().includes(s)){results.push({d,matchType:null});return;}
@@ -1270,9 +1271,10 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
     resultsDiv.style.display='block';
     resultsDiv.querySelectorAll('.wqm-res').forEach(el=>{
       el.onclick=()=>{
-        const d=(el.dataset.src==='cafeteria'?DB.cafeteriaItems:DB.dishes)[el.dataset.key];
+        const src=el.dataset.src;
+        const d=(src==='cafeteria'?DB.cafeteriaItems:src==='kiosko'?DB.kioskItems:DB.dishes)[el.dataset.key];
         if(!d)return;
-        d._src=el.dataset.src;
+        d._src=src;
         resultsDiv.style.display='none';
         const tn=el.dataset.type||null;
         if(tn){addItem(d,tn,[]);search='';renderModal();}
