@@ -1061,15 +1061,39 @@ function renderWaiterMode(){
   else if(step==='mesa')renderWaiterMesaScreen(mc);
   else if(step==='modeChoice')renderWaiterModeChoice(mc);
   else if(step==='nameInput')renderWaiterNameInput(mc);
+  else if(step==='quickOrder')renderWaiterQuickOrder(mc);
   else renderWaiterMenu(mc);
 }
+function renderWaiterQuickOrder(mc){
+  const table=DB.tables[C.waiterTableId];
+  const tLabel=table?table.label:'';
+  // Override submitManualOrder to go back to mesas after submit
+  // Render the admin orders content but inject a back button
+  // We reuse the existing manualOrder render by switching to admin mode temporarily
+  C.mode='admin';C.adminTab='orders';
+  // Ensure manualOrder is set
+  if(!C.manualOrder)C.manualOrder={tableId:C.waiterTableId,orderMode:'general',personName:'',items:[],_fromWaiter:true};
+  render();
+  // Inject a back button at the top of the manual order card
+  setTimeout(()=>{
+    const card=document.querySelector('.card[style*="var(--brand)"]');
+    if(card){
+      const backBar=document.createElement('div');
+      backBar.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:#f8f7f4;border-bottom:0.5px solid var(--border);margin:-1rem -1rem .75rem;border-radius:8px 8px 0 0';
+      backBar.innerHTML=`<span style="font-size:13px;color:var(--muted)">⚡ Pedido rápido · ${tLabel}</span><button onclick="waiterCancelQuickOrder()" style="border:none;background:none;font-size:13px;color:var(--muted);cursor:pointer">← Volver</button>`;
+      card.insertBefore(backBar,card.firstChild);
+    }
+  },50);
+}
+window.waiterCancelQuickOrder=()=>{
+  C.manualOrder=null;C.manualOrderSearch='';C.manualOrderPicker=null;
+  C.mode='waiter';C.waiterStep='mesas';render();
+};
 function renderWaiterSelectScreen(mc){
   const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k}));
   if(waiters.length===0){
     if(firstLoad){
       mc.innerHTML=`<div class="content"><div class="mode-screen"><div class="spinner"></div><div style="font-size:14px;color:var(--muted);margin-top:12px">Cargando...</div></div></div>`;
-    } else {
-      mc.innerHTML=`<div class="content"><div class="mode-screen"><div style="font-size:48px">👩‍🍳</div><div style="font-size:18px;font-weight:500;margin-top:12px">No hay mozas/mozos cargados</div><div style="font-size:14px;color:var(--muted);margin-top:4px">El admin debe agregar el personal primero</div></div></div>`;
     }
     return;
   }
@@ -1274,7 +1298,7 @@ function renderWaiterMesasScreen(mc){
       if(readyCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">✅ ${readyCt} listo${readyCt!==1?'s':''}</span>`;
       if(delivNormalCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">✓ ${delivNormalCt} entregado${delivNormalCt!==1?'s':''}</span>`;
       h+=`</div></div>`;
-      h+=`<button class="btn btn-primary btn-sm" onclick="waiterAddToMesa('${tableId}')">+ Agregar</button>`;
+      h+=`<button class="btn btn-primary btn-sm" onclick="waiterAddQuick('${tableId}')">+ Agregar</button>`;
       h+=`</div>`;
 
       // ── Items ──
@@ -1460,9 +1484,20 @@ function renderWaiterMesaScreen(mc){
 window.waiterSelectMesa=id=>{C.waiterTableId=id;C.waiterCart={};C.waiterCat=null;C.waiterCafCat=null;C.waiterSearch='';C.waiterMenuSection='platos';C.waiterStep='modeChoice';render();};
 function renderWaiterModeChoice(mc){
   const table=DB.tables[C.waiterTableId];
-  mc.innerHTML=`<div class="content"><div class="mode-screen"><div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem"><div style="width:32px;height:32px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">${C.waiterName[0].toUpperCase()}</div><span style="font-size:14px;color:var(--muted)">${C.waiterName} · ${table?table.label:''}</span></div><div class="mesa-title" style="font-size:22px;margin-bottom:1.5rem">¿Cómo tomamos el pedido?</div><div class="mode-cards"><button class="mode-card" onclick="waiterChooseMode('general')"><div class="mode-card-icon">👥</div><div style="font-weight:600;margin-bottom:4px">General</div><div style="font-size:12px;color:var(--muted)">Un pedido para toda la mesa</div></button><button class="mode-card" onclick="waiterChooseMode('individual')"><div class="mode-card-icon">👤</div><div style="font-weight:600;margin-bottom:4px">Individual</div><div style="font-size:12px;color:var(--muted)">Pedido por persona</div></button></div><button class="back-btn" onclick="setWaiterStep('mesa')" style="margin-top:1rem">← Cambiar mesa</button></div></div>`;
+  mc.innerHTML=`<div class="content"><div class="mode-screen"><div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem"><div style="width:32px;height:32px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">${C.waiterName[0].toUpperCase()}</div><span style="font-size:14px;color:var(--muted)">${C.waiterName} · ${table?table.label:''}</span></div><div class="mesa-title" style="font-size:22px;margin-bottom:1.5rem">¿Cómo tomamos el pedido?</div><div class="mode-cards"><button class="mode-card" onclick="waiterChooseMode('general')"><div class="mode-card-icon">👥</div><div style="font-weight:600;margin-bottom:4px">General</div><div style="font-size:12px;color:var(--muted)">Un pedido para toda la mesa</div></button><button class="mode-card" onclick="waiterChooseMode('individual')"><div class="mode-card-icon">👤</div><div style="font-weight:600;margin-bottom:4px">Individual</div><div style="font-size:12px;color:var(--muted)">Pedido por persona</div></button><button class="mode-card" onclick="waiterQuickOrder()"><div class="mode-card-icon">⚡</div><div style="font-weight:600;margin-bottom:4px">Pedido rápido</div><div style="font-size:12px;color:var(--muted)">Con buscador y escáner</div></button></div><button class="back-btn" onclick="setWaiterStep('mesa')" style="margin-top:1rem">← Cambiar mesa</button></div></div>`;
 }
 window.waiterChooseMode=mode=>{C.waiterOrderMode=mode;if(mode==='individual')C.waiterStep='nameInput';else{C.waiterPersonName='';C.waiterStep='menu';}render();};
+window.waiterQuickOrder=()=>{
+  C.manualOrder={tableId:C.waiterTableId,orderMode:'general',personName:'',items:[],_fromWaiter:true};
+  C.manualOrderSearch='';C.manualOrderPicker=null;
+  C.waiterStep='quickOrder';render();
+};
+window.waiterAddQuick=(tableId)=>{
+  C.waiterTableId=tableId;
+  C.manualOrder={tableId,orderMode:'general',personName:'',items:[],_fromWaiter:true};
+  C.manualOrderSearch='';C.manualOrderPicker=null;
+  C.waiterStep='quickOrder';render();
+};
 function renderWaiterNameInput(mc){
   const clientes=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
   mc.innerHTML=`<div class="content"><div class="mode-screen">
@@ -4722,7 +4757,13 @@ window.startManualOrder=()=>{
   }
   render();
 };
-window.cancelManualOrder=()=>{C.manualOrder=null;C.manualOrderSearch='';C.manualOrderPicker=null;render();};
+window.cancelManualOrder=()=>{clearManualOrder();};
+function clearManualOrder(){
+  const fromWaiter=C.manualOrder&&C.manualOrder._fromWaiter;
+  C.manualOrder=null;C.manualOrderSearch='';C.manualOrderPicker=null;
+  if(fromWaiter){C.mode='waiter';C.waiterStep='mesas';}
+  render();
+}
 window.updateManualOrder=(field,val)=>{if(!C.manualOrder)return;C.manualOrder[field]=val;render();};
 window.manualNombreInput=val=>{
   if(C.manualOrder)C.manualOrder.personName=val;
@@ -4888,7 +4929,7 @@ window.submitManualOrder=async(modo='pending')=>{
 
   if(modo==='pending'){
     await push(ref(db,'orders'),{...orderBase,status:'pending'});
-    C.manualOrder=null;C.manualOrderSearch='';render();
+    clearManualOrder();
   } else if(modo==='cobrado'){
     if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de cobrar.');return;}
     const res=await showPaymentChoiceModal(null,total);
@@ -4908,7 +4949,7 @@ window.submitManualOrder=async(modo='pending')=>{
       const concepto=`${tableLabel}${personName?' · '+personName:''} (${pmL[pm]||pm})${pct>0?` -${pct}%`:''}`;
       await push(ref(db,'caja'),{tipo:'venta',concepto,monto:totalFinal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,descuento,pct});
     }
-    C.manualOrder=null;C.manualOrderSearch='';render();
+    clearManualOrder();
   } else if(modo==='deudor'){
     // Mostrar modal para confirmar nombre y descuento
     const nombreExistente=personName||'';
@@ -4993,8 +5034,7 @@ window.submitManualOrder=async(modo='pending')=>{
         personName:nombre,orderMode:'individual',
         deudorRegistradoAt:Date.now(),saldoPendiente,descuento,pct
       });
-      C.manualOrder=null;C.manualOrderSearch='';
-      C.adminTab='deudores';render();
+      C.adminTab='deudores';clearManualOrder();
     };
   }
 };
