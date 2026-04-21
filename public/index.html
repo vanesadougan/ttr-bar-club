@@ -4181,9 +4181,12 @@ function renderDeudoresTab(){
     .filter(o=>o.status==='deudor')
     .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 
+  const totalDeuda=deudores.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
+  const nDeudores=new Set(deudores.map(o=>(o.deudorNombre||o.personName||'?').trim())).size;
+
   let h='<div style="max-width:720px">';
   h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">`;
-  h+=`<div><div style="font-size:18px;font-weight:600">💳 Deudores</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${deudores.length} deuda${deudores.length!==1?'s':''} pendiente${deudores.length!==1?'s':''}</div></div>`;
+  h+=`<div><div style="font-size:18px;font-weight:600">💳 Deudores</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${nDeudores} cobro${nDeudores!==1?'s':''} pendiente${nDeudores!==1?'s':''} · <strong style="color:#dc2626">$${totalDeuda.toLocaleString()}</strong></div></div>`;
   h+=`<button onclick="agregarDeudaVieja()" style="padding:8px 14px;border-radius:8px;border:0.5px solid #dc2626;background:#fef2f2;color:#dc2626;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Deuda vieja</button>`;
   h+=`</div>`;
 
@@ -5267,10 +5270,14 @@ function openPromoSlotsModal(d, onConfirm){
 
       <!-- Options -->
       <div style="overflow-y:auto;flex:1;padding:8px 18px;display:flex;flex-direction:column;gap:6px">
-        ${opts.map(dd=>`<button class="ps-opt" data-key="${dd._key}" data-name="${dd.name.replace(/"/g,'&quot;')}" ${remaining===0?'disabled style="opacity:.5"':''} style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);cursor:pointer;font-size:14px;font-family:inherit">
-          <span>${dd.name}</span>
+        ${opts.map(dd=>{
+          const rawTypes=(dd.types||[]).map(t=>typeof t==='string'?{name:t,price:dd.price}:t).filter(t=>t&&t.name);
+          const hasV=rawTypes.length>0;
+          const hasC=dd.customizable&&(dd.ingredients||[]).length>0;
+          return `<button class="ps-opt" data-key="${dd._key}" data-name="${dd.name.replace(/"/g,'&quot;')}" ${remaining===0?'disabled style="opacity:.5"':''} style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);cursor:pointer;font-size:14px;font-family:inherit">
+          <div><span>${dd.name}</span>${hasV?`<span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px;margin-left:6px">variantes</span>`:''}${hasC?`<span style="font-size:10px;background:#ede9fe;color:#5b21b6;padding:1px 5px;border-radius:4px;margin-left:4px">pers.</span>`:''}</div>
           <span style="color:var(--accent);font-size:12px">+ agregar</span>
-        </button>`).join('')}
+        </button>`;}).join('')}
       </div>
 
       <!-- Footer -->
@@ -5301,11 +5308,67 @@ function openPromoSlotsModal(d, onConfirm){
     });
     overlay.querySelectorAll('.ps-opt').forEach(btn=>{
       btn.addEventListener('click',()=>{
-        const key=btn.dataset.key;const name=btn.dataset.name;
-        const existing=sel.chosen.find(c=>c.key===key);
-        if(existing){existing.qty++;}
-        else{sel.chosen.push({key,name,qty:1});}
-        render();
+        const key=btn.dataset.key;
+        const dd=DB.dishes[key];
+        if(!dd)return;
+        const rawTypes=(dd.types||[]).map(t=>typeof t==='string'?{name:t,price:dd.price}:t).filter(t=>t&&t.name);
+        const hasTypes=rawTypes.length>0;
+        const isCustom=dd.customizable&&(dd.ingredients||[]).length>0;
+
+        const addToSlot=(itemName,typeName,excluded=[])=>{
+          const displayName=typeName?`${dd.name} (${typeName})`:dd.name;
+          const slotKey=key+(typeName?`|${typeName}`:'')+(!excluded.length?'':`|SIN:${excluded.join(',')}`);
+          const existing=sel.chosen.find(c=>c.key===slotKey);
+          if(existing){existing.qty++;}
+          else{sel.chosen.push({key:slotKey,name:displayName,qty:1});}
+          render();
+        };
+
+        if(hasTypes){
+          // Show inline type picker in a sub-overlay
+          const typeOverlay=document.createElement('div');
+          typeOverlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:4000;display:flex;align-items:flex-end;justify-content:center';
+          typeOverlay.innerHTML=`<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:18px;padding-bottom:calc(18px + env(safe-area-inset-bottom))">
+            <div style="font-size:14px;font-weight:700;margin-bottom:12px">Elegí la variante de ${dd.name}</div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+              ${rawTypes.map(t=>`<button class="type-pick-btn" data-type="${t.name.replace(/"/g,'&quot;')}" style="display:flex;justify-content:space-between;padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);cursor:pointer;font-size:14px;font-family:inherit"><span>${t.name}</span><span style="color:var(--accent)">$${(Number(t.price)||Number(dd.price)||0).toLocaleString()}</span></button>`).join('')}
+            </div>
+            <button id="type-pick-cancel" style="width:100%;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;cursor:pointer;font-family:inherit;color:var(--muted)">Cancelar</button>
+          </div>`;
+          document.body.appendChild(typeOverlay);
+          typeOverlay.querySelector('#type-pick-cancel').onclick=()=>typeOverlay.remove();
+          typeOverlay.addEventListener('click',e=>{if(e.target===typeOverlay)typeOverlay.remove();});
+          typeOverlay.querySelectorAll('.type-pick-btn').forEach(tb=>{
+            tb.onclick=()=>{typeOverlay.remove();addToSlot(dd.name,tb.dataset.type,[]);};
+          });
+        } else if(isCustom){
+          // Show customizer sub-overlay
+          const ings=(dd.ingredients||[]).map(i=>typeof i==='string'?i:(i.name||String(i))).filter(Boolean);
+          let excluded=new Set();
+          const custOverlay=document.createElement('div');
+          custOverlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:4000;display:flex;align-items:flex-end;justify-content:center';
+          const renderCust=()=>{
+            custOverlay.innerHTML=`<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:18px;padding-bottom:calc(18px + env(safe-area-inset-bottom))">
+              <div style="font-size:14px;font-weight:700;margin-bottom:4px">Personalizar ${dd.name}</div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Destildá lo que no querés</div>
+              <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+                ${ings.map(ing=>{const ex=excluded.has(ing);return `<button class="cust-ing2" data-ing="${ing.replace(/"/g,'&quot;')}" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;border:1.5px solid ${ex?'#dc2626':'var(--border)'};background:${ex?'#fef2f2':'var(--card)'};cursor:pointer;font-size:14px;font-family:inherit"><span style="color:${ex?'#dc2626':'var(--text)'}">${ex?'✗ SIN ':''} ${ing}</span><span>${ex?'❌':'✓'}</span></button>`;}).join('')}
+              </div>
+              <div style="display:flex;gap:8px">
+                <button id="cust2-confirm" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Agregar</button>
+                <button id="cust2-cancel" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button>
+              </div>
+            </div>`;
+            custOverlay.querySelectorAll('.cust-ing2').forEach(b=>{b.onclick=()=>{const ing=b.dataset.ing;if(excluded.has(ing))excluded.delete(ing);else excluded.add(ing);renderCust();};});
+            custOverlay.querySelector('#cust2-confirm').onclick=()=>{custOverlay.remove();addToSlot(dd.name,null,[...excluded]);};
+            custOverlay.querySelector('#cust2-cancel').onclick=()=>custOverlay.remove();
+          };
+          document.body.appendChild(custOverlay);
+          custOverlay.addEventListener('click',e=>{if(e.target===custOverlay)custOverlay.remove();});
+          renderCust();
+        } else {
+          addToSlot(dd.name,null,[]);
+        }
       });
     });
     overlay.querySelectorAll('[data-rm]').forEach(btn=>{
