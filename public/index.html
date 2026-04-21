@@ -1073,226 +1073,302 @@ function renderWaiterQuickOrder(mc){
 }
 window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
   document.getElementById('waiter-quick-modal')?.remove();
-  const tables=Object.entries(DB.tables).map(([k,v])=>({...v,_key:k}));
+  const tables=Object.entries(DB.tables).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.label||'').localeCompare(b.label||'','es',{numeric:true}));
   const clientesList=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
-  // State
   let mo={tableId:tableId||'',orderMode:orderMode||'general',personName:personName||'',items:[]};
   let search='';
-  let picker=null;
+  let picker=null; // {d, typeName selected}
 
   const overlay=document.createElement('div');
   overlay.id='waiter-quick-modal';
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
+  overlay.style.cssText='position:fixed;inset:0;background:var(--card);z-index:2000;display:flex;flex-direction:column;overflow:hidden';
 
   const renderModal=()=>{
     const moTotal=mo.items.reduce((s,i)=>s+i.price*i.qty,0);
     const hasItems=mo.items.length>0;
     const canConfirm=hasItems&&!(mo.orderMode==='individual'&&!mo.personName?.trim());
-    const table=DB.tables[mo.tableId];
 
-    overlay.innerHTML=`<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">
-      <!-- Header -->
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:0.5px solid var(--border);flex-shrink:0">
-        <div style="font-size:15px;font-weight:600">⚡ Pedido rápido${table?' · '+table.label:''}</div>
-        <button id="wqm-close" style="border:none;background:var(--bg);border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;color:var(--muted)">✕</button>
+    overlay.innerHTML=`
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:0.5px solid var(--border);flex-shrink:0;background:var(--card)">
+      <div>
+        <div style="font-size:16px;font-weight:700">⚡ Pedido rápido</div>
+        <div style="font-size:12px;color:var(--muted)">${DB.tables[mo.tableId]?DB.tables[mo.tableId].label:'Sin mesa'}</div>
       </div>
+      <button id="wqm-close" style="border:none;background:var(--bg);border-radius:50%;width:34px;height:34px;font-size:18px;cursor:pointer;color:var(--muted);display:flex;align-items:center;justify-content:center">✕</button>
+    </div>
 
-      <div style="overflow-y:auto;flex:1;padding:14px 18px">
-        <!-- Mesa + Modo -->
-        <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-          <div style="flex:1;min-width:120px">
-            <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">MESA</label>
-            <select id="wqm-table" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:var(--bg)">
-              <option value="">— Sin mesa —</option>
-              ${tables.map(t=>`<option value="${t._key}"${mo.tableId===t._key?' selected':''}>${t.label}</option>`).join('')}
-            </select>
-          </div>
-          <div style="flex:1;min-width:120px">
-            <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">MODO</label>
-            <select id="wqm-mode" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:var(--bg)">
-              <option value="general"${mo.orderMode==='general'?' selected':''}>👥 General</option>
-              <option value="individual"${mo.orderMode==='individual'?' selected':''}>👤 Individual</option>
-            </select>
-          </div>
-        </div>
-
-        ${mo.orderMode==='individual'?`
-        <div style="margin-bottom:12px;position:relative">
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">NOMBRE <span style="color:var(--danger)">*</span></label>
-          <input id="wqm-nombre" placeholder="Nombre del comensal" value="${mo.personName||''}"
-            style="width:100%;padding:8px 12px;border:0.5px solid var(--border);border-radius:8px;font-size:16px;font-family:inherit;box-sizing:border-box;background:var(--bg)" autocomplete="off">
-          <div id="wqm-nombre-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:0.5px solid var(--border);border-radius:8px;z-index:10;max-height:140px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
-        </div>`:''}
-
-        <!-- Buscador -->
-        <div style="position:relative;margin-bottom:10px">
-          <input id="wqm-search" placeholder="🔍 Buscá o escaneá un producto..." value="${search}"
-            style="width:100%;padding:10px 12px;border:1.5px solid var(--brand);border-radius:10px;font-size:16px;font-family:inherit;box-sizing:border-box;background:var(--bg)" autocomplete="off">
-          <div id="wqm-results" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:0.5px solid var(--border);border-radius:10px;z-index:10;max-height:200px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.15)"></div>
-        </div>
-
-        ${picker?renderWqmPicker(picker,mo):''}
-
-        <!-- Items -->
-        ${hasItems?`<div style="margin-bottom:12px">
-          ${mo.items.map((item,idx)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid #f3f4f6">
-            <div style="flex:1;font-size:13px"><strong>${item.name}</strong>${item.selectedType?` <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:3px">${item.selectedType}</span>`:''}</div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <button data-wqm-qty="${idx}" data-delta="-1" style="width:24px;height:24px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:14px;cursor:pointer;line-height:1">−</button>
-              <span style="font-size:13px;font-weight:600;min-width:16px;text-align:center">${item.qty}</span>
-              <button data-wqm-qty="${idx}" data-delta="1" style="width:24px;height:24px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:14px;cursor:pointer;line-height:1">+</button>
-            </div>
-            <span style="font-size:13px;font-weight:600;color:var(--accent);min-width:60px;text-align:right">$${(item.price*item.qty).toLocaleString()}</span>
-            <button data-wqm-rm="${idx}" style="width:22px;height:22px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:12px;cursor:pointer;line-height:1">✕</button>
-          </div>`).join('')}
-          <div style="display:flex;justify-content:flex-end;margin-top:8px">
-            <span style="font-size:15px;font-weight:700;color:var(--accent)">Total: $${moTotal.toLocaleString()}</span>
-          </div>
-        </div>`:'<div style="font-size:13px;color:var(--muted);text-align:center;padding:16px 0">Agregá items al pedido</div>'}
+    <!-- Config: mesa + modo -->
+    <div style="display:flex;gap:10px;padding:12px 18px;border-bottom:0.5px solid var(--border);flex-shrink:0;background:var(--bg)">
+      <div style="flex:1">
+        <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;text-transform:uppercase">Mesa</label>
+        <select id="wqm-table" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:var(--card)">
+          <option value="">— Sin mesa —</option>
+          ${tables.map(t=>`<option value="${t._key}"${mo.tableId===t._key?' selected':''}>${t.label}</option>`).join('')}
+        </select>
       </div>
-
-      <!-- Footer -->
-      <div style="padding:14px 18px;border-top:0.5px solid var(--border);flex-shrink:0">
-        <button id="wqm-confirm" ${canConfirm?'':'disabled'} style="width:100%;padding:12px;border-radius:10px;border:none;background:${canConfirm?'var(--brand)':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${canConfirm?'pointer':'not-allowed'};font-family:inherit;opacity:${canConfirm?1:.6}">
-          📋 Confirmar pedido
-        </button>
+      <div style="flex:1">
+        <label style="font-size:10px;font-weight:700;color:var(--muted);display:block;margin-bottom:3px;text-transform:uppercase">Modo</label>
+        <select id="wqm-mode" style="width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:var(--card)">
+          <option value="general"${mo.orderMode==='general'?' selected':''}>👥 General</option>
+          <option value="individual"${mo.orderMode==='individual'?' selected':''}>👤 Individual</option>
+        </select>
       </div>
+    </div>
+
+    ${mo.orderMode==='individual'?`
+    <div style="padding:10px 18px;border-bottom:0.5px solid var(--border);flex-shrink:0;background:var(--card);position:relative">
+      <input id="wqm-nombre" placeholder="Nombre del comensal *" value="${mo.personName||''}" autocomplete="off"
+        style="width:100%;padding:9px 12px;border:1.5px solid ${!mo.personName?.trim()&&hasItems?'#dc2626':'var(--border)'};border-radius:8px;font-size:16px;font-family:inherit;box-sizing:border-box;background:var(--bg)">
+      <div id="wqm-nombre-dd" style="display:none;position:absolute;left:18px;right:18px;top:calc(100% - 2px);background:var(--card);border:0.5px solid var(--border);border-radius:0 0 8px 8px;z-index:10;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.15)">
+        ${clientesList.map(n=>`<div class="wqm-cliente" data-nombre="${n.replace(/"/g,'&quot;')}" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6">${n}</div>`).join('')}
+      </div>
+    </div>`:''}
+
+    <!-- Buscador -->
+    <div style="padding:10px 18px;border-bottom:0.5px solid var(--border);flex-shrink:0;background:var(--card);position:relative">
+      <input id="wqm-search" placeholder="🔍 Buscá o escaneá un producto..." value="${search}" autocomplete="off"
+        style="width:100%;padding:10px 14px;border:1.5px solid var(--brand);border-radius:10px;font-size:16px;font-family:inherit;box-sizing:border-box;background:var(--bg)">
+      <div id="wqm-results" style="display:none;position:absolute;left:18px;right:18px;top:calc(100% - 2px);background:var(--card);border:0.5px solid var(--border);border-radius:0 0 10px 10px;z-index:10;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.15)"></div>
+    </div>
+
+    <!-- Picker de variantes -->
+    ${picker?`<div style="padding:12px 18px;background:#f8f7f4;border-bottom:0.5px solid var(--border);flex-shrink:0">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px">Elegí la variante de <strong>${picker.d.name}</strong></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+        ${(picker.d.types||[]).map(t=>`<button class="wqm-type-btn" data-type="${t.name.replace(/"/g,'&quot;')}" data-price="${Number(t.price)||Number(picker.d.price)||0}"
+          style="padding:9px 14px;border-radius:8px;border:1.5px solid ${picker.selectedType===t.name?'var(--brand)':'var(--border)'};background:${picker.selectedType===t.name?'#f0f7ff':'var(--card)'};font-size:13px;font-weight:${picker.selectedType===t.name?700:400};cursor:pointer;font-family:inherit">
+          ${t.name} · $${(Number(t.price)||Number(picker.d.price)||0).toLocaleString()}
+        </button>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px">
+        <button id="wqm-picker-confirm" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Agregar</button>
+        <button id="wqm-picker-cancel" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>
+    </div>`:''}
+
+    <!-- Items scrollable -->
+    <div style="flex:1;overflow-y:auto;padding:0 18px">
+      ${hasItems?mo.items.map((item,idx)=>`
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 0;border-bottom:0.5px solid #f3f4f6">
+          <div style="flex:1;font-size:14px">
+            <strong>${item.name}</strong>${item.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">${item.selectedType}</span>`:''}
+            ${item.excluded&&item.excluded.length?`<div style="font-size:11px;color:#dc2626">SIN: ${item.excluded.join(', ')}</div>`:''}
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <button data-rm-one="${idx}" style="width:26px;height:26px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:15px;cursor:pointer;line-height:1">−</button>
+            <span style="font-size:14px;font-weight:600;min-width:20px;text-align:center">${item.qty}</span>
+            <button data-add-one="${idx}" style="width:26px;height:26px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:15px;cursor:pointer;line-height:1">+</button>
+          </div>
+          <span style="font-size:14px;font-weight:600;color:var(--accent);min-width:70px;text-align:right">$${(item.price*item.qty).toLocaleString()}</span>
+          <button data-rm="${idx}" style="width:26px;height:26px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:13px;cursor:pointer;line-height:1">✕</button>
+        </div>`).join('')
+      :`<div style="text-align:center;padding:32px 0;color:var(--muted)"><div style="font-size:36px;margin-bottom:8px">🛒</div><div style="font-size:14px">Buscá productos para agregar</div></div>`}
+    </div>
+
+    <!-- Footer -->
+    <div style="padding:14px 18px;border-top:0.5px solid var(--border);flex-shrink:0;background:var(--card)">
+      ${hasItems?`<div style="display:flex;justify-content:space-between;margin-bottom:10px"><span style="font-size:14px;color:var(--muted)">Total</span><span style="font-size:18px;font-weight:700;color:var(--accent)">$${moTotal.toLocaleString()}</span></div>`:''}
+      <button id="wqm-confirm" ${!canConfirm?'disabled':''} style="width:100%;padding:13px;border-radius:10px;border:none;background:${canConfirm?'var(--brand)':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${canConfirm?'pointer':'not-allowed'};font-family:inherit;opacity:${canConfirm?1:.6}">
+        📋 Confirmar pedido${hasItems?' · '+mo.items.reduce((s,i)=>s+i.qty,0)+' ítems':''}
+      </button>
     </div>`;
 
-    // Events
+    bindEvents();
+  };
+
+  const addItem=(d,typeName,excluded=[])=>{
+    const typeObj=(d.types||[]).find(t=>t.name===typeName);
+    const price=typeName?(Number(typeObj?.price)||Number(d.price)||0):Number(d.price)||0;
+    const existing=mo.items.find(i=>i.name===d.name&&(i.selectedType||null)===(typeName||null)&&!(i.excluded&&i.excluded.length));
+    if(existing&&!excluded.length){existing.qty++;}
+    else{mo.items.push({name:d.name,qty:1,price,finalPrice:price,selectedType:typeName||null,excluded,isCafeteria:d._src==='cafeteria'});}
+  };
+
+  const tryAddItem=(d)=>{
+    const hasTypes=d.hasTypes&&(d.types||[]).length>0;
+    const isCustom=d.customizable&&(d.ingredients||[]).length>0;
+    if(hasTypes){picker={d,selectedType:null};search='';renderModal();return;}
+    if(isCustom){openWqmCustomizer(d);return;}
+    addItem(d,null,[]);
+    search='';
+    renderModal();
+  };
+
+  const openWqmCustomizer=(d)=>{
+    // Simple customizer: show ingredients as toggles
+    let excluded=new Set();
+    const custOverlay=document.createElement('div');
+    custOverlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
+    const renderCust=()=>{
+      custOverlay.innerHTML=`<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom))">
+        <div style="font-size:15px;font-weight:700;margin-bottom:4px">Personalizar ${d.name}</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Desactivá lo que no querés</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+          ${(d.ingredients||[]).map(ing=>{const ex=excluded.has(ing);return `<button class="cust-ing" data-ing="${ing}" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:8px;border:1.5px solid ${ex?'#dc2626':'var(--border)'};background:${ex?'#fef2f2':'var(--card)'};cursor:pointer;font-size:14px;font-family:inherit">
+            <span style="color:${ex?'#dc2626':'var(--text)'}">${ex?'✗ SIN ':''} ${ing}</span>
+            <span style="font-size:18px">${ex?'❌':'✓'}</span>
+          </button>`;}).join('')}
+        </div>
+        <div style="display:flex;gap:8px">
+          <button id="cust-confirm" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--brand);color:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Agregar</button>
+          <button id="cust-cancel" style="padding:12px 16px;border-radius:10px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
+        </div>
+      </div>`;
+      custOverlay.querySelectorAll('.cust-ing').forEach(btn=>{
+        btn.onclick=()=>{const ing=btn.dataset.ing;if(excluded.has(ing))excluded.delete(ing);else excluded.add(ing);renderCust();};
+      });
+      custOverlay.querySelector('#cust-confirm').onclick=()=>{
+        addItem(d,null,[...excluded]);search='';custOverlay.remove();renderModal();
+      };
+      custOverlay.querySelector('#cust-cancel').onclick=()=>custOverlay.remove();
+    };
+    document.body.appendChild(custOverlay);
+    custOverlay.addEventListener('click',e=>{if(e.target===custOverlay)custOverlay.remove();});
+    renderCust();
+  };
+
+  const doSearch=(s)=>{
+    const resultsDiv=overlay.querySelector('#wqm-results');
+    if(!resultsDiv)return;
+    if(!s){resultsDiv.style.display='none';return;}
+    const results=[];
+    [...Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k,_src:'dishes'})),
+     ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria'})),
+    ].forEach(d=>{
+      if(d.unavailable)return;
+      if(d.name.toLowerCase().includes(s)){results.push({d,matchType:null});return;}
+      if(d.barcode&&String(d.barcode).includes(s)){results.push({d,matchType:null});return;}
+      if(d.barcodes&&d.barcodes.some(b=>String(b).includes(s))){results.push({d,matchType:null});return;}
+      if(d.hasTypes&&d.types?.length){
+        const byName=d.types.filter(t=>t.name.toLowerCase().includes(s));
+        if(byName.length===1){results.push({d,matchType:byName[0]});return;}
+        if(byName.length>1){results.push({d,matchType:null});return;}
+        const byBarcode=d.types.find(t=>t.barcodes&&t.barcodes.some(b=>String(b).includes(s)));
+        if(byBarcode){results.push({d,matchType:byBarcode});return;}
+      }
+    });
+    // Barcode exact → add directly
+    const looksLikeBarcode=/^\d{4,}$/.test(s);
+    if(looksLikeBarcode&&results.length===1){
+      const {d,matchType}=results[0];
+      if(matchType){addItem(d,matchType.name,[]);search='';resultsDiv.style.display='none';renderModal();return;}
+      if(!d.hasTypes||!d.types?.length){addItem(d,null,[]);search='';resultsDiv.style.display='none';renderModal();return;}
+    }
+    if(!results.length){resultsDiv.innerHTML=`<div style="padding:10px 14px;font-size:13px;color:var(--muted)">Sin resultados</div>`;resultsDiv.style.display='block';return;}
+    const seen=new Set();
+    const unique=results.filter(r=>{const k=r.d._key+'|'+(r.matchType?.name||'');if(seen.has(k))return false;seen.add(k);return true;});
+    resultsDiv.innerHTML=unique.map(({d,matchType})=>`<div class="wqm-res" data-key="${d._key}" data-src="${d._src}" data-type="${matchType?matchType.name.replace(/"/g,'&quot;'):''}" style="display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background=\'var(--bg)\'" onmouseout="this.style.background=\'\'" >
+      <div style="flex:1"><div style="font-size:14px;font-weight:500">${d.name}${matchType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:4px">${matchType.name}</span>`:''}</div><div style="font-size:11px;color:var(--muted)">${!matchType&&d.hasTypes&&d.types?.length?'· variantes':''}${d.customizable&&d.ingredients?.length?'· personalizable':''}</div></div>
+      <span style="font-size:14px;font-weight:600;color:var(--accent)">$${(matchType?Number(matchType.price)||Number(d.price):Number(d.price)).toLocaleString()}</span>
+    </div>`).join('');
+    resultsDiv.style.display='block';
+    resultsDiv.querySelectorAll('.wqm-res').forEach(el=>{
+      el.onclick=()=>{
+        const d=(el.dataset.src==='cafeteria'?DB.cafeteriaItems:DB.dishes)[el.dataset.key];
+        if(!d)return;
+        d._src=el.dataset.src;
+        resultsDiv.style.display='none';
+        const tn=el.dataset.type||null;
+        if(tn){addItem(d,tn,[]);search='';renderModal();}
+        else{tryAddItem(d);}
+      };
+    });
+  };
+
+  const bindEvents=()=>{
     overlay.querySelector('#wqm-close').onclick=()=>overlay.remove();
     overlay.querySelector('#wqm-table').onchange=e=>{mo.tableId=e.target.value;renderModal();};
     overlay.querySelector('#wqm-mode').onchange=e=>{mo.orderMode=e.target.value;mo.personName='';renderModal();};
 
-    // Nombre autocomplete
+    // Nombre
     const nombreInp=overlay.querySelector('#wqm-nombre');
     const nombreDd=overlay.querySelector('#wqm-nombre-dd');
     if(nombreInp){
       nombreInp.addEventListener('input',e=>{
         mo.personName=e.target.value;
-        // Update confirm button
-        const btn=overlay.querySelector('#wqm-confirm');
-        if(btn){const ok=mo.items.length>0&&e.target.value.trim().length>0;btn.disabled=!ok;btn.style.opacity=ok?1:.6;btn.style.background=ok?'var(--brand)':'#d1d5db';}
-        // Dropdown
         const q=e.target.value.toLowerCase().trim();
         const filtered=q?clientesList.filter(n=>n.toLowerCase().includes(q)):clientesList;
-        if(filtered.length&&q){
-          nombreDd.innerHTML=filtered.map(n=>`<div data-wqm-cliente="${n}" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6">${n}</div>`).join('');
-          nombreDd.style.display='block';
-        } else {nombreDd.style.display='none';}
+        if(nombreDd){
+          nombreDd.innerHTML=filtered.map(n=>`<div class="wqm-cliente" data-nombre="${n.replace(/"/g,'&quot;')}" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6">${n}</div>`).join('');
+          nombreDd.style.display=filtered.length?'block':'none';
+          bindClienteClicks();
+        }
+        const btn=overlay.querySelector('#wqm-confirm');
+        if(btn){const ok=mo.items.length>0&&e.target.value.trim().length>0;btn.disabled=!ok;btn.style.opacity=ok?1:.6;btn.style.background=ok?'var(--brand)':'#d1d5db';}
       });
       nombreInp.addEventListener('focus',()=>{
-        if(!nombreInp.value&&clientesList.length){
-          nombreDd.innerHTML=clientesList.map(n=>`<div data-wqm-cliente="${n}" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6">${n}</div>`).join('');
-          nombreDd.style.display='block';
-        }
+        if(nombreDd){nombreDd.style.display=clientesList.length?'block':'none';}
       });
-      nombreDd.querySelectorAll('[data-wqm-cliente]').forEach(d=>{
-        d.onclick=()=>{mo.personName=d.dataset.wqmCliente;nombreInp.value=d.dataset.wqmCliente;nombreDd.style.display='none';renderModal();};
-      });
+      document.addEventListener('click',e=>{if(nombreDd&&!nombreInp.contains(e.target)&&!nombreDd.contains(e.target))nombreDd.style.display='none';},{once:false});
+      bindClienteClicks();
     }
+
+    const bindClienteClicks=()=>{
+      overlay.querySelectorAll('.wqm-cliente').forEach(el=>{
+        el.onclick=()=>{
+          mo.personName=el.dataset.nombre;
+          if(nombreInp)nombreInp.value=el.dataset.nombre;
+          if(nombreDd)nombreDd.style.display='none';
+          const btn=overlay.querySelector('#wqm-confirm');
+          if(btn&&mo.items.length>0){btn.disabled=false;btn.style.opacity=1;btn.style.background='var(--brand)';}
+        };
+      });
+    };
 
     // Search
     const searchInp=overlay.querySelector('#wqm-search');
-    const resultsDiv=overlay.querySelector('#wqm-results');
-    searchInp.addEventListener('input',e=>{
-      search=e.target.value;
-      const s=search.toLowerCase().trim();
-      if(!s){resultsDiv.style.display='none';return;}
-      const allItems=[
-        ...Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k,_src:'dishes'})),
-        ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria'})),
-      ].filter(d=>{
-        if(d.unavailable)return false;
-        if(d.name.toLowerCase().includes(s))return true;
-        if(d.barcode&&String(d.barcode).includes(s))return true;
-        if(d.barcodes&&d.barcodes.some(b=>String(b).includes(s)))return true;
-        if(d.types&&d.types.some(t=>t.barcodes&&t.barcodes.some(b=>String(b).includes(s))))return true;
-        return false;
-      });
-      // Barcode exact match → add directly
-      const looksLikeBarcode=/^\d{4,}$/.test(s);
-      if(looksLikeBarcode&&allItems.length===1){
-        const d=allItems[0];
-        if(d.types&&d.types.length>0){
-          const matchType=d.types.find(t=>t.barcodes&&t.barcodes.some(b=>String(b)===s));
-          if(matchType){wqmAddItem(d,matchType.name);searchInp.value='';search='';resultsDiv.style.display='none';renderModal();return;}
-        } else {wqmAddItem(allItems[0],null);searchInp.value='';search='';resultsDiv.style.display='none';renderModal();return;}
-      }
-      const seen=new Set();
-      const unique=allItems.filter(d=>{const k=d.name+'|'+d._src;if(seen.has(k))return false;seen.add(k);return true;});
-      if(!unique.length){resultsDiv.innerHTML=`<div style="padding:10px 14px;font-size:13px;color:var(--muted)">Sin resultados</div>`;resultsDiv.style.display='block';return;}
-      resultsDiv.innerHTML=unique.map(d=>`<div data-wqm-item="${d._key}" data-wqm-src="${d._src}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
-        <div style="flex:1"><div style="font-size:14px;font-weight:500">${d.name}</div><div style="font-size:11px;color:var(--muted)">${d.hasTypes&&d.types?.length?' · variantes':''}</div></div>
-        <span style="font-size:14px;font-weight:600;color:var(--accent)">$${Number(d.price).toLocaleString()}</span>
-      </div>`).join('');
-      resultsDiv.style.display='block';
-      resultsDiv.querySelectorAll('[data-wqm-item]').forEach(el=>{
-        el.onclick=()=>{
-          const key=el.dataset.wqmItem;const src=el.dataset.wqmSrc;
-          const d=src==='cafeteria'?DB.cafeteriaItems[key]:DB.dishes[key];
-          if(!d)return;
-          if(d.hasTypes&&d.types?.length>0){picker={key,src,d};renderModal();}
-          else{wqmAddItem(d,null);searchInp.value='';search='';resultsDiv.style.display='none';renderModal();}
-        };
-      });
-    });
-    searchInp.addEventListener('keydown',e=>{if(e.key==='Escape'){resultsDiv.style.display='none';}});
+    if(searchInp){
+      searchInp.addEventListener('input',e=>{search=e.target.value.toLowerCase().trim();doSearch(search);});
+      searchInp.addEventListener('focus',()=>{if(search)doSearch(search);});
+    }
 
-    // Qty and remove buttons
-    overlay.querySelectorAll('[data-wqm-qty]').forEach(btn=>{
-      btn.onclick=()=>{const idx=+btn.dataset.wqmQty;const delta=+btn.dataset.delta;mo.items[idx].qty=Math.max(1,mo.items[idx].qty+delta);renderModal();};
+    // Picker type buttons
+    overlay.querySelectorAll('.wqm-type-btn').forEach(btn=>{
+      btn.onclick=()=>{
+        if(picker)picker.selectedType=btn.dataset.type;
+        overlay.querySelectorAll('.wqm-type-btn').forEach(b=>{
+          b.style.border=`1.5px solid ${b===btn?'var(--brand)':'var(--border)'}`;
+          b.style.background=b===btn?'#f0f7ff':'var(--card)';
+          b.style.fontWeight=b===btn?'700':'400';
+        });
+      };
     });
-    overlay.querySelectorAll('[data-wqm-rm]').forEach(btn=>{
-      btn.onclick=()=>{mo.items.splice(+btn.dataset.wqmRm,1);renderModal();};
-    });
-
-    // Picker confirm/cancel
     overlay.querySelector('#wqm-picker-confirm')?.addEventListener('click',()=>{
-      if(!picker)return;
-      const sel=overlay.querySelector('[data-wqm-type].selected');
-      if(!sel){alert('Elegí una variante');return;}
-      wqmAddItem(picker.d,sel.dataset.wqmType);picker=null;search='';renderModal();
+      if(!picker?.selectedType){alert('Elegí una variante');return;}
+      const typeObj=(picker.d.types||[]).find(t=>t.name===picker.selectedType);
+      const price=Number(typeObj?.price)||Number(picker.d.price)||0;
+      addItem(picker.d,picker.selectedType,[]);
+      picker=null;search='';renderModal();
     });
     overlay.querySelector('#wqm-picker-cancel')?.addEventListener('click',()=>{picker=null;renderModal();});
-    overlay.querySelectorAll('[data-wqm-type]').forEach(btn=>{
-      btn.onclick=()=>{overlay.querySelectorAll('[data-wqm-type]').forEach(b=>b.classList.remove('selected'));btn.classList.add('selected');};
+
+    // Qty / remove
+    overlay.querySelectorAll('[data-rm-one]').forEach(btn=>{
+      btn.onclick=()=>{const idx=+btn.dataset.rmOne;if(mo.items[idx].qty>1)mo.items[idx].qty--;else mo.items.splice(idx,1);renderModal();};
+    });
+    overlay.querySelectorAll('[data-add-one]').forEach(btn=>{
+      btn.onclick=()=>{mo.items[+btn.dataset.addOne].qty++;renderModal();};
+    });
+    overlay.querySelectorAll('[data-rm]').forEach(btn=>{
+      btn.onclick=()=>{mo.items.splice(+btn.dataset.rm,1);renderModal();};
     });
 
-    // Confirm order
+    // Confirm
     overlay.querySelector('#wqm-confirm')?.addEventListener('click',async()=>{
       if(!mo.items.length)return;
       if(mo.orderMode==='individual'&&!mo.personName?.trim()){alert('Ingresá el nombre');return;}
-      const items=mo.items.map(i=>({name:i.name,qty:i.qty,price:i.price,finalPrice:i.price,excluded:[],selectedType:i.selectedType||null,isCafeteria:i.isCafeteria||false,manualEntry:true}));
+      const items=mo.items.map(i=>({name:i.name,qty:i.qty,price:i.price,finalPrice:i.price,excluded:i.excluded||[],selectedType:i.selectedType||null,isCafeteria:i.isCafeteria||false,manualEntry:true}));
       const personName=mo.orderMode==='individual'?mo.personName.trim():null;
       await push(ref(db,'orders'),{tableId:mo.tableId||'sinmesa',items,status:'pending',orderMode:mo.orderMode,personName,createdAt:Date.now(),time:nowStr(),takenBy:C.waiterName||null});
       overlay.remove();
+      C.waiterStep='mesas';
+      render();
       showNotif('order','✅ Pedido enviado','');
     });
   };
 
-  function wqmAddItem(d,typeName){
-    const price=typeName?Number((d.types||[]).find(t=>t.name===typeName)?.price||d.price):Number(d.price);
-    const existing=mo.items.find(i=>i.name===d.name&&(i.selectedType||null)===(typeName||null));
-    if(existing){existing.qty++;} else {mo.items.push({name:d.name,qty:1,price,finalPrice:price,selectedType:typeName||null,isCafeteria:d._src==='cafeteria'});}
-  }
-
-  function renderWqmPicker(pk,mo){
-    const d=pk.d;
-    return `<div style="padding:12px;background:#f8f7f4;border-radius:10px;margin-bottom:10px">
-      <div style="font-size:13px;font-weight:600;margin-bottom:8px">Elegí la variante de ${d.name}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
-        ${(d.types||[]).map(t=>`<button data-wqm-type="${t.name}" style="padding:8px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);font-size:13px;cursor:pointer;font-family:inherit">${t.name} · $${Number(t.price).toLocaleString()}</button>`).join('')}
-      </div>
-      <div style="display:flex;gap:8px">
-        <button id="wqm-picker-confirm" style="flex:1;padding:9px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Agregar</button>
-        <button id="wqm-picker-cancel" style="padding:9px 14px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button>
-      </div>
-    </div>`;
-  }
-
   document.body.appendChild(overlay);
-  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
   renderModal();
 };
 window.waiterCancelQuickOrder=()=>{
@@ -1508,8 +1584,7 @@ function renderWaiterMesasScreen(mc){
       if(readyCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">✅ ${readyCt} listo${readyCt!==1?'s':''}</span>`;
       if(delivNormalCt>0)h+=`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">✓ ${delivNormalCt} entregado${delivNormalCt!==1?'s':''}</span>`;
       h+=`</div></div>`;
-      h+=`<button class="btn btn-primary btn-sm" onclick="waiterAddQuick('${tableId}')">+ Agregar</button>`;
-      h+=`</div>`;
+      // No agregar global en header — va por persona/grupo abajo
 
       // ── Items ──
       if(isIndiv){
@@ -1523,10 +1598,13 @@ function renderWaiterMesasScreen(mc){
             if(!pMap[k])pMap[k]={name:item.name,type:item.selectedType||null,qty:0,statuses:{},excl:item.excluded||[]};
             pMap[k].qty+=item.qty;pMap[k].statuses[o.status]=(pMap[k].statuses[o.status]||0)+item.qty;
           }));
+          const pgIdx=window._pgKeys.push([tableId,person,isGeneral?'general':'individual'])-1;
           h+=`<div style="margin-bottom:8px">`;
           h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;padding:4px 6px;background:#f0f4ff;border-radius:6px">`;
           h+=`<span style="font-size:12px;font-weight:600;color:#1e40af">👤 ${person}</span>`;
-          h+=`<span style="font-size:12px;font-weight:600;color:#1e40af">$${pTotal.toLocaleString()}</span>`;
+          h+=`<div style="display:flex;align-items:center;gap:6px"><span style="font-size:12px;font-weight:600;color:#1e40af">$${pTotal.toLocaleString()}</span>
+            <button onclick="waiterAddForPerson(${pgIdx})" style="padding:2px 8px;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar</button>
+          </div>`;
           h+=`</div>`;
           Object.values(pMap).forEach(item=>{
             const pd=item.statuses['pending']||0,dd=item.statuses['delivered']||0;
@@ -1541,7 +1619,11 @@ function renderWaiterMesasScreen(mc){
           h+=`</div>`;
         });
       } else {
-        // Agrupar por moza cuando hay varias
+        // Agrupar por moza cuando hay varias — con botón + Agregar al inicio
+        const generalIdx=window._pgKeys.push([tableId,'','general'])-1;
+        h+=`<div style="display:flex;justify-content:flex-end;margin-bottom:6px">
+          <button onclick="waiterAddForPerson(${generalIdx})" style="padding:3px 10px;border-radius:6px;border:none;background:#3b82f6;color:#fff;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar</button>
+        </div>`;
         const mozasOrden=[...new Set(orders.map(o=>o.takenBy||'Sin moza'))];
         const porMoza={};
         orders.forEach(o=>{const m=o.takenBy||'Sin moza';if(!porMoza[m])porMoza[m]=[];porMoza[m].push(o);});
@@ -1697,6 +1779,12 @@ function renderWaiterModeChoice(mc){
   mc.innerHTML=`<div class="content"><div class="mode-screen"><div style="display:flex;align-items:center;gap:8px;margin-bottom:.5rem"><div style="width:32px;height:32px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700">${C.waiterName[0].toUpperCase()}</div><span style="font-size:14px;color:var(--muted)">${C.waiterName} · ${table?table.label:''}</span></div><div class="mesa-title" style="font-size:22px;margin-bottom:1.5rem">¿Cómo tomamos el pedido?</div><div class="mode-cards"><button class="mode-card" onclick="waiterChooseMode('general')"><div class="mode-card-icon">👥</div><div style="font-weight:600;margin-bottom:4px">General</div><div style="font-size:12px;color:var(--muted)">Un pedido para toda la mesa</div></button><button class="mode-card" onclick="waiterChooseMode('individual')"><div class="mode-card-icon">👤</div><div style="font-weight:600;margin-bottom:4px">Individual</div><div style="font-size:12px;color:var(--muted)">Pedido por persona</div></button><button class="mode-card" onclick="waiterQuickOrder()"><div class="mode-card-icon">⚡</div><div style="font-weight:600;margin-bottom:4px">Pedido rápido</div><div style="font-size:12px;color:var(--muted)">Con buscador y escáner</div></button></div><button class="back-btn" onclick="setWaiterStep('mesa')" style="margin-top:1rem">← Cambiar mesa</button></div></div>`;
 }
 window.waiterChooseMode=mode=>{C.waiterOrderMode=mode;if(mode==='individual')C.waiterStep='nameInput';else{C.waiterPersonName='';C.waiterStep='menu';}render();};
+window.waiterAddForPerson=(pgIdx)=>{
+  const info=window._pgKeys[pgIdx];
+  if(!info)return;
+  const [tableId,personName,orderMode]=info;
+  openWaiterQuickOrderModal(tableId,personName||'',orderMode||'general');
+};
 window.waiterQuickOrder=()=>{
   openWaiterQuickOrderModal(C.waiterTableId);
 };
