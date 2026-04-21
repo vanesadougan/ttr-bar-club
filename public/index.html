@@ -1241,7 +1241,7 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
       if(d.barcode&&String(d.barcode).includes(s)){results.push({d,matchType:null});return;}
       if(d.barcodes&&d.barcodes.some(b=>String(b).includes(s))){results.push({d,matchType:null});return;}
       if(d.hasTypes&&d.types?.length){
-        const byName=d.types.filter(t=>t.name.toLowerCase().includes(s));
+        const byName=d.types.filter(t=>t.name&&t.name.toLowerCase().includes(s));
         if(byName.length===1){results.push({d,matchType:byName[0]});return;}
         if(byName.length>1){results.push({d,matchType:null});return;}
         const byBarcode=d.types.find(t=>t.barcodes&&t.barcodes.some(b=>String(b).includes(s)));
