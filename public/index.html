@@ -1600,7 +1600,7 @@ function renderWaiterMesasScreen(mc){
             if(!pMap[k])pMap[k]={name:item.name,type:item.selectedType||null,qty:0,statuses:{},excl:item.excluded||[]};
             pMap[k].qty+=item.qty;pMap[k].statuses[o.status]=(pMap[k].statuses[o.status]||0)+item.qty;
           }));
-          const pgIdx=window._wqKeys.push([tableId,person,isGeneral?'general':'individual'])-1;
+          const pgIdx=window._wqKeys.push([tableId,person==='General'?'':''+person,person==='General'?'general':'individual'])-1;
           h+=`<div style="margin-bottom:8px">`;
           h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;padding:4px 6px;background:#f0f4ff;border-radius:6px">`;
           h+=`<span style="font-size:12px;font-weight:600;color:#1e40af">👤 ${person}</span>`;
