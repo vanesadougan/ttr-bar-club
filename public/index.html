@@ -1186,10 +1186,11 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
   };
 
   const tryAddItem=(d)=>{
-    const validTypes=(d.types||[]).filter(t=>t&&t.name);
-    const hasTypes=(d.hasTypes||validTypes.length>0)&&validTypes.length>0;
+    // types puede ser array de strings ['Carne','Pollo'] o de objetos [{name,price}]
+    const rawTypes=d.types||[];
+    const validTypes=rawTypes.map(t=>typeof t==='string'?{name:t,price:d.price}:t).filter(t=>t&&t.name);
+    const hasTypes=validTypes.length>0;
     const isCustom=d.customizable&&(d.ingredients||[]).length>0;
-    console.log('tryAddItem:', d.name, 'hasTypes:', hasTypes, 'types:', d.types, 'validTypes:', validTypes, 'isCustom:', isCustom);
     if(hasTypes){picker={d:({...d,types:validTypes}),selectedType:null};search='';renderModal();return;}
     if(isCustom){openWqmCustomizer(d);return;}
     addItem(d,null,[]);
@@ -1244,10 +1245,11 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
       if(d.barcode&&String(d.barcode).includes(s)){results.push({d,matchType:null});return;}
       if(d.barcodes&&d.barcodes.some(b=>String(b).includes(s))){results.push({d,matchType:null});return;}
       if(d.types?.length){
-        const byName=d.types.filter(t=>t&&t.name&&t.name.toLowerCase().includes(s));
+        const normalTypes=d.types.map(t=>typeof t==='string'?{name:t,price:d.price}:t).filter(t=>t&&t.name);
+        const byName=normalTypes.filter(t=>t.name.toLowerCase().includes(s));
         if(byName.length===1){results.push({d,matchType:byName[0]});return;}
         if(byName.length>1){results.push({d,matchType:null});return;}
-        const byBarcode=d.types.find(t=>t.barcodes&&t.barcodes.some(b=>String(b).includes(s)));
+        const byBarcode=normalTypes.find(t=>t.barcodes&&t.barcodes.some(b=>String(b).includes(s)));
         if(byBarcode){results.push({d,matchType:byBarcode});return;}
       }
     });
