@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>TTR Bar Club</title>
   <link rel="manifest" href="/manifest.json">
   <meta name="theme-color" content="#1a1a2e">
@@ -6370,7 +6370,7 @@ window.showWaiterModal=()=>{
     <div style="font-size:22px;text-align:center;margin-bottom:4px">🛎</div>
     <div style="font-size:16px;font-weight:600;text-align:center;margin-bottom:4px">Llamar al mozo</div>
     <div style="font-size:13px;color:var(--muted);text-align:center;margin-bottom:14px">¿Necesitás algo en particular?</div>
-    <textarea id="waiter-msg" placeholder="Ej: Traeme la cuenta, necesito servilletas... (opcional)" style="width:100%;min-height:72px;padding:10px;border:0.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:14px;resize:none;box-sizing:border-box;outline:none;background:var(--bg)"></textarea>
+    <textarea id="waiter-msg" placeholder="Ej: Traeme la cuenta, necesito servilletas... (opcional)" style="width:100%;min-height:72px;padding:10px;border:0.5px solid var(--border);border-radius:10px;font-family:inherit;font-size:16px;resize:none;box-sizing:border-box;outline:none;background:var(--bg)"></textarea>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button onclick="document.getElementById('waiter-modal').remove()" style="flex:1;padding:13px;border-radius:10px;border:0.5px solid var(--border);background:transparent;font-family:inherit;font-size:14px;cursor:pointer;color:var(--muted)">Cancelar</button>
       <button onclick="confirmCallWaiter()" style="flex:2;padding:13px;border-radius:10px;border:none;background:var(--brand);color:#fff;font-family:inherit;font-size:14px;font-weight:600;cursor:pointer">Llamar al mozo</button>
@@ -6378,7 +6378,6 @@ window.showWaiterModal=()=>{
   </div>`;
   document.body.appendChild(overlay);
   overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
-  setTimeout(()=>document.getElementById('waiter-msg')?.focus(),100);
 };
 window.confirmCallWaiter=()=>{
   const msg=(document.getElementById('waiter-msg')?.value||'').trim();
