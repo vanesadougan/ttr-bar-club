@@ -1065,26 +1065,236 @@ function renderWaiterMode(){
   else renderWaiterMenu(mc);
 }
 function renderWaiterQuickOrder(mc){
-  const table=DB.tables[C.waiterTableId];
-  const tLabel=table?table.label:'';
-  // Override submitManualOrder to go back to mesas after submit
-  // Render the admin orders content but inject a back button
-  // We reuse the existing manualOrder render by switching to admin mode temporarily
-  C.mode='admin';C.adminTab='orders';
-  // Ensure manualOrder is set
-  if(!C.manualOrder)C.manualOrder={tableId:C.waiterTableId,orderMode:'general',personName:'',items:[],_fromWaiter:true};
+  // Volver a mesas y mostrar el modal encima
+  C.waiterStep='mesas';
   render();
-  // Inject a back button at the top of the manual order card
-  setTimeout(()=>{
-    const card=document.querySelector('.card[style*="var(--brand)"]');
-    if(card){
-      const backBar=document.createElement('div');
-      backBar.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:#f8f7f4;border-bottom:0.5px solid var(--border);margin:-1rem -1rem .75rem;border-radius:8px 8px 0 0';
-      backBar.innerHTML=`<span style="font-size:13px;color:var(--muted)">⚡ Pedido rápido · ${tLabel}</span><button onclick="waiterCancelQuickOrder()" style="border:none;background:none;font-size:13px;color:var(--muted);cursor:pointer">← Volver</button>`;
-      card.insertBefore(backBar,card.firstChild);
-    }
-  },50);
+  // Abrir modal de pedido rápido encima de la pantalla de mesas
+  openWaiterQuickOrderModal(C.waiterTableId);
 }
+window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
+  document.getElementById('waiter-quick-modal')?.remove();
+  const tables=Object.entries(DB.tables).map(([k,v])=>({...v,_key:k}));
+  const clientesList=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
+  // State
+  let mo={tableId:tableId||'',orderMode:orderMode||'general',personName:personName||'',items:[]};
+  let search='';
+  let picker=null;
+
+  const overlay=document.createElement('div');
+  overlay.id='waiter-quick-modal';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
+
+  const renderModal=()=>{
+    const moTotal=mo.items.reduce((s,i)=>s+i.price*i.qty,0);
+    const hasItems=mo.items.length>0;
+    const canConfirm=hasItems&&!(mo.orderMode==='individual'&&!mo.personName?.trim());
+    const table=DB.tables[mo.tableId];
+
+    overlay.innerHTML=`<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;overflow:hidden">
+      <!-- Header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:0.5px solid var(--border);flex-shrink:0">
+        <div style="font-size:15px;font-weight:600">⚡ Pedido rápido${table?' · '+table.label:''}</div>
+        <button id="wqm-close" style="border:none;background:var(--bg);border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;color:var(--muted)">✕</button>
+      </div>
+
+      <div style="overflow-y:auto;flex:1;padding:14px 18px">
+        <!-- Mesa + Modo -->
+        <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:120px">
+            <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">MESA</label>
+            <select id="wqm-table" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:var(--bg)">
+              <option value="">— Sin mesa —</option>
+              ${tables.map(t=>`<option value="${t._key}"${mo.tableId===t._key?' selected':''}>${t.label}</option>`).join('')}
+            </select>
+          </div>
+          <div style="flex:1;min-width:120px">
+            <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">MODO</label>
+            <select id="wqm-mode" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;background:var(--bg)">
+              <option value="general"${mo.orderMode==='general'?' selected':''}>👥 General</option>
+              <option value="individual"${mo.orderMode==='individual'?' selected':''}>👤 Individual</option>
+            </select>
+          </div>
+        </div>
+
+        ${mo.orderMode==='individual'?`
+        <div style="margin-bottom:12px;position:relative">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px">NOMBRE <span style="color:var(--danger)">*</span></label>
+          <input id="wqm-nombre" placeholder="Nombre del comensal" value="${mo.personName||''}"
+            style="width:100%;padding:8px 12px;border:0.5px solid var(--border);border-radius:8px;font-size:16px;font-family:inherit;box-sizing:border-box;background:var(--bg)" autocomplete="off">
+          <div id="wqm-nombre-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:0.5px solid var(--border);border-radius:8px;z-index:10;max-height:140px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.15)"></div>
+        </div>`:''}
+
+        <!-- Buscador -->
+        <div style="position:relative;margin-bottom:10px">
+          <input id="wqm-search" placeholder="🔍 Buscá o escaneá un producto..." value="${search}"
+            style="width:100%;padding:10px 12px;border:1.5px solid var(--brand);border-radius:10px;font-size:16px;font-family:inherit;box-sizing:border-box;background:var(--bg)" autocomplete="off">
+          <div id="wqm-results" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:0.5px solid var(--border);border-radius:10px;z-index:10;max-height:200px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.15)"></div>
+        </div>
+
+        ${picker?renderWqmPicker(picker,mo):''}
+
+        <!-- Items -->
+        ${hasItems?`<div style="margin-bottom:12px">
+          ${mo.items.map((item,idx)=>`<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:0.5px solid #f3f4f6">
+            <div style="flex:1;font-size:13px"><strong>${item.name}</strong>${item.selectedType?` <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:3px">${item.selectedType}</span>`:''}</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <button data-wqm-qty="${idx}" data-delta="-1" style="width:24px;height:24px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:14px;cursor:pointer;line-height:1">−</button>
+              <span style="font-size:13px;font-weight:600;min-width:16px;text-align:center">${item.qty}</span>
+              <button data-wqm-qty="${idx}" data-delta="1" style="width:24px;height:24px;border-radius:50%;border:1px solid var(--border);background:var(--bg);font-size:14px;cursor:pointer;line-height:1">+</button>
+            </div>
+            <span style="font-size:13px;font-weight:600;color:var(--accent);min-width:60px;text-align:right">$${(item.price*item.qty).toLocaleString()}</span>
+            <button data-wqm-rm="${idx}" style="width:22px;height:22px;border-radius:50%;border:1px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:12px;cursor:pointer;line-height:1">✕</button>
+          </div>`).join('')}
+          <div style="display:flex;justify-content:flex-end;margin-top:8px">
+            <span style="font-size:15px;font-weight:700;color:var(--accent)">Total: $${moTotal.toLocaleString()}</span>
+          </div>
+        </div>`:'<div style="font-size:13px;color:var(--muted);text-align:center;padding:16px 0">Agregá items al pedido</div>'}
+      </div>
+
+      <!-- Footer -->
+      <div style="padding:14px 18px;border-top:0.5px solid var(--border);flex-shrink:0">
+        <button id="wqm-confirm" ${canConfirm?'':'disabled'} style="width:100%;padding:12px;border-radius:10px;border:none;background:${canConfirm?'var(--brand)':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${canConfirm?'pointer':'not-allowed'};font-family:inherit;opacity:${canConfirm?1:.6}">
+          📋 Confirmar pedido
+        </button>
+      </div>
+    </div>`;
+
+    // Events
+    overlay.querySelector('#wqm-close').onclick=()=>overlay.remove();
+    overlay.querySelector('#wqm-table').onchange=e=>{mo.tableId=e.target.value;renderModal();};
+    overlay.querySelector('#wqm-mode').onchange=e=>{mo.orderMode=e.target.value;mo.personName='';renderModal();};
+
+    // Nombre autocomplete
+    const nombreInp=overlay.querySelector('#wqm-nombre');
+    const nombreDd=overlay.querySelector('#wqm-nombre-dd');
+    if(nombreInp){
+      nombreInp.addEventListener('input',e=>{
+        mo.personName=e.target.value;
+        // Update confirm button
+        const btn=overlay.querySelector('#wqm-confirm');
+        if(btn){const ok=mo.items.length>0&&e.target.value.trim().length>0;btn.disabled=!ok;btn.style.opacity=ok?1:.6;btn.style.background=ok?'var(--brand)':'#d1d5db';}
+        // Dropdown
+        const q=e.target.value.toLowerCase().trim();
+        const filtered=q?clientesList.filter(n=>n.toLowerCase().includes(q)):clientesList;
+        if(filtered.length&&q){
+          nombreDd.innerHTML=filtered.map(n=>`<div data-wqm-cliente="${n}" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6">${n}</div>`).join('');
+          nombreDd.style.display='block';
+        } else {nombreDd.style.display='none';}
+      });
+      nombreInp.addEventListener('focus',()=>{
+        if(!nombreInp.value&&clientesList.length){
+          nombreDd.innerHTML=clientesList.map(n=>`<div data-wqm-cliente="${n}" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6">${n}</div>`).join('');
+          nombreDd.style.display='block';
+        }
+      });
+      nombreDd.querySelectorAll('[data-wqm-cliente]').forEach(d=>{
+        d.onclick=()=>{mo.personName=d.dataset.wqmCliente;nombreInp.value=d.dataset.wqmCliente;nombreDd.style.display='none';renderModal();};
+      });
+    }
+
+    // Search
+    const searchInp=overlay.querySelector('#wqm-search');
+    const resultsDiv=overlay.querySelector('#wqm-results');
+    searchInp.addEventListener('input',e=>{
+      search=e.target.value;
+      const s=search.toLowerCase().trim();
+      if(!s){resultsDiv.style.display='none';return;}
+      const allItems=[
+        ...Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k,_src:'dishes'})),
+        ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria'})),
+      ].filter(d=>{
+        if(d.unavailable)return false;
+        if(d.name.toLowerCase().includes(s))return true;
+        if(d.barcode&&String(d.barcode).includes(s))return true;
+        if(d.barcodes&&d.barcodes.some(b=>String(b).includes(s)))return true;
+        if(d.types&&d.types.some(t=>t.barcodes&&t.barcodes.some(b=>String(b).includes(s))))return true;
+        return false;
+      });
+      // Barcode exact match → add directly
+      const looksLikeBarcode=/^\d{4,}$/.test(s);
+      if(looksLikeBarcode&&allItems.length===1){
+        const d=allItems[0];
+        if(d.types&&d.types.length>0){
+          const matchType=d.types.find(t=>t.barcodes&&t.barcodes.some(b=>String(b)===s));
+          if(matchType){wqmAddItem(d,matchType.name);searchInp.value='';search='';resultsDiv.style.display='none';renderModal();return;}
+        } else {wqmAddItem(allItems[0],null);searchInp.value='';search='';resultsDiv.style.display='none';renderModal();return;}
+      }
+      const seen=new Set();
+      const unique=allItems.filter(d=>{const k=d.name+'|'+d._src;if(seen.has(k))return false;seen.add(k);return true;});
+      if(!unique.length){resultsDiv.innerHTML=`<div style="padding:10px 14px;font-size:13px;color:var(--muted)">Sin resultados</div>`;resultsDiv.style.display='block';return;}
+      resultsDiv.innerHTML=unique.map(d=>`<div data-wqm-item="${d._key}" data-wqm-src="${d._src}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:0.5px solid var(--border)" onmouseover="this.style.background='var(--bg)'" onmouseout="this.style.background=''">
+        <div style="flex:1"><div style="font-size:14px;font-weight:500">${d.name}</div><div style="font-size:11px;color:var(--muted)">${d.hasTypes&&d.types?.length?' · variantes':''}</div></div>
+        <span style="font-size:14px;font-weight:600;color:var(--accent)">$${Number(d.price).toLocaleString()}</span>
+      </div>`).join('');
+      resultsDiv.style.display='block';
+      resultsDiv.querySelectorAll('[data-wqm-item]').forEach(el=>{
+        el.onclick=()=>{
+          const key=el.dataset.wqmItem;const src=el.dataset.wqmSrc;
+          const d=src==='cafeteria'?DB.cafeteriaItems[key]:DB.dishes[key];
+          if(!d)return;
+          if(d.hasTypes&&d.types?.length>0){picker={key,src,d};renderModal();}
+          else{wqmAddItem(d,null);searchInp.value='';search='';resultsDiv.style.display='none';renderModal();}
+        };
+      });
+    });
+    searchInp.addEventListener('keydown',e=>{if(e.key==='Escape'){resultsDiv.style.display='none';}});
+
+    // Qty and remove buttons
+    overlay.querySelectorAll('[data-wqm-qty]').forEach(btn=>{
+      btn.onclick=()=>{const idx=+btn.dataset.wqmQty;const delta=+btn.dataset.delta;mo.items[idx].qty=Math.max(1,mo.items[idx].qty+delta);renderModal();};
+    });
+    overlay.querySelectorAll('[data-wqm-rm]').forEach(btn=>{
+      btn.onclick=()=>{mo.items.splice(+btn.dataset.wqmRm,1);renderModal();};
+    });
+
+    // Picker confirm/cancel
+    overlay.querySelector('#wqm-picker-confirm')?.addEventListener('click',()=>{
+      if(!picker)return;
+      const sel=overlay.querySelector('[data-wqm-type].selected');
+      if(!sel){alert('Elegí una variante');return;}
+      wqmAddItem(picker.d,sel.dataset.wqmType);picker=null;search='';renderModal();
+    });
+    overlay.querySelector('#wqm-picker-cancel')?.addEventListener('click',()=>{picker=null;renderModal();});
+    overlay.querySelectorAll('[data-wqm-type]').forEach(btn=>{
+      btn.onclick=()=>{overlay.querySelectorAll('[data-wqm-type]').forEach(b=>b.classList.remove('selected'));btn.classList.add('selected');};
+    });
+
+    // Confirm order
+    overlay.querySelector('#wqm-confirm')?.addEventListener('click',async()=>{
+      if(!mo.items.length)return;
+      if(mo.orderMode==='individual'&&!mo.personName?.trim()){alert('Ingresá el nombre');return;}
+      const items=mo.items.map(i=>({name:i.name,qty:i.qty,price:i.price,finalPrice:i.price,excluded:[],selectedType:i.selectedType||null,isCafeteria:i.isCafeteria||false,manualEntry:true}));
+      const personName=mo.orderMode==='individual'?mo.personName.trim():null;
+      await push(ref(db,'orders'),{tableId:mo.tableId||'sinmesa',items,status:'pending',orderMode:mo.orderMode,personName,createdAt:Date.now(),time:nowStr(),takenBy:C.waiterName||null});
+      overlay.remove();
+      showNotif('order','✅ Pedido enviado','');
+    });
+  };
+
+  function wqmAddItem(d,typeName){
+    const price=typeName?Number((d.types||[]).find(t=>t.name===typeName)?.price||d.price):Number(d.price);
+    const existing=mo.items.find(i=>i.name===d.name&&(i.selectedType||null)===(typeName||null));
+    if(existing){existing.qty++;} else {mo.items.push({name:d.name,qty:1,price,finalPrice:price,selectedType:typeName||null,isCafeteria:d._src==='cafeteria'});}
+  }
+
+  function renderWqmPicker(pk,mo){
+    const d=pk.d;
+    return `<div style="padding:12px;background:#f8f7f4;border-radius:10px;margin-bottom:10px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px">Elegí la variante de ${d.name}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+        ${(d.types||[]).map(t=>`<button data-wqm-type="${t.name}" style="padding:8px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);font-size:13px;cursor:pointer;font-family:inherit">${t.name} · $${Number(t.price).toLocaleString()}</button>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px">
+        <button id="wqm-picker-confirm" style="flex:1;padding:9px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Agregar</button>
+        <button id="wqm-picker-cancel" style="padding:9px 14px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>
+    </div>`;
+  }
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  renderModal();
+};
 window.waiterCancelQuickOrder=()=>{
   C.manualOrder=null;C.manualOrderSearch='';C.manualOrderPicker=null;
   C.mode='waiter';C.waiterStep='mesas';render();
@@ -1488,15 +1698,10 @@ function renderWaiterModeChoice(mc){
 }
 window.waiterChooseMode=mode=>{C.waiterOrderMode=mode;if(mode==='individual')C.waiterStep='nameInput';else{C.waiterPersonName='';C.waiterStep='menu';}render();};
 window.waiterQuickOrder=()=>{
-  C.manualOrder={tableId:C.waiterTableId,orderMode:'general',personName:'',items:[],_fromWaiter:true};
-  C.manualOrderSearch='';C.manualOrderPicker=null;
-  C.waiterStep='quickOrder';render();
+  openWaiterQuickOrderModal(C.waiterTableId);
 };
 window.waiterAddQuick=(tableId)=>{
-  C.waiterTableId=tableId;
-  C.manualOrder={tableId,orderMode:'general',personName:'',items:[],_fromWaiter:true};
-  C.manualOrderSearch='';C.manualOrderPicker=null;
-  C.waiterStep='quickOrder';render();
+  openWaiterQuickOrderModal(tableId);
 };
 function renderWaiterNameInput(mc){
   const clientes=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
