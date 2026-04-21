@@ -759,6 +759,9 @@ function renderWaitersAdminTab(){
 }
 window.toggleWaiterLeader=()=>{const o=C.editingWaiter||(C.newWaiter=C.newWaiter||{name:'',pin:''});o.isLeader=!o.isLeader;render();};
 window.uWaiter=(field,val)=>{const o=C.editingWaiter||(C.newWaiter=C.newWaiter||{name:'',pin:''});o[field]=val;};
+window.addPromoSlot=()=>{const f=C.editingDish||C.newDish;if(!f)return;if(!f.promoSlots)f.promoSlots=[];f.promoSlots.push({qty:1,cat:''});renderOrModal();};
+window.removePromoSlot=(i)=>{const f=C.editingDish||C.newDish;if(!f||!f.promoSlots)return;f.promoSlots.splice(i,1);renderOrModal();};
+window.updatePromoSlot=(i,field,val)=>{const f=C.editingDish||C.newDish;if(!f||!f.promoSlots)return;f.promoSlots[i][field]=val;renderOrModal();};
 window.addWaiter=()=>{const d=C.newWaiter||{};if(!d.name||!d.name.trim()){alert('Ingresá el nombre');return;}if(!d.pin||String(d.pin).length!==4){alert('Ingresá un PIN de 4 dígitos');return;}push(ref(db,'waiters'),{name:d.name.trim(),pin:String(d.pin),isLeader:!!d.isLeader});C.newWaiter={name:'',pin:''};render();};
 window.editWaiter=key=>{C.editingWaiter={...DB.waiters[key],_key:key};render();};
 window.saveEditWaiter=()=>{
@@ -1187,6 +1190,16 @@ window.openWaiterQuickOrderModal=(tableId,personName,orderMode)=>{
   };
 
   const tryAddItem=(d)=>{
+    // Promo con slots
+    if(d.isPromoSlots&&(d.promoSlots||[]).length>0){
+      openPromoSlotsModal(d,(name,price,promoKey)=>{
+        const existing=mo.items.find(i=>i._promoKey===promoKey);
+        if(existing){existing.qty++;}
+        else{mo.items.push({name,qty:1,price,finalPrice:price,selectedType:null,excluded:[],_promoKey:promoKey,emoji:'🎁'});}
+        search='';renderModal();
+      });
+      return;
+    }
     // Mitad y mitad
     if(d.isMitadMitad&&d.mitadMitadCat){
       openMitadModal(d,(name,price,mitadKey)=>{
@@ -1810,6 +1823,7 @@ window.waiterConfirmName=()=>{const inp=document.getElementById('waiter-name-inp
 function waiterCartCount(){return Object.values(C.waiterCart).reduce((s,v)=>s+v.qty,0);}
 function waiterCartTotal(){return Object.entries(C.waiterCart).reduce((s,[key,v])=>{
   if(key.startsWith('mitad|'))return s+(v._mitadPrice||0)*v.qty;
+  if(key.startsWith('promo|'))return s+(v._promoPrice||0)*v.qty;
   const id=key.includes('|')?key.split('|')[0]:key;const d=DB.dishes[id]||DB.cafeteriaItems[id];if(!d)return s;return s+(DB.cafeteriaItems[id]?Number(d.price):dishFinalPrice(d,v.qty,v.selectedType||null))*v.qty;},0);}
 function buildWaiterMenuH(){
   const section=C.waiterMenuSection||'platos';
@@ -1878,12 +1892,14 @@ function buildWaiterMenuH(){
           menuH+=`</div>`;
         }
         if(_hasCustom&&(!_hasTypes||_selType)){
-          menuH+=`<div class="cust-ing-list">`;
-          (_d.ingredients||[]).forEach(_ing=>{const _ex=_selExcl.has(_ing);menuH+=`<div class="cust-ing-row${_ex?' excluded':''}" onclick="waiterToggleExcl('${_ing.replace(/'/g,"\\'")}')"><div style="display:flex;align-items:center;gap:8px"><div class="cust-check ${_ex?'unchecked':'checked'}">${_ex?'':'✓'}</div><span class="${_ex?'strikethrough':''}">${_ing}</span></div>${_ex?'<span style="font-size:11px;color:#b45309">Sin esto</span>':''}</div>`;});
-          menuH+=`</div>`;
+          menuH+=`<button onclick="waiterOpenCustModal('${d._key}','${(_selType||'').replace(/'/g,"\\'")}','dish')" style="width:100%;margin-top:6px;padding:8px;border-radius:8px;border:1.5px dashed var(--border);background:var(--bg);font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">🧩 Personalizar ingredientes</button>`;
         }
-        const _canConfirm=!_hasTypes||_selType;
-        menuH+=`<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-primary" style="flex:1" ${_canConfirm?'':'disabled'} onclick="waiterConfirmDish('${d._key}','dish')">Agregar al pedido</button><button class="btn btn-ghost" onclick="waiterCancelPick()">Cancelar</button></div>`;
+        const _canConfirm=(!_hasTypes||_selType)&&!_hasCustom;
+        if(!_hasCustom){
+          menuH+=`<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-primary" style="flex:1" ${_canConfirm?'':'disabled'} onclick="waiterConfirmDish('${d._key}','dish')">Agregar al pedido</button><button class="btn btn-ghost" onclick="waiterCancelPick()">Cancelar</button></div>`;
+        } else {
+          menuH+=`<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-ghost" onclick="waiterCancelPick()">Cancelar</button></div>`;
+        }
         menuH+=`</div>`;
       }
       if(d.isMitadMitad){
@@ -2237,6 +2253,37 @@ window.waiterConfirmMitad=()=>{
 };
 window.waiterCancelMitad=()=>{C.mitadDishId=null;C.mitad1=null;C.mitad2=null;C.mitadStep=1;refreshWaiterMenuCol();};
 window.waiterPickType=t=>{C.waiterPickType=t;refreshWaiterMenuCol();};
+window.waiterOpenCustModal=(dishId,selType,src)=>{
+  const d=src==='caf'?DB.cafeteriaItems[dishId]:DB.dishes[dishId];if(!d)return;
+  const ings=(d.ingredients||[]).map(i=>typeof i==='string'?i:(i.name||String(i))).filter(Boolean);
+  let excluded=new Set(C.waiterPickExcl||[]);
+  document.getElementById('waiter-cust-overlay')?.remove();
+  const overlay=document.createElement('div');
+  overlay.id='waiter-cust-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
+  const renderO=()=>{
+    overlay.innerHTML=`<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));max-height:80vh;display:flex;flex-direction:column">
+      <div style="flex-shrink:0;margin-bottom:14px">
+        <div style="font-size:16px;font-weight:700">${d.name}${selType?` <span style="font-size:13px;color:var(--muted)">— ${selType}</span>`:''}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:2px">Destildá lo que no querés</div>
+      </div>
+      <div style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+        ${ings.map(ing=>{const ex=excluded.has(ing);return `<button class="wcust-btn" data-ing="${ing.replace(/"/g,'&quot;')}" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:10px;border:1.5px solid ${ex?'#dc2626':'var(--border)'};background:${ex?'#fef2f2':'var(--card)'};cursor:pointer;font-size:14px;font-family:inherit;width:100%;text-align:left"><span style="color:${ex?'#dc2626':'var(--text)'};${ex?'text-decoration:line-through':''}">${ing}</span><span style="font-size:18px;flex-shrink:0">${ex?'❌':'✓'}</span></button>`;}).join('')}
+      </div>
+      ${excluded.size>0?`<div style="flex-shrink:0;margin-bottom:10px;padding:8px 12px;background:#fef3c7;border-radius:8px;font-size:12px;color:#92400e;font-weight:600">⚠️ SIN: ${[...excluded].join(', ')}</div>`:''}
+      <div style="display:flex;gap:8px;flex-shrink:0">
+        <button id="wcust-confirm" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Agregar al pedido</button>
+        <button id="wcust-cancel" style="padding:12px 16px;border-radius:10px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>
+    </div>`;
+    overlay.querySelectorAll('.wcust-btn').forEach(btn=>{btn.onclick=()=>{const ing=btn.dataset.ing;if(excluded.has(ing))excluded.delete(ing);else excluded.add(ing);renderO();};});
+    overlay.querySelector('#wcust-confirm').onclick=()=>{C.waiterPickExcl=[...excluded];overlay.remove();waiterConfirmDish(dishId,src);};
+    overlay.querySelector('#wcust-cancel').onclick=()=>overlay.remove();
+  };
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  renderO();
+};
 window.waiterToggleExcl=ing=>{
   if(!C.waiterPickExcl)C.waiterPickExcl=[];
   const i=C.waiterPickExcl.indexOf(ing);
@@ -4168,9 +4215,12 @@ function renderDeudoresTab(){
     .filter(o=>o.status==='deudor')
     .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 
+  const totalDeuda=deudores.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
+  const nDeudores=new Set(deudores.map(o=>(o.deudorNombre||o.personName||'?').trim())).size;
+
   let h='<div style="max-width:720px">';
   h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">`;
-  h+=`<div><div style="font-size:18px;font-weight:600">💳 Deudores</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${deudores.length} deuda${deudores.length!==1?'s':''} pendiente${deudores.length!==1?'s':''}</div></div>`;
+  h+=`<div><div style="font-size:18px;font-weight:600">💳 Deudores</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${nDeudores} cobro${nDeudores!==1?'s':''} pendiente${nDeudores!==1?'s':''} · <strong style="color:#dc2626">$${totalDeuda.toLocaleString()}</strong></div></div>`;
   h+=`<button onclick="agregarDeudaVieja()" style="padding:8px 14px;border-radius:8px;border:0.5px solid #dc2626;background:#fef2f2;color:#dc2626;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Deuda vieja</button>`;
   h+=`</div>`;
 
@@ -5027,7 +5077,36 @@ window.openDishAdvModal=()=>{
     }
     b+='</div>';
 
-    // Personalización
+    // Promo con slots
+    const openPromoSlots=sec2.promoSlots||false;
+    const isPS=f2.isPromoSlots||false;
+    const pSlots=f2.promoSlots||[];
+    b+='<div style="padding:14px 20px;border-bottom:0.5px solid var(--border)">';
+    b+='<div class="form-section-header" onclick="toggleDishSection(\'promoSlots\');window._renderDishAdvBody&&window._renderDishAdvBody()" style="padding:0;margin-bottom:'+(openPromoSlots?'10':'0')+'px">';
+    b+='<span>🎁 Promo con elección'+(isPS?' <span style="font-size:11px;background:#fce7f3;color:#be185d;padding:1px 7px;border-radius:10px">Activo</span>':'')+'</span><span>'+(openPromoSlots?'▲':'▼')+'</span></div>';
+    if(openPromoSlots){
+      b+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><span style="font-size:12px;color:var(--muted)">El cliente elige ítems de categorías</span><label class="toggle-switch"><input type="checkbox" '+(isPS?'checked':'')+' onchange="uF(\'dish\',\'isPromoSlots\',this.checked);window._renderDishAdvBody&&window._renderDishAdvBody()"><span class="toggle-slider"></span></label></div>';
+      if(isPS){
+        const allCatsPS=getCats();
+        if(pSlots.length>0){
+          b+='<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">';
+          pSlots.forEach((slot,si)=>{
+            const slotCat=allCatsPS.find(c=>c._key===slot.cat);
+            b+=`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)">
+              <input type="number" min="1" max="20" value="${slot.qty||1}" onchange="updatePromoSlot(${si},'qty',Number(this.value))" style="width:50px;padding:4px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;text-align:center">
+              <select onchange="updatePromoSlot(${si},'cat',this.value)" style="flex:1;padding:4px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px">
+                <option value="">— Categoría —</option>
+                ${allCatsPS.map(c=>`<option value="${c._key}"${slot.cat===c._key?' selected':''}>${c.icon} ${c.label}</option>`).join('')}
+              </select>
+              <button onclick="removePromoSlot(${si})" style="width:24px;height:24px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:14px;cursor:pointer;line-height:1">×</button>
+            </div>`;
+          });
+          b+='</div>';
+        }
+        b+='<button onclick="addPromoSlot()" style="width:100%;padding:7px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar grupo</button>';
+      }
+    }
+    b+='</div>';
     const openIngs=sec2.ings||false;
     b+='<div style="padding:14px 20px;border-bottom:0.5px solid var(--border)">';
     b+='<div class="form-section-header" onclick="toggleDishSection(\'ings\');window._renderDishAdvBody&&window._renderDishAdvBody()" style="padding:0;margin-bottom:'+(openIngs?'10':'0')+'px">';
@@ -5185,6 +5264,163 @@ window.updateManualSearch=()=>{
 };
 
 // Al seleccionar un item: si tiene variantes o ingredientes, abrir picker; si no, agregar directo
+function openPromoSlotsModal(d, onConfirm){
+  // Build slot state: for each slot, track selections [{dishKey, name, qty}]
+  const slots=(d.promoSlots||[]).filter(s=>s.cat&&s.qty>0);
+  if(!slots.length){onConfirm(d.name,Number(d.price)||0,'promo|'+d._key);return;}
+  const selections=slots.map(s=>({cat:s.cat,total:s.qty,chosen:[]})); // chosen: [{key,name,qty}]
+  let currentSlot=0;
+
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:3000;display:flex;align-items:flex-end;justify-content:center';
+
+  const render=()=>{
+    const slot=slots[currentSlot];
+    const sel=selections[currentSlot];
+    const cat=getCats().find(c=>c._key===slot.cat);
+    const opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(dd=>dd.cat===slot.cat&&!dd.unavailable).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+    const chosenTotal=sel.chosen.reduce((s,c)=>s+c.qty,0);
+    const remaining=sel.total-chosenTotal;
+
+    overlay.innerHTML=`<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:480px;max-height:85vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom)">
+      <div style="padding:14px 18px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+        <div>
+          <div style="font-size:15px;font-weight:700">🎁 ${d.name}</div>
+          <div style="font-size:12px;color:var(--muted)">Grupo ${currentSlot+1} de ${slots.length}: elegí ${sel.total} ${cat?cat.label:'ítems'}</div>
+        </div>
+        <button id="ps-cancel" style="border:none;background:var(--bg);border-radius:50%;width:30px;height:30px;font-size:16px;cursor:pointer;color:var(--muted)">✕</button>
+      </div>
+
+      <!-- Selected summary -->
+      ${sel.chosen.length>0?`<div style="padding:8px 18px;background:#f0f7ff;border-bottom:0.5px solid var(--border);flex-shrink:0;display:flex;flex-wrap:wrap;gap:6px">
+        ${sel.chosen.map((c,ci)=>`<div style="display:flex;align-items:center;gap:4px;background:#dbeafe;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:600;color:#1e40af">
+          <span>${c.baseName||c.name} ×${c.qty}${c.excluded&&c.excluded.length?`<span style="font-size:10px;color:#b45309;font-weight:500;margin-left:3px">sin:${c.excluded.join(',')}</span>`:''}</span>
+          <button data-rm="${ci}" style="border:none;background:none;color:#1e40af;font-size:14px;cursor:pointer;line-height:1;padding:0 0 0 2px">×</button>
+        </div>`).join('')}
+        <span style="font-size:12px;color:${remaining===0?'#059669':'#d97706'};font-weight:600;align-self:center">
+          ${remaining===0?'✓ Completo':`Faltan ${remaining}`}
+        </span>
+      </div>`:''}
+
+      <!-- Options -->
+      <div style="overflow-y:auto;flex:1;padding:8px 18px;display:flex;flex-direction:column;gap:6px">
+        ${opts.map(dd=>{
+          const rawTypes=(dd.types||[]).map(t=>typeof t==='string'?{name:t,price:dd.price}:t).filter(t=>t&&t.name);
+          const hasV=rawTypes.length>0;
+          const hasC=dd.customizable&&(dd.ingredients||[]).length>0;
+          return `<button class="ps-opt" data-key="${dd._key}" data-name="${dd.name.replace(/"/g,'&quot;')}" ${remaining===0?'disabled style="opacity:.5"':''} style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);cursor:pointer;font-size:14px;font-family:inherit">
+          <div><span>${dd.name}</span>${hasV?`<span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px;margin-left:6px">variantes</span>`:''}${hasC?`<span style="font-size:10px;background:#ede9fe;color:#5b21b6;padding:1px 5px;border-radius:4px;margin-left:4px">pers.</span>`:''}</div>
+          <span style="color:var(--accent);font-size:12px">+ agregar</span>
+        </button>`;}).join('')}
+      </div>
+
+      <!-- Footer -->
+      <div style="padding:12px 18px;border-top:0.5px solid var(--border);flex-shrink:0;display:flex;gap:8px">
+        ${currentSlot>0?`<button id="ps-back" style="padding:10px 14px;border-radius:10px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">← Atrás</button>`:''}
+        <button id="ps-next" ${remaining!==0?'disabled':''} style="flex:1;padding:12px;border-radius:10px;border:none;background:${remaining===0?'var(--brand)':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${remaining===0?'pointer':'not-allowed'};font-family:inherit;opacity:${remaining===0?1:.6}">
+          ${currentSlot<slots.length-1?'Siguiente →':'✓ Confirmar promo'}
+        </button>
+      </div>
+    </div>`;
+
+    overlay.querySelector('#ps-cancel').onclick=()=>overlay.remove();
+    overlay.querySelector('#ps-back')?.addEventListener('click',()=>{currentSlot--;render();});
+    overlay.querySelector('#ps-next')?.addEventListener('click',()=>{
+      if(remaining!==0)return;
+      if(currentSlot<slots.length-1){currentSlot++;render();}
+      else{
+        // Build name and key
+        const parts=selections.map((sel,si)=>{
+          const cat=getCats().find(c=>c._key===slots[si].cat);
+          return sel.chosen.map(c=>`${c.name}×${c.qty}`).join(', ');
+        });
+        const name=`${d.name} (${parts.join(' + ')})`;
+        const key=`promo|${d._key}|`+selections.map(s=>s.chosen.map(c=>`${c.key}×${c.qty}`).join(',')).join('|');
+        overlay.remove();
+        onConfirm(name,Number(d.price)||0,key);
+      }
+    });
+    overlay.querySelectorAll('.ps-opt').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const key=btn.dataset.key;
+        const dd=DB.dishes[key];
+        if(!dd)return;
+        const rawTypes=(dd.types||[]).map(t=>typeof t==='string'?{name:t,price:dd.price}:t).filter(t=>t&&t.name);
+        const hasTypes=rawTypes.length>0;
+        const isCustom=dd.customizable&&(dd.ingredients||[]).length>0;
+
+        const addToSlot=(itemName,typeName,excluded=[])=>{
+          const baseName=typeName?`${dd.name} (${typeName})`:dd.name;
+          let displayName=baseName;
+          if(excluded.length>0)displayName+=` sin: ${excluded.join(', ')}`;
+          const slotKey=key+(typeName?`|${typeName}`:'')+(!excluded.length?'':`|SIN:${excluded.join(',')}`);
+          const existing=sel.chosen.find(c=>c.key===slotKey);
+          if(existing){existing.qty++;}
+          else{sel.chosen.push({key:slotKey,name:displayName,baseName,excluded,qty:1});}
+          render();
+        };
+
+        if(hasTypes){
+          // Show inline type picker in a sub-overlay
+          const typeOverlay=document.createElement('div');
+          typeOverlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:4000;display:flex;align-items:flex-end;justify-content:center';
+          typeOverlay.innerHTML=`<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:18px;padding-bottom:calc(18px + env(safe-area-inset-bottom))">
+            <div style="font-size:14px;font-weight:700;margin-bottom:12px">Elegí la variante de ${dd.name}</div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+              ${rawTypes.map(t=>`<button class="type-pick-btn" data-type="${t.name.replace(/"/g,'&quot;')}" style="display:flex;justify-content:space-between;padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--card);cursor:pointer;font-size:14px;font-family:inherit"><span>${t.name}</span><span style="color:var(--accent)">$${(Number(t.price)||Number(dd.price)||0).toLocaleString()}</span></button>`).join('')}
+            </div>
+            <button id="type-pick-cancel" style="width:100%;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;cursor:pointer;font-family:inherit;color:var(--muted)">Cancelar</button>
+          </div>`;
+          document.body.appendChild(typeOverlay);
+          typeOverlay.querySelector('#type-pick-cancel').onclick=()=>typeOverlay.remove();
+          typeOverlay.addEventListener('click',e=>{if(e.target===typeOverlay)typeOverlay.remove();});
+          typeOverlay.querySelectorAll('.type-pick-btn').forEach(tb=>{
+            tb.onclick=()=>{typeOverlay.remove();addToSlot(dd.name,tb.dataset.type,[]);};
+          });
+        } else if(isCustom){
+          // Show customizer sub-overlay
+          const ings=(dd.ingredients||[]).map(i=>typeof i==='string'?i:(i.name||String(i))).filter(Boolean);
+          let excluded=new Set();
+          const custOverlay=document.createElement('div');
+          custOverlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:4000;display:flex;align-items:flex-end;justify-content:center';
+          const renderCust=()=>{
+            custOverlay.innerHTML=`<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:18px;padding-bottom:calc(18px + env(safe-area-inset-bottom))">
+              <div style="font-size:14px;font-weight:700;margin-bottom:4px">Personalizar ${dd.name}</div>
+              <div style="font-size:12px;color:var(--muted);margin-bottom:12px">Destildá lo que no querés</div>
+              <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">
+                ${ings.map(ing=>{const ex=excluded.has(ing);return `<button class="cust-ing2" data-ing="${ing.replace(/"/g,'&quot;')}" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;border:1.5px solid ${ex?'#dc2626':'var(--border)'};background:${ex?'#fef2f2':'var(--card)'};cursor:pointer;font-size:14px;font-family:inherit"><span style="color:${ex?'#dc2626':'var(--text)'}">${ex?'✗ SIN ':''} ${ing}</span><span>${ex?'❌':'✓'}</span></button>`;}).join('')}
+              </div>
+              <div style="display:flex;gap:8px">
+                <button id="cust2-confirm" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Agregar</button>
+                <button id="cust2-cancel" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;cursor:pointer;font-family:inherit">Cancelar</button>
+              </div>
+            </div>`;
+            custOverlay.querySelectorAll('.cust-ing2').forEach(b=>{b.onclick=()=>{const ing=b.dataset.ing;if(excluded.has(ing))excluded.delete(ing);else excluded.add(ing);renderCust();};});
+            custOverlay.querySelector('#cust2-confirm').onclick=()=>{custOverlay.remove();addToSlot(dd.name,null,[...excluded]);};
+            custOverlay.querySelector('#cust2-cancel').onclick=()=>custOverlay.remove();
+          };
+          document.body.appendChild(custOverlay);
+          custOverlay.addEventListener('click',e=>{if(e.target===custOverlay)custOverlay.remove();});
+          renderCust();
+        } else {
+          addToSlot(dd.name,null,[]);
+        }
+      });
+    });
+    overlay.querySelectorAll('[data-rm]').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        const ci=+btn.dataset.rm;
+        if(sel.chosen[ci].qty>1){sel.chosen[ci].qty--;}
+        else{sel.chosen.splice(ci,1);}
+        render();
+      });
+    });
+  };
+
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  render();
+}
 function openMitadModal(d, onConfirm){
   const opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(dd=>dd.cat===d.mitadMitadCat&&!dd.unavailable).sort((a,b)=>a.name.localeCompare(b.name,'es'));
   let mitad1=null,mitad2=null,step=1;
@@ -5248,6 +5484,17 @@ function openMitadModal(d, onConfirm){
 window.selectManualItem=(key,src,scannedBarcode)=>{
   const d=src==='cafeteria'?DB.cafeteriaItems[key]:src==='kiosko'?DB.kioskItems[key]:DB.dishes[key];
   if(!d)return;
+  // Promo con slots
+  if(d.isPromoSlots&&(d.promoSlots||[]).length>0){
+    openPromoSlotsModal(d,(name,price,promoKey)=>{
+      if(!C.manualOrder)return;
+      const existing=C.manualOrder.items.find(i=>i._promoKey===promoKey);
+      if(existing){existing.qty++;}
+      else{C.manualOrder.items.push({_key:key,_promoKey:promoKey,name,price,qty:1,isCafeteria:false,isKiosko:false,emoji:'🎁',selectedType:null,excluded:[]});}
+      C.manualOrderSearch='';render();
+    });
+    return;
+  }
   // Mitad y mitad
   if(d.isMitadMitad&&d.mitadMitadCat){
     openMitadModal(d,(name,price,mitadKey)=>{
@@ -6407,6 +6654,7 @@ async function deductTypeStock(items){
 function cartTotal(){
   return Object.entries(C.cart).reduce((s,[id,v])=>{
     if(id.startsWith('mitad|'))return s+(v._mitadPrice||0)*v.qty;
+    if(id.startsWith('promo|'))return s+(v._promoPrice||0)*v.qty;
     if(id.startsWith('kiosk|')){const d=DB.kioskItems[v._kioskKey];return s+(d?Number(d.price)*v.qty:0);}
     if(id.startsWith('restk|')){const d=DB.dishes[v._kioskKey];return s+(d?dishFinalPrice(d,v.qty,v._typeName||null)*v.qty:0);}
     // key puede ser dishId o dishId|tipo
@@ -6583,16 +6831,6 @@ function renderMenuWithCart(mc){
   });
   menuH+=`</div>`;
 
-  if(C.custDishId!==null){
-    const d=DB.dishes[C.custDishId];
-    if(d){
-      const excl=(C.cart[C.custDishId]&&C.cart[C.custDishId].excluded)||new Set();
-      menuH+=`<div class="cust-modal"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:20px">${(cats.find(c=>c._key===d.cat)||{}).icon||'🍽'}</span><div><div style="font-size:16px;font-weight:500">${d.name}</div><div style="font-size:12px;color:var(--muted)">Destildá lo que no querés</div></div></div><div class="cust-ing-list">`;
-      (d.ingredients||[]).forEach(ing=>{const ex=excl.has(ing);menuH+=`<div class="cust-ing-row${ex?' excluded':''}" onclick="toggleIng('${C.custDishId}','${ing.replace(/'/g,"\\'")}')"><div style="display:flex;align-items:center;gap:8px"><div class="cust-check ${ex?'unchecked':'checked'}">${ex?'':'✓'}</div><span class="${ex?'strikethrough':''}">${ing}</span></div>${ex?`<span style="font-size:11px;color:#b45309">Sin esto</span>`:''}</div>`;});
-      menuH+=`</div><div style="display:flex;gap:8px"><button class="btn btn-primary" style="flex:1" onclick="confirmCust('${C.custDishId}')">Agregar al pedido</button><button class="btn btn-ghost" onclick="cancelCust()">Cancelar</button></div></div>`;
-    }
-  }
-
   menuH+=`<div class="menu-grid">`;
   filtered.forEach(d=>{
     const entry=C.cart[d._key];const q=entry?entry.qty:0;const excl=entry?entry.excluded:new Set();
@@ -6682,7 +6920,14 @@ function renderMenuWithCart(mc){
             menuH+=`<button class="add-btn" onclick="openTypePicker('${d._key}')">+</button>`;
           }
         } else {
-          const addOnclick=d.customizable&&(d.ingredients||[]).length>0?`openCust('${d._key}')`:`quickAdd('${d._key}')`;
+          let addOnclick;
+          if(d.isPromoSlots&&(d.promoSlots||[]).length>0){
+            addOnclick=`custOpenPromoSlots('${d._key}')`;
+          } else if(d.customizable&&(d.ingredients||[]).length>0){
+            addOnclick=`openCust('${d._key}')`;
+          } else {
+            addOnclick=`quickAdd('${d._key}')`;
+          }
           menuH+=q===0?`<button class="add-btn" onclick="${addOnclick}">+</button>`:`<div class="qty-ctrl"><button class="qty-btn" onclick="removeFromCart('${d._key}')">−</button><span class="qty-val">${q}</span><button class="qty-btn" onclick="${addOnclick}">+</button></div>`;
         }
       }
@@ -6726,7 +6971,52 @@ function scrollActiveCat(){
 }
 
 
-window.openCust=id=>{C.custDishId=id;refreshMenuWithScroll();};
+window.custOpenPromoSlots=id=>{
+  const d=DB.dishes[id];if(!d)return;
+  openPromoSlotsModal(d,(name,price,promoKey)=>{
+    if(!C.cart[promoKey])C.cart[promoKey]={qty:0,_promoName:name,_promoPrice:price};
+    C.cart[promoKey].qty+=1;
+    refreshMenuWithScroll();
+    if(document.getElementById('cart-sheet'))showCartSheet();
+  });
+};
+window.openCust=id=>{
+  const d=DB.dishes[id];if(!d)return;
+  const ings=(d.ingredients||[]).map(i=>typeof i==='string'?i:(i.name||String(i))).filter(Boolean);
+  if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};
+  const excluded=new Set(C.cart[id].excluded||[]);
+  document.getElementById('cust-overlay-cust')?.remove();
+  const overlay=document.createElement('div');
+  overlay.id='cust-overlay-cust';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:flex-end;justify-content:center';
+  const renderO=()=>{
+    overlay.innerHTML=`<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:480px;padding:20px;padding-bottom:calc(20px + env(safe-area-inset-bottom));max-height:80vh;display:flex;flex-direction:column">
+      <div style="flex-shrink:0;margin-bottom:14px">
+        <div style="font-size:16px;font-weight:700">${d.name}</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:2px">Destildá lo que no querés</div>
+      </div>
+      <div style="overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+        ${ings.map(ing=>{const ex=excluded.has(ing);return `<button class="cust-ing-btn" data-ing="${ing.replace(/"/g,'&quot;')}" style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-radius:10px;border:1.5px solid ${ex?'#dc2626':'var(--border)'};background:${ex?'#fef2f2':'var(--card)'};cursor:pointer;font-size:14px;font-family:inherit;width:100%;text-align:left"><span style="color:${ex?'#dc2626':'var(--text)'};${ex?'text-decoration:line-through':''}">${ing}</span><span style="font-size:18px;flex-shrink:0">${ex?'❌':'✓'}</span></button>`;}).join('')}
+      </div>
+      ${excluded.size>0?`<div style="flex-shrink:0;margin-bottom:10px;padding:8px 12px;background:#fef3c7;border-radius:8px;font-size:12px;color:#92400e;font-weight:600">⚠️ SIN: ${[...excluded].join(', ')}</div>`:''}
+      <div style="display:flex;gap:8px;flex-shrink:0">
+        <button id="cust-confirm-btn" style="flex:1;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit">Agregar al pedido</button>
+        <button id="cust-cancel-btn" style="padding:12px 16px;border-radius:10px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>
+    </div>`;
+    overlay.querySelectorAll('.cust-ing-btn').forEach(btn=>{btn.onclick=()=>{const ing=btn.dataset.ing;if(excluded.has(ing))excluded.delete(ing);else excluded.add(ing);renderO();};});
+    overlay.querySelector('#cust-confirm-btn').onclick=()=>{
+      if(!C.cart[id])C.cart[id]={qty:0,excluded:new Set()};
+      C.cart[id].excluded=excluded;C.cart[id].qty+=1;
+      overlay.remove();refreshMenuWithScroll();
+      if(document.getElementById('cart-sheet'))showCartSheet();
+    };
+    overlay.querySelector('#cust-cancel-btn').onclick=()=>overlay.remove();
+  };
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  renderO();
+};
 window.cancelCust=()=>{C.custDishId=null;refreshMenuWithScroll();};
 window.openTypePicker=id=>{C.typePickerDishId=id;C.custDishId=null;refreshMenuWithScroll();};
 
@@ -6768,8 +7058,7 @@ window.selectType=(dishId,typeName)=>{
   const cartKey=typeName?`${dishId}|${typeName}`:dishId;
   if(!C.cart[cartKey])C.cart[cartKey]={qty:0,excluded:new Set(),selectedType:typeName||null,_dishId:dishId};
   if(d&&d.customizable&&(d.ingredients||[]).length>0){
-    // Abrir customizador — necesitamos que use la key compuesta
-    C.custDishId=cartKey;
+    openCust(cartKey);
   } else {
     C.cart[cartKey].qty+=1;
   }
@@ -7055,6 +7344,10 @@ function renderCartPanel(mc, menuH, ct, isIndividual, cats){
       cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🍕</div><div class="cart-item-info"><div class="cart-item-name">${v._mitadName||'Pizza M&M'}</div></div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCart('${id}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="custAddMitad('${id}')">+</button></div><div class="cart-item-price">$${((v._mitadPrice||0)*v.qty).toLocaleString()}</div></div>`;
       return;
     }
+    if(id.startsWith('promo|')){
+      cartH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🎁</div><div class="cart-item-info"><div class="cart-item-name">${v._promoName||id}</div></div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCart('${id}')">−</button><span class="cqval">${v.qty}</span></div><div class="cart-item-price">$${((v._promoPrice||0)*v.qty).toLocaleString()}</div></div>`;
+      return;
+    }
     // key puede ser dishId o dishId|tipo (igual que mozas)
     const baseId=id.includes('|')?id.split('|')[0]:id;
     const d=DB.dishes[baseId]||DB.cafeteriaItems[baseId];if(!d)return;
@@ -7108,6 +7401,10 @@ window.showCartSheet=()=>{
       itemsH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🍕</div><div class="cart-item-info"><div class="cart-item-name">${v._mitadName||'Pizza M&M'}</div></div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCart('${id}')">−</button><span class="cqval">${v.qty}</span><button class="cqbtn" onclick="custAddMitad('${id}')">+</button></div><div class="cart-item-price">$${((v._mitadPrice||0)*v.qty).toLocaleString()}</div></div>`;
       return;
     }
+    if(id.startsWith('promo|')){
+      itemsH+=`<div class="cart-item"><div style="font-size:16px;flex-shrink:0">🎁</div><div class="cart-item-info"><div class="cart-item-name">${v._promoName||id}</div></div><div class="cart-qty"><button class="cqbtn" onclick="removeFromCart('${id}')">−</button><span class="cqval">${v.qty}</span></div><div class="cart-item-price">$${((v._promoPrice||0)*v.qty).toLocaleString()}</div></div>`;
+      return;
+    }
     const baseId=id.includes('|')?id.split('|')[0]:id;
     const d=DB.dishes[baseId]||DB.cafeteriaItems[baseId];if(!d)return;
     const isCaf=!!DB.cafeteriaItems[baseId];
@@ -7155,6 +7452,7 @@ window.placeOrder=()=>{
   const items=Object.entries(C.cart).map(([id,v])=>{
     if(id.startsWith('kiosk|')||id.startsWith('restk|')){const isRest=id.startsWith('restk|');const kd=isRest?DB.dishes[v._kioskKey]:DB.kioskItems[v._kioskKey];if(!kd)return null;const kp=isRest&&v._typeName?dishFinalPrice(kd,v.qty,v._typeName):isRest?dishFinalPrice(kd,v.qty):Number(kd.price);const kname=v._typeName?kd.name+' — '+v._typeName:kd.name;return{name:kname,qty:v.qty,price:kp,finalPrice:kp,excluded:[],selectedType:v._typeName||null,isCafeteria:false,isKiosko:true,emoji:'🏪'};}
     if(id.startsWith('mitad|'))return{name:v._mitadName||id,qty:v.qty,price:v._mitadPrice||0,finalPrice:v._mitadPrice||0,excluded:[],selectedType:null,isCafeteria:false,emoji:'🍕'};
+    if(id.startsWith('promo|'))return{name:v._promoName||id,qty:v.qty,price:v._promoPrice||0,finalPrice:v._promoPrice||0,excluded:[],selectedType:null,isCafeteria:false,emoji:'🎁'};
     const baseId2=id.includes('|')?id.split('|')[0]:id;
     const dPlato=DB.dishes[baseId2];
     const dCaf=DB.cafeteriaItems[baseId2];
