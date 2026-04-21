@@ -250,13 +250,14 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
 // ─── FIREBASE CONFIG ───────────────────────────────
 // Reemplazá estos valores con los de tu proyecto Firebase
 const firebaseConfig = {
-  apiKey: "AIzaSyBdskPCYx2Nelq-IVeGshM-hv8rBz9WkjA",
-  authDomain: "ttr-bar-club-dev.firebaseapp.com",
-  databaseURL: "https://ttr-bar-club-dev-default-rtdb.firebaseio.com",
-  projectId: "ttr-bar-club-dev",
-  storageBucket: "ttr-bar-club-dev.firebasestorage.app",
-  messagingSenderId: "635056829443",
-  appId: "1:635056829443:web:0872e806ab97fcc9bcca36"
+  apiKey: "AIzaSyBvZ-t5rFj6Eo2Eveze5f5eqqRxZ2xiodY",
+  authDomain: "ttr-bar-club.firebaseapp.com",
+  databaseURL: "https://ttr-bar-club-default-rtdb.firebaseio.com",
+  projectId: "ttr-bar-club",
+  storageBucket: "ttr-bar-club.firebasestorage.app",
+  messagingSenderId: "197986436291",
+  appId: "1:197986436291:web:338ddcf70a35962aacce76",
+  measurementId: "G-4QYLLN280Q"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -808,6 +809,7 @@ function renderCajaTab(){
     h+=`<button class="btn btn-primary" onclick="cajaApertura()">Apertura de caja</button>`;
   } else {
     h+=`<button class="btn btn-outline btn-sm" onclick="cajaGasto()">+ Cargar gasto</button>`;
+    h+=`<button class="btn btn-outline btn-sm" onclick="cajaSaldo()" style="border-color:#059669;color:#059669">+ Cargar saldo</button>`;
     h+=`<button class="btn btn-ghost btn-sm" onclick="cajaDescargar()" style="border-color:var(--border)">↓ Descargar estado</button>`;
     h+=`<button onclick="cajaCierre()" style="padding:6px 14px;border-radius:8px;border:0.5px solid #b91c1c;background:#fee2e2;color:#b91c1c;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">🔒 Cierre de caja</button>`;
   }
@@ -849,6 +851,18 @@ function renderCajaTab(){
       h+=`<div class="two-col"><div class="form-group" style="margin-bottom:10px"><label>Monto ($)</label><input type="number" min="0" placeholder="0" id="caja-monto"></div>`;
       h+=`<div class="form-group" style="margin-bottom:10px"><label>Descripción <span style="font-size:11px;color:var(--muted)">(opcional)</span></label><input placeholder="Ej: Verdulería, Sueldo..." id="caja-desc"></div></div>`;
       h+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="cajaGuardarGasto()">Guardar gasto</button><button class="btn btn-ghost" onclick="cajaCancelarModal()">Cancelar</button></div>`;
+      h+=`</div>`;
+    }
+
+    if(C.cajaModal==='saldo'){
+      h+=`<div class="card" style="margin-bottom:1.25rem;border-color:#059669">`;
+      h+=`<div class="card-title" style="color:#059669">💰 Cargar saldo</div>`;
+      h+=`<div style="margin-bottom:10px"><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Medio de pago</label><div style="display:flex;gap:8px">`;
+      [{v:'efectivo',l:'💵 Efectivo'},{v:'mercadopago',l:'📱 Mercado Pago'},{v:'transferencia',l:'🏦 Transferencia'}].forEach(p=>{const sel=(C.cajaGastoPm||'efectivo')===p.v;h+=`<button onclick="setCajaGastoPm('${p.v}')" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid ${sel?'#059669':'var(--border)'};background:${sel?'#059669':'var(--card)'};color:${sel?'#fff':'var(--text)'};font-size:12px;font-weight:${sel?'600':'400'};cursor:pointer;font-family:inherit">${p.l}</button>`;});
+      h+=`</div></div>`;
+      h+=`<div class="two-col"><div class="form-group" style="margin-bottom:10px"><label>Monto ($)</label><input type="number" min="0" placeholder="0" id="caja-monto"></div>`;
+      h+=`<div class="form-group" style="margin-bottom:10px"><label>Descripción <span style="font-size:11px;color:var(--muted)">(opcional)</span></label><input placeholder="Ej: Depósito, Cobro extra..." id="caja-desc"></div></div>`;
+      h+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" style="background:#059669;border-color:#059669" onclick="cajaGuardarSaldo()">Guardar saldo</button><button class="btn btn-ghost" onclick="cajaCancelarModal()">Cancelar</button></div>`;
       h+=`</div>`;
     }
 
@@ -932,13 +946,28 @@ window.cajaGuardarGasto=async()=>{
 window.cajaCancelarModal=()=>{C.cajaModal=null;render();};
 
 // Cierre — genera Excel con SheetJS via CDN
+window.cajaSaldo=()=>{C.cajaModal='saldo';C.cajaGastoPm='efectivo';C.cajaMonto='';C.cajaDesc='';render();};
+window.cajaGuardarSaldo=async()=>{
+  const monto=Number(document.getElementById('caja-monto')?.value)||0;
+  const desc=(document.getElementById('caja-desc')?.value||'').trim();
+  if(!monto||monto<=0){alert('Ingresá un monto mayor a 0');return;}
+  const pm=C.cajaGastoPm||'efectivo';
+  const pmL={efectivo:'Efectivo',mercadopago:'Mercado Pago',transferencia:'Transferencia'};
+  const hoy=new Date().toISOString().slice(0,10);
+  await push(ref(db,'caja'),{tipo:'saldo',concepto:`Saldo (${pmL[pm]||pm})`,monto,fecha:hoy,ts:Date.now(),desc,paymentMethod:pm});
+  C.cajaModal=null;C.cajaMonto='';C.cajaDesc='';render();
+};
 function cajaGenerarCSV(movs, hoy){
-  const rows=[['Hora','Concepto','Descripción','Debe (-)','Haber (+)','Saldo acumulado']];
+  // Hoja 1: movimientos con fecha+hora
+  const rows=[['Fecha y Hora','Concepto','Descripción','Medio de Pago','Debe (-)','Haber (+)','Saldo acumulado']];
   let saldoAcum=0;
   movs.forEach(m=>{
-    const hora=new Date(m.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    const dt=new Date(m.ts);
+    const fechaHora=dt.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'})+' '+dt.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago',mixto:'Mixto'};
+    const pm=pmL[m.paymentMethod||'']||m.paymentMethod||'';
     saldoAcum+=m.monto;
-    rows.push([hora, m.concepto, m.desc||'',
+    rows.push([fechaHora, m.concepto, m.desc||'', pm,
       m.monto<0?Math.abs(m.monto):'',
       m.monto>=0?m.monto:'',
       saldoAcum]);
@@ -946,9 +975,33 @@ function cajaGenerarCSV(movs, hoy){
   const ingresos=movs.filter(m=>m.monto>0).reduce((s,m)=>s+m.monto,0);
   const egresos=movs.filter(m=>m.monto<0).reduce((s,m)=>s+m.monto,0);
   rows.push([]);
-  rows.push(['','TOTALES','',Math.abs(egresos),ingresos,saldoAcum]);
-  rows.push(['','Fecha cierre',hoy,'','','']);
-  return rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  rows.push(['','TOTALES','','',Math.abs(egresos),ingresos,saldoAcum]);
+  rows.push(['','Fecha cierre',hoy,'','','','']);
+
+  // Hoja 2: asientos por medio de pago
+  const pmOrder=['efectivo','debito','credito','transferencia','mercadopago','mixto'];
+  const pmL={efectivo:'💵 Efectivo',debito:'💳 Débito',credito:'💳 Crédito',transferencia:'🏦 Transferencia',mercadopago:'📱 Mercado Pago',mixto:'🔀 Mixto'};
+  const byPm={};
+  movs.forEach(m=>{
+    const pm=m.paymentMethod||'efectivo';
+    if(!byPm[pm])byPm[pm]={ingresos:0,egresos:0,movs:[]};
+    if(m.monto>0)byPm[pm].ingresos+=m.monto;
+    else byPm[pm].egresos+=Math.abs(m.monto);
+    byPm[pm].movs.push(m);
+  });
+  const rows2=[['Medio de Pago','Ingresos (+)','Egresos (-)','Neto']];
+  pmOrder.forEach(pm=>{
+    if(!byPm[pm])return;
+    const {ingresos,egresos}=byPm[pm];
+    rows2.push([pmL[pm]||pm, ingresos, egresos, ingresos-egresos]);
+  });
+  rows2.push([]);
+  rows2.push(['TOTAL',ingresos,Math.abs(egresos),saldoAcum]);
+
+  // Combinar en un CSV con separador de hoja (línea vacía + header)
+  const csv1=rows.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const csv2=rows2.map(r=>r.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  return csv1+'\n\n\n"--- RESUMEN POR MEDIO DE PAGO ---"\n'+csv2;
 }
 function cajaDescargarArchivo(movs){
   const hoy=new Date().toLocaleDateString('es-AR');
