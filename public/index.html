@@ -4307,54 +4307,81 @@ function renderDeudoresTab(){
 }
 
 window.editDeudorNombre=async(keys,nombreActual)=>{
+  const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k}));
+  const leaders=waiters.filter(w=>w.isLeader);
   const clientesList=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
+
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
-  overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <div style="font-size:16px;font-weight:600;margin-bottom:4px">✏️ Editar nombre</div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Cambiá el nombre del deudor</div>
-    <div style="position:relative;margin-bottom:16px">
-      <input id="edn-input" value="${nombreActual.replace(/"/g,'&quot;')}" autocomplete="off" style="width:100%;padding:10px 12px;border:1.5px solid var(--brand);border-radius:8px;font-size:15px;font-family:inherit;box-sizing:border-box">
-      <div id="edn-dd" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 2px);background:var(--card);border:0.5px solid var(--border);border-radius:8px;z-index:10;max-height:200px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button id="edn-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
-      <button id="edn-cancel" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
-    </div>
-  </div>`;
-  document.body.appendChild(overlay);
+  let step='pin';let pinInput='';
 
-  const inp=overlay.querySelector('#edn-input');
-  const dd=overlay.querySelector('#edn-dd');
-
-  const showDd=(q)=>{
-    const filtered=q?clientesList.filter(n=>n.toLowerCase().includes(q.toLowerCase())):clientesList;
-    if(!filtered.length){dd.style.display='none';return;}
-    dd.innerHTML=filtered.map(n=>`<div class="edn-opt" data-n="${n.replace(/"/g,'&quot;')}" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6">${n}</div>`).join('');
-    dd.style.display='block';
-    dd.querySelectorAll('.edn-opt').forEach(el=>{
-      el.onmousedown=()=>{inp.value=el.dataset.n;dd.style.display='none';};
-    });
-  };
-
-  inp.addEventListener('input',()=>showDd(inp.value));
-  inp.addEventListener('focus',()=>showDd(inp.value));
-  inp.addEventListener('blur',()=>setTimeout(()=>{dd.style.display='none';},150));
-  inp.select();
-
-  overlay.querySelector('#edn-cancel').onclick=()=>overlay.remove();
-  overlay.querySelector('#edn-ok').onclick=async()=>{
-    const nuevoNombre=inp.value.trim();
-    if(!nuevoNombre){alert('Ingresá un nombre');return;}
-    for(const k of keys){
-      await update(ref(db,`orders/${k}`),{deudorNombre:nuevoNombre});
+  const render=()=>{
+    if(step==='pin'){
+      const dots='●'.repeat(pinInput.length)+'○'.repeat(4-pinInput.length);
+      overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:280px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
+        <div style="font-size:28px;margin-bottom:8px">🔐</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">Editar nombre de deudor</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">Ingresá el PIN de moza líder</div>
+        <div style="font-size:28px;letter-spacing:14px;color:var(--brand);margin-bottom:14px">${dots}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+          ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>k===''?'<div></div>':`<button data-key="${k}" style="padding:14px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);font-size:20px;font-weight:600;cursor:pointer;font-family:inherit">${k}</button>`).join('')}
+        </div>
+        <button id="pin-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>`;
+      overlay.querySelector('#pin-cancel').onclick=()=>overlay.remove();
+      overlay.querySelectorAll('[data-key]').forEach(btn=>{
+        btn.onclick=()=>{
+          const k=btn.dataset.key;
+          if(k==='⌫'){pinInput=pinInput.slice(0,-1);render();return;}
+          if(pinInput.length>=4)return;
+          pinInput+=k;
+          if(pinInput.length===4){
+            const found=leaders.find(w=>String(w.pin)===pinInput);
+            if(!found){pinInput='';const d=overlay.querySelector('div[style*="letter-spacing"]');if(d)d.style.color='#dc2626';setTimeout(()=>render(),800);}
+            else{step='edit';render();}
+          } else render();
+        };
+      });
+    } else {
+      overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:16px;font-weight:600;margin-bottom:4px">✏️ Editar nombre</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Cambiá el nombre del deudor</div>
+        <div style="position:relative;margin-bottom:16px">
+          <input id="edn-input" value="${nombreActual.replace(/"/g,'&quot;')}" autocomplete="off" style="width:100%;padding:10px 12px;border:1.5px solid var(--brand);border-radius:8px;font-size:15px;font-family:inherit;box-sizing:border-box">
+          <div id="edn-dd" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 2px);background:var(--card);border:0.5px solid var(--border);border-radius:8px;z-index:10;max-height:200px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button id="edn-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
+          <button id="edn-cancel" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
+        </div>
+      </div>`;
+      const inp=overlay.querySelector('#edn-input');
+      const dd=overlay.querySelector('#edn-dd');
+      const showDd=(q)=>{
+        const filtered=q?clientesList.filter(n=>n.toLowerCase().includes(q.toLowerCase())):clientesList;
+        if(!filtered.length){dd.style.display='none';return;}
+        dd.innerHTML=filtered.map(n=>`<div class="edn-opt" data-n="${n.replace(/"/g,'&quot;')}" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6">${n}</div>`).join('');
+        dd.style.display='block';
+        dd.querySelectorAll('.edn-opt').forEach(el=>{el.onmousedown=()=>{inp.value=el.dataset.n;dd.style.display='none';};});
+      };
+      inp.addEventListener('input',()=>showDd(inp.value));
+      inp.addEventListener('focus',()=>showDd(inp.value));
+      inp.addEventListener('blur',()=>setTimeout(()=>{dd.style.display='none';},150));
+      overlay.querySelector('#edn-cancel').onclick=()=>overlay.remove();
+      overlay.querySelector('#edn-ok').onclick=async()=>{
+        const nuevoNombre=inp.value.trim();
+        if(!nuevoNombre){alert('Ingresá un nombre');return;}
+        for(const k of keys) await update(ref(db,`orders/${k}`),{deudorNombre:nuevoNombre});
+        overlay.remove();render();
+      };
+      inp.addEventListener('keydown',e=>{if(e.key==='Enter')overlay.querySelector('#edn-ok').click();});
+      setTimeout(()=>inp.select(),50);
     }
-    overlay.remove();
-    render();
   };
-  inp.addEventListener('keydown',e=>{if(e.key==='Enter')overlay.querySelector('#edn-ok').click();});
+
+  document.body.appendChild(overlay);
   overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
-  setTimeout(()=>inp.focus(),50);
+  render();
 };
 window.eliminarDeuda=async(keys)=>{
   const overlay=document.createElement('div');
