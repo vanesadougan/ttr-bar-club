@@ -759,9 +759,17 @@ function renderWaitersAdminTab(){
 }
 window.toggleWaiterLeader=()=>{const o=C.editingWaiter||(C.newWaiter=C.newWaiter||{name:'',pin:''});o.isLeader=!o.isLeader;render();};
 window.uWaiter=(field,val)=>{const o=C.editingWaiter||(C.newWaiter=C.newWaiter||{name:'',pin:''});o[field]=val;};
-window.addPromoSlot=()=>{const f=C.editingDish||C.newDish;if(!f)return;if(!f.promoSlots)f.promoSlots=[];f.promoSlots.push({qty:1,cat:''});renderOrModal();};
+window.addPromoSlot=()=>{const f=C.editingDish||C.newDish;if(!f)return;if(!f.promoSlots)f.promoSlots=[];f.promoSlots.push({qty:1,cat:'',items:[]});renderOrModal();};
 window.removePromoSlot=(i)=>{const f=C.editingDish||C.newDish;if(!f||!f.promoSlots)return;f.promoSlots.splice(i,1);renderOrModal();};
 window.updatePromoSlot=(i,field,val)=>{const f=C.editingDish||C.newDish;if(!f||!f.promoSlots)return;f.promoSlots[i][field]=val;renderOrModal();};
+window.togglePromoSlotItem=(si,dishKey)=>{
+  const f=C.editingDish||C.newDish;if(!f||!f.promoSlots)return;
+  const slot=f.promoSlots[si];if(!slot)return;
+  if(!slot.items)slot.items=[];
+  const idx=slot.items.indexOf(dishKey);
+  if(idx>=0)slot.items.splice(idx,1);else slot.items.push(dishKey);
+  renderOrModal();
+};
 window.addWaiter=()=>{const d=C.newWaiter||{};if(!d.name||!d.name.trim()){alert('Ingresá el nombre');return;}if(!d.pin||String(d.pin).length!==4){alert('Ingresá un PIN de 4 dígitos');return;}push(ref(db,'waiters'),{name:d.name.trim(),pin:String(d.pin),isLeader:!!d.isLeader});C.newWaiter={name:'',pin:''};render();};
 window.editWaiter=key=>{C.editingWaiter={...DB.waiters[key],_key:key};render();};
 window.saveEditWaiter=()=>{
@@ -5163,17 +5171,33 @@ window.openDishAdvModal=()=>{
       if(isPS){
         const allCatsPS=getCats();
         if(pSlots.length>0){
-          b+='<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px">';
+          b+='<div style="display:flex;flex-direction:column;gap:10px;margin-bottom:10px">';
           pSlots.forEach((slot,si)=>{
             const slotCat=allCatsPS.find(c=>c._key===slot.cat);
-            b+=`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border)">
+            const slotDishes=slot.cat?Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>d.cat===slot.cat&&!d.unavailable).sort((a,b)=>a.name.localeCompare(b.name,'es')):[];
+            const selectedItems=slot.items||[]; // [] = todos
+            b+=`<div style="background:var(--bg);border-radius:8px;border:0.5px solid var(--border);overflow:hidden">`;
+            b+=`<div style="display:flex;align-items:center;gap:8px;padding:8px 12px">
               <input type="number" min="1" max="20" value="${slot.qty||1}" onchange="updatePromoSlot(${si},'qty',Number(this.value))" style="width:50px;padding:4px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px;text-align:center">
-              <select onchange="updatePromoSlot(${si},'cat',this.value)" style="flex:1;padding:4px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px">
+              <select onchange="updatePromoSlot(${si},'cat',this.value);updatePromoSlot(${si},'items',[])" style="flex:1;padding:4px 8px;border:0.5px solid var(--border);border-radius:6px;font-family:inherit;font-size:13px">
                 <option value="">— Categoría —</option>
                 ${allCatsPS.map(c=>`<option value="${c._key}"${slot.cat===c._key?' selected':''}>${c.icon} ${c.label}</option>`).join('')}
               </select>
-              <button onclick="removePromoSlot(${si})" style="width:24px;height:24px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:14px;cursor:pointer;line-height:1">×</button>
+              <button onclick="removePromoSlot(${si})" style="width:24px;height:24px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:14px;cursor:pointer;line-height:1;flex-shrink:0">×</button>
             </div>`;
+            if(slotDishes.length>0){
+              const allSelected=selectedItems.length===0;
+              b+=`<div style="padding:6px 12px 10px;border-top:0.5px solid var(--border)">`;
+              b+=`<div style="font-size:11px;font-weight:600;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Aplica a</div>`;
+              b+=`<div style="display:flex;flex-wrap:wrap;gap:5px">`;
+              b+=`<button onclick="updatePromoSlot(${si},'items',[])" style="padding:3px 10px;border-radius:20px;border:1.5px solid ${allSelected?'var(--brand)':'var(--border)'};background:${allSelected?'#f0f7ff':'var(--card)'};color:${allSelected?'var(--brand)':'var(--muted)'};font-size:12px;font-weight:${allSelected?600:400};cursor:pointer;font-family:inherit">Todos</button>`;
+              slotDishes.forEach(d=>{
+                const sel=selectedItems.includes(d._key);
+                b+=`<button onclick="togglePromoSlotItem(${si},'${d._key}')" style="padding:3px 10px;border-radius:20px;border:1.5px solid ${sel?'var(--brand)':'var(--border)'};background:${sel?'#f0f7ff':'var(--card)'};color:${sel?'var(--brand)':'var(--text)'};font-size:12px;font-weight:${sel?600:400};cursor:pointer;font-family:inherit">${d.name}</button>`;
+              });
+              b+=`</div></div>`;
+            }
+            b+=`</div>`;
           });
           b+='</div>';
         }
@@ -5352,7 +5376,10 @@ function openPromoSlotsModal(d, onConfirm){
     const slot=slots[currentSlot];
     const sel=selections[currentSlot];
     const cat=getCats().find(c=>c._key===slot.cat);
-    const opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(dd=>dd.cat===slot.cat&&!dd.unavailable).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+    const allowedItems=slot.items&&slot.items.length>0?new Set(slot.items):null;
+    const opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k}))
+      .filter(dd=>dd.cat===slot.cat&&!dd.unavailable&&(!allowedItems||allowedItems.has(dd._key)))
+      .sort((a,b)=>a.name.localeCompare(b.name,'es'));
     const chosenTotal=sel.chosen.reduce((s,c)=>s+c.qty,0);
     const remaining=sel.total-chosenTotal;
 
