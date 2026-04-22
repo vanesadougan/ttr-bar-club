@@ -4241,8 +4241,12 @@ function renderDeudoresTab(){
       h+=`<div class="card" style="margin-bottom:.875rem;border-left:3px solid #dc2626;padding:0;overflow:hidden">`;
 
       // Header: nombre + total que debe
+      const _dIdx=window._deudorKeys.push(keys)-1;
       h+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:0.5px solid var(--border)">`;
-      h+=`<div style="font-size:17px;font-weight:700">👤 ${g.nombre}</div>`;
+      h+=`<div style="display:flex;align-items:center;gap:8px">
+        <div style="font-size:17px;font-weight:700">👤 ${g.nombre}</div>
+        <button onclick="editDeudorNombre(window._deudorKeys[${_dIdx}],'${g.nombre.replace(/'/g,"\\'")}')" style="padding:3px 8px;border-radius:6px;border:0.5px solid var(--border);background:var(--bg);font-size:11px;color:var(--muted);cursor:pointer;font-family:inherit">✏️ Editar</button>
+      </div>`;
       h+=`<div style="text-align:right">
         <div style="font-size:20px;font-weight:700;color:#dc2626">$${saldoMostrar.toLocaleString()}</div>
         ${pagadoParcial>0?`<div style="font-size:11px;color:#059669">Ya pagó $${pagadoParcial.toLocaleString()}</div>`:''}
@@ -4301,6 +4305,56 @@ function renderDeudoresTab(){
   return h;
 }
 
+window.editDeudorNombre=async(keys,nombreActual)=>{
+  const clientesList=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="font-size:16px;font-weight:600;margin-bottom:4px">✏️ Editar nombre</div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:16px">Cambiá el nombre del deudor</div>
+    <div style="position:relative;margin-bottom:16px">
+      <input id="edn-input" value="${nombreActual.replace(/"/g,'&quot;')}" autocomplete="off" style="width:100%;padding:10px 12px;border:1.5px solid var(--brand);border-radius:8px;font-size:15px;font-family:inherit;box-sizing:border-box">
+      <div id="edn-dd" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 2px);background:var(--card);border:0.5px solid var(--border);border-radius:8px;z-index:10;max-height:200px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button id="edn-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
+      <button id="edn-cancel" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  const inp=overlay.querySelector('#edn-input');
+  const dd=overlay.querySelector('#edn-dd');
+
+  const showDd=(q)=>{
+    const filtered=q?clientesList.filter(n=>n.toLowerCase().includes(q.toLowerCase())):clientesList;
+    if(!filtered.length){dd.style.display='none';return;}
+    dd.innerHTML=filtered.map(n=>`<div class="edn-opt" data-n="${n.replace(/"/g,'&quot;')}" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6">${n}</div>`).join('');
+    dd.style.display='block';
+    dd.querySelectorAll('.edn-opt').forEach(el=>{
+      el.onmousedown=()=>{inp.value=el.dataset.n;dd.style.display='none';};
+    });
+  };
+
+  inp.addEventListener('input',()=>showDd(inp.value));
+  inp.addEventListener('focus',()=>showDd(inp.value));
+  inp.addEventListener('blur',()=>setTimeout(()=>{dd.style.display='none';},150));
+  inp.select();
+
+  overlay.querySelector('#edn-cancel').onclick=()=>overlay.remove();
+  overlay.querySelector('#edn-ok').onclick=async()=>{
+    const nuevoNombre=inp.value.trim();
+    if(!nuevoNombre){alert('Ingresá un nombre');return;}
+    for(const k of keys){
+      await update(ref(db,`orders/${k}`),{deudorNombre:nuevoNombre});
+    }
+    overlay.remove();
+    render();
+  };
+  inp.addEventListener('keydown',e=>{if(e.key==='Enter')overlay.querySelector('#edn-ok').click();});
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  setTimeout(()=>inp.focus(),50);
+};
 window.eliminarDeuda=async(keys)=>{
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
