@@ -5034,17 +5034,25 @@ window.dishMoveUp=async(key,catId)=>{
   const catDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>d.cat===catId).sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
   const idx=catDishes.findIndex(d=>d._key===key);
   if(idx<=0)return;
-  const a=catDishes[idx],b=catDishes[idx-1];
-  await update(ref(db,`dishes/${a._key}`),{sortOrder:idx-1});
-  await update(ref(db,`dishes/${b._key}`),{sortOrder:idx});
+  // Normalize all sortOrders first to avoid gaps/duplicates
+  const updates={};
+  catDishes.forEach((d,i)=>{updates[`dishes/${d._key}/sortOrder`]=i;});
+  // Then swap idx and idx-1
+  updates[`dishes/${catDishes[idx]._key}/sortOrder`]=idx-1;
+  updates[`dishes/${catDishes[idx-1]._key}/sortOrder`]=idx;
+  await update(ref(db),updates);
 };
 window.dishMoveDown=async(key,catId)=>{
   const catDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>d.cat===catId).sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
   const idx=catDishes.findIndex(d=>d._key===key);
   if(idx>=catDishes.length-1)return;
-  const a=catDishes[idx],b=catDishes[idx+1];
-  await update(ref(db,`dishes/${a._key}`),{sortOrder:idx+1});
-  await update(ref(db,`dishes/${b._key}`),{sortOrder:idx});
+  // Normalize all sortOrders first
+  const updates={};
+  catDishes.forEach((d,i)=>{updates[`dishes/${d._key}/sortOrder`]=i;});
+  // Then swap idx and idx+1
+  updates[`dishes/${catDishes[idx]._key}/sortOrder`]=idx+1;
+  updates[`dishes/${catDishes[idx+1]._key}/sortOrder`]=idx;
+  await update(ref(db),updates);
 };
 window.addTable=()=>{const t=C.newTable;if(!t.label){alert('Ingresá un nombre');return;}push(ref(db,'tables'),{...t});C.newTable={label:'',capacity:''};render();};
 window.editTable=key=>{C.editingTable={...DB.tables[key],_key:key};render();};
