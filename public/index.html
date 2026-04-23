@@ -5012,8 +5012,6 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
   document.body.appendChild(overlay);
 
   const renderOverlay=()=>{
-    const montoConDesc=descPct>0?Math.round(saldoMostrado*(1-descPct/100)):saldoMostrado;
-    montoTotal=montoConDesc;
     const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
     const resta=Math.max(0,montoTotal-totalPagado);
     overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto">
@@ -5064,6 +5062,7 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
     overlay.querySelectorAll('[data-desc-pct]').forEach(btn=>{
       btn.addEventListener('click',()=>{
         descPct=Number(btn.dataset.descPct);
+        montoTotal=descPct>0?Math.round(saldoMostrado*(1-descPct/100)):saldoMostrado;
         payments=[];
         renderOverlay();
       });
@@ -5073,7 +5072,6 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
     });
     overlay.querySelector('#cobro-monto')?.addEventListener('change',e=>{
       montoTotal=Math.max(0,Number(e.target.value)||0);
-      renderOverlay();
     });
     overlay.querySelectorAll('[data-add-pm]').forEach(btn=>{
       btn.addEventListener('click',()=>{
