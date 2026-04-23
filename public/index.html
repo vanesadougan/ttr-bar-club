@@ -4230,7 +4230,7 @@ function renderComprasTab(){
   // Header
   h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">`;
   h+=`<div><div style="font-size:18px;font-weight:600">🛒 Mis Compras</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${pendientes.length} deuda${pendientes.length!==1?'s':''} pendiente${pendientes.length!==1?'s':''}</div></div>`;
-  h+=`<button onclick="C._addingCompra=true;C._newCompra={fecha:new Date().toISOString().slice(0,10)};C._comprasSubTab='deudas';render()" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Nueva compra</button>`;
+  h+=`<button onclick="startAddCompra()" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Nueva compra</button>`;
   h+=`</div>`;
 
   // Form nueva compra
@@ -4268,14 +4268,14 @@ function renderComprasTab(){
         <button onclick="abrirPagoCompra('parcial')" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #d97706;background:#fef3c7;color:#92400e;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">💳 Pago parcial</button>
         <button onclick="guardarCompraDeuda()" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:14px;cursor:pointer;font-family:inherit">📋 Guardar sin pagar</button>
       </div>
-      <button onclick="C._addingCompra=false;C._newCompra={};render()" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      <button onclick="cancelAddCompra()" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
     </div>`;
   }
 
   // Sub-tabs
   h+=`<div style="display:flex;gap:4px;border-bottom:0.5px solid var(--border);margin-bottom:1rem">`;
-  h+=`<button onclick="C._comprasSubTab='deudas';render()" style="padding:7px 16px;border:none;border-bottom:2px solid ${subTab==='deudas'?'var(--accent)':'transparent'};background:transparent;font-size:13px;font-weight:${subTab==='deudas'?600:400};color:${subTab==='deudas'?'var(--text)':'var(--muted)'};cursor:pointer;font-family:inherit">⚠️ Mis deudas ${pendientes.length>0?`<span style="font-size:11px;background:#dc2626;color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px">${pendientes.length}</span>`:''}</button>`;
-  h+=`<button onclick="C._comprasSubTab='historial';render()" style="padding:7px 16px;border:none;border-bottom:2px solid ${subTab==='historial'?'var(--accent)':'transparent'};background:transparent;font-size:13px;font-weight:${subTab==='historial'?600:400};color:${subTab==='historial'?'var(--text)':'var(--muted)'};cursor:pointer;font-family:inherit">📜 Historial (60 días) ${historial.length>0?`<span style="font-size:11px;background:#6b7280;color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px">${historial.length}</span>`:''}</button>`;
+  h+=`<button onclick="setComprasSubTab('deudas')" style="padding:7px 16px;border:none;border-bottom:2px solid ${subTab==='deudas'?'var(--accent)':'transparent'};background:transparent;font-size:13px;font-weight:${subTab==='deudas'?600:400};color:${subTab==='deudas'?'var(--text)':'var(--muted)'};cursor:pointer;font-family:inherit">⚠️ Mis deudas ${pendientes.length>0?`<span style="font-size:11px;background:#dc2626;color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px">${pendientes.length}</span>`:''}</button>`;
+  h+=`<button onclick="setComprasSubTab('historial')" style="padding:7px 16px;border:none;border-bottom:2px solid ${subTab==='historial'?'var(--accent)':'transparent'};background:transparent;font-size:13px;font-weight:${subTab==='historial'?600:400};color:${subTab==='historial'?'var(--text)':'var(--muted)'};cursor:pointer;font-family:inherit">📜 Historial (60 días) ${historial.length>0?`<span style="font-size:11px;background:#6b7280;color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px">${historial.length}</span>`:''}</button>`;
   h+=`</div>`;
 
   if(subTab==='deudas'){
@@ -4512,7 +4512,7 @@ function renderProveedoresTab(){
         <textarea id="prov-desc" placeholder="Productos que provee, condiciones, etc." rows="2" oninput="C._newProveedor=C._newProveedor||{};C._newProveedor.descripcion=this.value" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical">${f.descripcion||''}</textarea></div>
       <div style="display:flex;gap:8px;margin-top:12px">
         <button onclick="saveNewProveedor()" class="btn btn-primary">Guardar</button>
-        <button onclick="C._addingProveedor=false;C._newProveedor={};render()" class="btn btn-ghost">Cancelar</button>
+        <button onclick="cancelAddProveedor()" class="btn btn-ghost">Cancelar</button>
       </div>
     </div>`;
   }
@@ -4538,7 +4538,7 @@ function renderProveedoresTab(){
           <textarea id="eprov-desc" rows="2" oninput="C._editingProveedor.descripcion=this.value" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical">${editing.descripcion||''}</textarea></div>
         <div style="display:flex;gap:8px;margin-top:12px">
           <button onclick="saveEditProveedor()" class="btn btn-primary">Guardar</button>
-          <button onclick="C._editingProveedor=null;render()" class="btn btn-ghost">Cancelar</button>
+          <button onclick="cancelEditProveedor()" class="btn btn-ghost">Cancelar</button>
         </div>`;
     } else {
       h+=`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">`;
@@ -4561,6 +4561,11 @@ function renderProveedoresTab(){
   return h;
 }
 window.startAddProveedor=()=>{C._addingProveedor=true;C._newProveedor={};C._editingProveedor=null;render();};
+window.cancelAddProveedor=()=>{C._addingProveedor=false;C._newProveedor={};render();};
+window.cancelEditProveedor=()=>{C._editingProveedor=null;render();};
+window.startAddCompra=()=>{C._addingCompra=true;C._newCompra={fecha:new Date().toISOString().slice(0,10)};C._comprasSubTab='deudas';render();};
+window.cancelAddCompra=()=>{C._addingCompra=false;C._newCompra={};render();};
+window.setComprasSubTab=(tab)=>{C._comprasSubTab=tab;render();};
 window.saveNewProveedor=async()=>{
   const nombre=(document.getElementById('prov-nombre')?.value||C._newProveedor?.nombre||'').trim();
   if(!nombre){alert('El nombre es obligatorio');return;}
