@@ -287,7 +287,7 @@ function getCats(){
 const catOpen={};
 
 // Local reactive state (synced from Firebase)
-let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}, cancellations:{}, cafeteriaItems:{}, cafeteriaCategories:{}, ingredients:{}, waiters:{}, caja:{}, deudores:{}, kioskItems:{}, clientes:{} };
+let DB = { dishes:{}, tables:{}, orders:{}, ratings:{}, categories:{}, alerts:{}, cancellations:{}, cafeteriaItems:{}, cafeteriaCategories:{}, ingredients:{}, waiters:{}, caja:{}, deudores:{}, kioskItems:{}, clientes:{}, proveedores:{}, compras:{} };
 
 // Customer flow state (local only)
 let C = {
@@ -408,6 +408,8 @@ onValue(ref(db,'caja'), snap=>{ DB.caja = snap.val()||{}; if(!firstLoad) render(
 onValue(ref(db,'deudores'), snap=>{ DB.deudores = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'kioskItems'), snap=>{ DB.kioskItems = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
 onValue(ref(db,'clientes'), snap=>{ DB.clientes = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'proveedores'), snap=>{ DB.proveedores = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'compras'), snap=>{ DB.compras = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'kioskCategories'), snap=>{ DB.kioskCategories = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
 onValue(ref(db,'ingredients'), snap=>{
   DB.ingredients = snap.val()||{};
@@ -669,7 +671,7 @@ function renderAdmin(){
   const pc=pendingCount();
 
   // ── Nivel 1: pestañas principales ──
-  const mainTabs=['tables','mozas','menu','orders','history','deudores','caja','stock','clientes'];
+  const mainTabs=['tables','mozas','menu','orders','history','deudores','caja','stock','clientes','proveedores','compras'];
   const mainLabels={
     tables:'🪑 Mesas',
     mozas:'👩 Mozas',
@@ -680,7 +682,9 @@ function renderAdmin(){
     caja:'💰 Caja',
     stock:'📦 Stock',
     ratings:'⭐ Calificaciones',
-    clientes:'👥 Clientes'
+    clientes:'👥 Clientes',
+    proveedores:'🏭 Proveedores',
+    compras:`🛒 Compras${(()=>{const n=Object.values(DB.compras||{}).filter(c=>c.estado==='pendiente').length;return n>0?` <span class="badge">${n}</span>`:''})()}`
   };
   // Determinar tab activo de nivel 1
   const dishTabs=['dishes','cafeteria','kiosko'];
@@ -719,6 +723,8 @@ function renderAdmin(){
   else if(activeMain==='caja') h+=renderCajaTab();
   else if(activeMain==='deudores') h+=renderDeudoresTab();
   else if(activeMain==='clientes') h+=renderClientesTab();
+  else if(activeMain==='proveedores') h+=renderProveedoresTab();
+  else if(activeMain==='compras') h+=renderComprasTab();
 
   h+=`</div>`;
   mc.innerHTML=h;
@@ -4208,6 +4214,376 @@ window.editCliente=(key,nombreActual)=>{
   };
   inp.addEventListener('keydown',e=>{if(e.key==='Enter')overlay.querySelector('#edit-cliente-ok').click();});
 };
+function renderComprasTab(){
+  const compras=Object.entries(DB.compras||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(b.fecha||0)-(a.fecha||0));
+  const ahora=Date.now();
+  const hace60=ahora-60*24*60*60*1000;
+  const pendientes=compras.filter(c=>c.estado==='pendiente');
+  const historial=compras.filter(c=>c.estado==='pagado'&&(c.creadoAt||0)>=hace60);
+  const proveedores=Object.entries(DB.proveedores||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
+  const addF=C._addingCompra||false;
+  const newC=C._newCompra||{};
+  const subTab=C._comprasSubTab||'deudas';
+
+  let h=`<div style="max-width:700px">`;
+
+  // Header
+  h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">`;
+  h+=`<div><div style="font-size:18px;font-weight:600">🛒 Mis Compras</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${pendientes.length} deuda${pendientes.length!==1?'s':''} pendiente${pendientes.length!==1?'s':''}</div></div>`;
+  h+=`<button onclick="C._addingCompra=true;C._newCompra={fecha:new Date().toISOString().slice(0,10)};C._comprasSubTab='deudas';render()" style="padding:8px 16px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Nueva compra</button>`;
+  h+=`</div>`;
+
+  // Form nueva compra
+  if(addF){
+    h+=`<div class="card" style="border-color:var(--accent);margin-bottom:1.25rem">
+      <div style="font-size:15px;font-weight:700;margin-bottom:14px;color:var(--accent)">🛒 Nueva compra</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-group" style="margin-bottom:0">
+          <label>Fecha</label>
+          <input type="date" id="nc-fecha" value="${newC.fecha||new Date().toISOString().slice(0,10)}" oninput="C._newCompra=C._newCompra||{};C._newCompra.fecha=this.value">
+        </div>
+        <div class="form-group" style="margin-bottom:0">
+          <label>N° Boleta <span style="font-size:11px;color:var(--muted)">(opcional)</span></label>
+          <input id="nc-boleta" placeholder="Ej: 0001-00012345" value="${newC.boleta||''}" oninput="C._newCompra=C._newCompra||{};C._newCompra.boleta=this.value">
+        </div>
+      </div>
+      <div class="form-group" style="margin-top:10px">
+        <label>Proveedor</label>
+        <select id="nc-prov" onchange="C._newCompra=C._newCompra||{};C._newCompra.proveedorKey=this.value;C._newCompra.proveedorNombre=this.options[this.selectedIndex].text">
+          <option value="">— Elegí un proveedor —</option>
+          ${proveedores.map(p=>`<option value="${p._key}"${newC.proveedorKey===p._key?' selected':''}>${p.nombre}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Descripción <span style="font-size:11px;color:var(--muted)">(opcional)</span></label>
+        <textarea id="nc-desc" rows="2" placeholder="Qué se compró..." oninput="C._newCompra=C._newCompra||{};C._newCompra.descripcion=this.value" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical">${newC.descripcion||''}</textarea>
+      </div>
+      <div class="form-group" style="margin-bottom:0">
+        <label>Total de la boleta</label>
+        <input type="number" id="nc-total" min="1" placeholder="$0" value="${newC.total||''}" oninput="C._newCompra=C._newCompra||{};C._newCompra.total=Number(this.value)"
+          style="font-size:20px;font-weight:700;text-align:center;padding:10px">
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button onclick="abrirPagoCompra('nueva')" style="flex:1;padding:10px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">💵 Pagar total</button>
+        <button onclick="abrirPagoCompra('parcial')" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #d97706;background:#fef3c7;color:#92400e;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">💳 Pago parcial</button>
+        <button onclick="guardarCompraDeuda()" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:14px;cursor:pointer;font-family:inherit">📋 Guardar sin pagar</button>
+      </div>
+      <button onclick="C._addingCompra=false;C._newCompra={};render()" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+    </div>`;
+  }
+
+  // Sub-tabs
+  h+=`<div style="display:flex;gap:4px;border-bottom:0.5px solid var(--border);margin-bottom:1rem">`;
+  h+=`<button onclick="C._comprasSubTab='deudas';render()" style="padding:7px 16px;border:none;border-bottom:2px solid ${subTab==='deudas'?'var(--accent)':'transparent'};background:transparent;font-size:13px;font-weight:${subTab==='deudas'?600:400};color:${subTab==='deudas'?'var(--text)':'var(--muted)'};cursor:pointer;font-family:inherit">⚠️ Mis deudas ${pendientes.length>0?`<span style="font-size:11px;background:#dc2626;color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px">${pendientes.length}</span>`:''}</button>`;
+  h+=`<button onclick="C._comprasSubTab='historial';render()" style="padding:7px 16px;border:none;border-bottom:2px solid ${subTab==='historial'?'var(--accent)':'transparent'};background:transparent;font-size:13px;font-weight:${subTab==='historial'?600:400};color:${subTab==='historial'?'var(--text)':'var(--muted)'};cursor:pointer;font-family:inherit">📜 Historial (60 días) ${historial.length>0?`<span style="font-size:11px;background:#6b7280;color:#fff;padding:1px 6px;border-radius:10px;margin-left:4px">${historial.length}</span>`:''}</button>`;
+  h+=`</div>`;
+
+  if(subTab==='deudas'){
+    if(pendientes.length===0){
+      h+=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">
+        <div style="font-size:40px;margin-bottom:12px">✅</div>
+        <div style="font-size:16px;font-weight:500">Sin deudas pendientes</div>
+      </div>`;
+    } else {
+      pendientes.forEach(c=>{
+        const pagado=c.totalBoleta-(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta);
+        h+=`<div class="card" style="margin-bottom:.875rem;border-left:3px solid #dc2626">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px">
+            <div style="flex:1">
+              <div style="font-size:15px;font-weight:700">🏭 ${c.proveedorNombre||'Sin proveedor'}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">${c.fecha||''} ${c.boleta?`· Boleta: ${c.boleta}`:''}</div>
+              ${c.descripcion?`<div style="font-size:13px;color:var(--muted);margin-top:4px">${c.descripcion}</div>`:''}
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:20px;font-weight:700;color:#dc2626">$${(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta).toLocaleString()}</div>
+              <div style="font-size:11px;color:var(--muted)">de $${c.totalBoleta.toLocaleString()}</div>
+              ${pagado>0?`<div style="font-size:11px;color:#059669">Ya pagado: $${pagado.toLocaleString()}</div>`:''}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button onclick="abrirPagoCompraPendiente('${c._key}')" style="flex:1;padding:7px 12px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">💵 Pagar</button>
+            <button onclick="if(confirm('¿Eliminar esta compra?'))eliminarCompra('${c._key}')" style="padding:7px 10px;border-radius:8px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:13px;cursor:pointer;font-family:inherit">✕</button>
+          </div>
+        </div>`;
+      });
+    }
+  } else {
+    if(historial.length===0){
+      h+=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">
+        <div style="font-size:40px;margin-bottom:12px">📜</div>
+        <div style="font-size:16px;font-weight:500">Sin compras en los últimos 60 días</div>
+      </div>`;
+    } else {
+      historial.forEach(c=>{
+        h+=`<div class="card" style="margin-bottom:.875rem;border-left:3px solid #10b981;opacity:.9">
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+            <div style="flex:1">
+              <div style="font-size:14px;font-weight:600">🏭 ${c.proveedorNombre||'Sin proveedor'}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">${c.fecha||''} ${c.boleta?`· Boleta: ${c.boleta}`:''}</div>
+              ${c.descripcion?`<div style="font-size:13px;color:var(--muted);margin-top:2px">${c.descripcion}</div>`:''}
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:16px;font-weight:700;color:#059669">$${c.totalBoleta.toLocaleString()}</div>
+              <div style="font-size:11px;color:#059669">✓ Pagado</div>
+            </div>
+          </div>
+        </div>`;
+      });
+    }
+  }
+
+  h+=`</div>`;
+  return h;
+}
+
+// ── Helpers de pago de compras ──
+function getNewCompraData(){
+  const newC=C._newCompra||{};
+  return {
+    fecha:document.getElementById('nc-fecha')?.value||newC.fecha||new Date().toISOString().slice(0,10),
+    boleta:document.getElementById('nc-boleta')?.value||newC.boleta||'',
+    proveedorKey:document.getElementById('nc-prov')?.value||newC.proveedorKey||'',
+    proveedorNombre:(()=>{const sel=document.getElementById('nc-prov');return sel?sel.options[sel.selectedIndex]?.text||'':newC.proveedorNombre||''})(),
+    descripcion:document.getElementById('nc-desc')?.value||newC.descripcion||'',
+    total:Number(document.getElementById('nc-total')?.value||newC.total||0),
+  };
+}
+
+window.guardarCompraDeuda=async()=>{
+  const d=getNewCompraData();
+  if(!d.total||d.total<=0){alert('Ingresá el total de la boleta');return;}
+  await push(ref(db,'compras'),{...d,totalBoleta:d.total,saldoPendiente:d.total,estado:'pendiente',creadoAt:Date.now()});
+  C._addingCompra=false;C._newCompra={};C._comprasSubTab='deudas';render();
+};
+
+window.abrirPagoCompra=async(tipo)=>{
+  const d=getNewCompraData();
+  if(!d.total||d.total<=0){alert('Ingresá el total de la boleta');return;}
+  if(!d.proveedorKey){alert('Elegí un proveedor');return;}
+  const montoPagar=tipo==='parcial'?null:d.total;
+  const resultado=await modalPagoCompra(d.proveedorNombre,d.total,montoPagar);
+  if(!resultado)return;
+  const {monto,payments}=resultado;
+  const saldoPendiente=Math.max(0,d.total-monto);
+  const estado=saldoPendiente===0?'pagado':'pendiente';
+  const compraKey=(await push(ref(db,'compras'),{...d,totalBoleta:d.total,saldoPendiente,estado,creadoAt:Date.now()})).key;
+  await registrarPagoEnCaja(payments,monto,d.proveedorNombre,compraKey);
+  C._addingCompra=false;C._newCompra={};C._comprasSubTab=estado==='pagado'?'historial':'deudas';render();
+};
+
+window.abrirPagoCompraPendiente=async(key)=>{
+  const c=DB.compras[key];if(!c)return;
+  const saldo=c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta;
+  const resultado=await modalPagoCompra(c.proveedorNombre||'Proveedor',c.totalBoleta,null,saldo);
+  if(!resultado)return;
+  const {monto,payments}=resultado;
+  const nuevoSaldo=Math.max(0,saldo-monto);
+  const estado=nuevoSaldo===0?'pagado':'pendiente';
+  await update(ref(db,`compras/${key}`),{saldoPendiente:nuevoSaldo,estado});
+  await registrarPagoEnCaja(payments,monto,c.proveedorNombre||'',key);
+  render();
+};
+
+window.eliminarCompra=async(key)=>{await remove(ref(db,`compras/${key}`));render();};
+
+async function registrarPagoEnCaja(payments,monto,proveedorNombre,compraKey){
+  if(!getCajaAbierta())return;
+  const hoy=new Date().toISOString().slice(0,10);
+  const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+  for(const p of payments){
+    const montoP=Number(p.monto)||0;if(!montoP)continue;
+    await push(ref(db,'caja'),{
+      tipo:'gasto',
+      concepto:`Pago a proveedor ${proveedorNombre} (${pmL[p.pm]||p.pm})`,
+      monto:-montoP,
+      fecha:hoy,ts:Date.now(),desc:'',
+      paymentMethod:p.pm,
+      compraKey
+    });
+  }
+}
+
+function modalPagoCompra(proveedorNombre,totalBoleta,montoPredefinido=null,saldoMax=null){
+  return new Promise(resolve=>{
+    if(!getCajaAbierta()){alert('La caja está cerrada. Abrí la caja antes de pagar.');resolve(null);return;}
+    const pms=[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}];
+    let payments=[];
+    let montoTotal=montoPredefinido!=null?montoPredefinido:(saldoMax||totalBoleta);
+    const limiteMax=saldoMax||totalBoleta;
+    const overlay=document.createElement('div');
+    overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
+    document.body.appendChild(overlay);
+
+    const renderO=()=>{
+      const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
+      const resta=Math.max(0,montoTotal-totalPagado);
+      overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto">
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">💳 Pago a proveedor</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">${proveedorNombre} · Boleta: <strong style="color:#111">$${totalBoleta.toLocaleString()}</strong></div>
+        <div class="form-group" style="margin-bottom:12px">
+          <label>Monto a pagar</label>
+          <input id="pm-monto" type="number" min="1" max="${limiteMax}" value="${montoTotal}"
+            style="width:100%;padding:10px 12px;border:1.5px solid var(--brand);border-radius:8px;font-size:20px;font-weight:700;font-family:inherit;text-align:center;box-sizing:border-box">
+        </div>
+        <div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:8px">MEDIOS DE PAGO</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+          ${pms.map(p=>`<button data-add-pm="${p.v}" style="padding:7px 10px;border-radius:8px;border:0.5px solid #e5e7eb;background:#fff;font-size:13px;cursor:pointer;font-family:inherit">${p.l}</button>`).join('')}
+        </div>
+        ${payments.length>0?`<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
+          ${payments.map((p,i)=>{const pm=pms.find(x=>x.v===p.pm);return `<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f8f7f4;border-radius:8px;border:0.5px solid #e5e7eb">
+            <span style="font-size:13px;flex:1;font-weight:500">${pm?pm.l:p.pm}</span>
+            <span style="font-size:12px;color:#6b7280">$</span>
+            <input type="number" min="0" value="${p.monto||''}" data-pm-idx="${i}"
+              style="width:90px;padding:4px 8px;border:0.5px solid #d1d5db;border-radius:6px;font-family:inherit;font-size:14px;font-weight:600;text-align:right">
+            <button data-rm-pm="${i}" style="width:22px;height:22px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:14px;cursor:pointer;line-height:1">×</button>
+          </div>`;}).join('')}
+        </div>`:''}
+        <div style="padding:10px 14px;background:${resta===0&&payments.length>0?'#f0fdf4':'#fff7ed'};border-radius:8px;margin-bottom:14px;border:0.5px solid ${resta===0&&payments.length>0?'#bbf7d0':'#fed7aa'};display:flex;justify-content:space-between">
+          <span style="font-size:13px;color:#6b7280">A pagar: <strong style="color:#111">$${montoTotal.toLocaleString()}</strong></span>
+          <span style="font-size:13px;font-weight:600;color:${resta===0&&payments.length>0?'#059669':'#d97706'}">
+            ${resta===0&&payments.length>0?'✓ Completo':`Falta: $${resta.toLocaleString()}`}
+          </span>
+        </div>
+        <button id="pm-ok" style="width:100%;padding:11px;border-radius:8px;border:none;background:${payments.length>0&&resta===0?'#059669':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${payments.length>0&&resta===0?'pointer':'not-allowed'};font-family:inherit;margin-bottom:8px;opacity:${payments.length>0&&resta===0?1:0.6}" ${payments.length===0||resta>0?'disabled':''}>
+          ${payments.length===0?'Elegí al menos un medio':resta>0?`Falta $${resta.toLocaleString()}`:'Registrar pago'}
+        </button>
+        <button id="pm-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>`;
+
+      overlay.querySelector('#pm-monto')?.addEventListener('change',e=>{
+        montoTotal=Math.min(limiteMax,Math.max(0,Number(e.target.value)||0));
+        renderO();
+      });
+      overlay.querySelectorAll('[data-add-pm]').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+          const montoInp=overlay.querySelector('#pm-monto');
+          if(montoInp)montoTotal=Math.min(limiteMax,Math.max(0,Number(montoInp.value)||0));
+          if(!payments.find(p=>p.pm===btn.dataset.addPm)){
+            const pagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
+            payments.push({pm:btn.dataset.addPm,monto:Math.max(0,montoTotal-pagado)});
+            renderO();
+          }
+        });
+      });
+      overlay.querySelectorAll('[data-pm-idx]').forEach(inp=>{
+        inp.addEventListener('change',()=>{payments[parseInt(inp.dataset.pmIdx)].monto=Number(inp.value);renderO();});
+        inp.addEventListener('input',e=>{payments[parseInt(inp.dataset.pmIdx)].monto=e.target.value;});
+      });
+      overlay.querySelectorAll('[data-rm-pm]').forEach(btn=>{
+        btn.addEventListener('click',()=>{payments.splice(parseInt(btn.dataset.rmPm),1);renderO();});
+      });
+      overlay.querySelector('#pm-ok')?.addEventListener('click',()=>{
+        if(!payments.length)return;
+        const montoInp=overlay.querySelector('#pm-monto');
+        if(montoInp)montoTotal=Math.min(limiteMax,Math.max(0,Number(montoInp.value)||0));
+        if(payments.length>1){
+          const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
+          if(Math.abs(totalPagado-montoTotal)>1){alert(`La suma ($${totalPagado.toLocaleString()}) no coincide con el monto ($${montoTotal.toLocaleString()})`);return;}
+        }
+        overlay.remove();
+        resolve({monto:montoTotal,payments});
+      });
+      overlay.querySelector('#pm-cancel')?.addEventListener('click',()=>{overlay.remove();resolve(null);});
+    };
+    renderO();
+  });
+}
+
+function renderProveedoresTab(){
+  const provs=Object.entries(DB.proveedores||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
+  const editing=C._editingProveedor||null;
+  const adding=C._addingProveedor||false;
+  let h=`<div style="max-width:600px">`;
+  h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">`;
+  h+=`<div><div style="font-size:18px;font-weight:600">🏭 Proveedores</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${provs.length} proveedor${provs.length!==1?'es':''}</div></div>`;
+  h+=`<button onclick="startAddProveedor()" style="padding:8px 16px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar</button>`;
+  h+=`</div>`;
+
+  // Form nuevo
+  if(adding){
+    const f=C._newProveedor||{};
+    h+=`<div class="card" style="border-color:var(--accent);margin-bottom:1rem">
+      <div style="font-size:14px;font-weight:600;margin-bottom:12px;color:var(--accent)">+ Nuevo proveedor</div>
+      <div class="form-group"><label>Nombre <span style="color:#dc2626">*</span></label>
+        <input id="prov-nombre" placeholder="Nombre del proveedor" value="${f.nombre||''}" oninput="C._newProveedor=C._newProveedor||{};C._newProveedor.nombre=this.value"></div>
+      <div class="form-group"><label>Teléfono <span style="font-size:11px;color:var(--muted)">(opcional)</span></label>
+        <input id="prov-tel" placeholder="Ej: +54 11 1234-5678" value="${f.telefono||''}" oninput="C._newProveedor=C._newProveedor||{};C._newProveedor.telefono=this.value"></div>
+      <div class="form-group" style="margin-bottom:0"><label>Descripción <span style="font-size:11px;color:var(--muted)">(opcional)</span></label>
+        <textarea id="prov-desc" placeholder="Productos que provee, condiciones, etc." rows="2" oninput="C._newProveedor=C._newProveedor||{};C._newProveedor.descripcion=this.value" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical">${f.descripcion||''}</textarea></div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="saveNewProveedor()" class="btn btn-primary">Guardar</button>
+        <button onclick="C._addingProveedor=false;C._newProveedor={};render()" class="btn btn-ghost">Cancelar</button>
+      </div>
+    </div>`;
+  }
+
+  if(provs.length===0&&!adding){
+    h+=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">
+      <div style="font-size:40px;margin-bottom:12px">🏭</div>
+      <div style="font-size:16px;font-weight:500">Sin proveedores cargados</div>
+      <div style="font-size:14px;margin-top:4px">Tocá "+ Agregar" para cargar el primero</div>
+    </div>`;
+  }
+
+  provs.forEach(p=>{
+    const isEditing=editing&&editing._key===p._key;
+    h+=`<div class="card" style="margin-bottom:.875rem;${isEditing?'border-color:var(--brand)':''}">`;
+    if(isEditing){
+      h+=`<div style="font-size:13px;font-weight:600;color:var(--brand);margin-bottom:12px">✏️ Editar proveedor</div>
+        <div class="form-group"><label>Nombre <span style="color:#dc2626">*</span></label>
+          <input id="eprov-nombre" value="${editing.nombre||''}" oninput="C._editingProveedor.nombre=this.value"></div>
+        <div class="form-group"><label>Teléfono</label>
+          <input id="eprov-tel" value="${editing.telefono||''}" oninput="C._editingProveedor.telefono=this.value"></div>
+        <div class="form-group" style="margin-bottom:0"><label>Descripción</label>
+          <textarea id="eprov-desc" rows="2" oninput="C._editingProveedor.descripcion=this.value" style="width:100%;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical">${editing.descripcion||''}</textarea></div>
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button onclick="saveEditProveedor()" class="btn btn-primary">Guardar</button>
+          <button onclick="C._editingProveedor=null;render()" class="btn btn-ghost">Cancelar</button>
+        </div>`;
+    } else {
+      h+=`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">`;
+      h+=`<div style="flex:1">
+        <div style="font-size:16px;font-weight:600;margin-bottom:2px">🏭 ${p.nombre}</div>
+        ${p.telefono?`<div style="font-size:13px;color:var(--muted);margin-bottom:2px">📞 ${p.telefono}</div>`:''}
+        ${p.descripcion?`<div style="font-size:13px;color:var(--muted);white-space:pre-line">${p.descripcion}</div>`:''}
+      </div>`;
+      h+=`<div style="display:flex;gap:6px;flex-shrink:0">
+        ${p.telefono?`<a href="tel:${p.telefono}" style="padding:5px 10px;border-radius:8px;border:0.5px solid #10b981;background:#d1fae5;color:#065f46;font-size:12px;font-weight:600;text-decoration:none;display:flex;align-items:center">📞</a>`:''}
+        <button onclick="startEditProveedor('${p._key}')" style="padding:5px 10px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);font-size:12px;cursor:pointer;font-family:inherit">✏️</button>
+        <button onclick="deleteProveedor('${p._key}')" style="padding:5px 10px;border-radius:8px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:12px;cursor:pointer;font-family:inherit">✕</button>
+      </div>`;
+      h+=`</div>`;
+    }
+    h+=`</div>`;
+  });
+
+  h+=`</div>`;
+  return h;
+}
+window.startAddProveedor=()=>{C._addingProveedor=true;C._newProveedor={};C._editingProveedor=null;render();};
+window.saveNewProveedor=async()=>{
+  const nombre=(document.getElementById('prov-nombre')?.value||C._newProveedor?.nombre||'').trim();
+  if(!nombre){alert('El nombre es obligatorio');return;}
+  const telefono=(document.getElementById('prov-tel')?.value||C._newProveedor?.telefono||'').trim();
+  const descripcion=(document.getElementById('prov-desc')?.value||C._newProveedor?.descripcion||'').trim();
+  await push(ref(db,'proveedores'),{nombre,telefono,descripcion,creadoAt:Date.now()});
+  C._addingProveedor=false;C._newProveedor={};render();
+};
+window.startEditProveedor=(key)=>{C._editingProveedor={...DB.proveedores[key],_key:key};C._addingProveedor=false;render();};
+window.saveEditProveedor=async()=>{
+  const e=C._editingProveedor;if(!e)return;
+  const nombre=(document.getElementById('eprov-nombre')?.value||e.nombre||'').trim();
+  if(!nombre){alert('El nombre es obligatorio');return;}
+  const telefono=(document.getElementById('eprov-tel')?.value||e.telefono||'').trim();
+  const descripcion=(document.getElementById('eprov-desc')?.value||e.descripcion||'').trim();
+  await update(ref(db,`proveedores/${e._key}`),{nombre,telefono,descripcion});
+  C._editingProveedor=null;render();
+};
+window.deleteProveedor=async(key)=>{
+  if(!confirm('¿Eliminar este proveedor?'))return;
+  await remove(ref(db,`proveedores/${key}`));
+  render();
+};
 function renderDeudoresTab(){
   window._deudorKeys=[];
   window._deudorSaldos=[];
@@ -4637,8 +5013,6 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
   document.body.appendChild(overlay);
 
   const renderOverlay=()=>{
-    const montoConDesc=descPct>0?Math.round(saldoMostrado*(1-descPct/100)):saldoMostrado;
-    montoTotal=montoConDesc;
     const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
     const resta=Math.max(0,montoTotal-totalPagado);
     overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto">
@@ -4689,6 +5063,7 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
     overlay.querySelectorAll('[data-desc-pct]').forEach(btn=>{
       btn.addEventListener('click',()=>{
         descPct=Number(btn.dataset.descPct);
+        montoTotal=descPct>0?Math.round(saldoMostrado*(1-descPct/100)):saldoMostrado;
         payments=[];
         renderOverlay();
       });
@@ -4698,7 +5073,6 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
     });
     overlay.querySelector('#cobro-monto')?.addEventListener('change',e=>{
       montoTotal=Math.max(0,Number(e.target.value)||0);
-      renderOverlay();
     });
     overlay.querySelectorAll('[data-add-pm]').forEach(btn=>{
       btn.addEventListener('click',()=>{
