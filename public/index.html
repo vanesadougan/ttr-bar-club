@@ -250,13 +250,14 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
 // ─── FIREBASE CONFIG ───────────────────────────────
 // Reemplazá estos valores con los de tu proyecto Firebase
 const firebaseConfig = {
-  apiKey: "AIzaSyBdskPCYx2Nelq-IVeGshM-hv8rBz9WkjA",
-  authDomain: "ttr-bar-club-dev.firebaseapp.com",
-  databaseURL: "https://ttr-bar-club-dev-default-rtdb.firebaseio.com",
-  projectId: "ttr-bar-club-dev",
-  storageBucket: "ttr-bar-club-dev.firebasestorage.app",
-  messagingSenderId: "635056829443",
-  appId: "1:635056829443:web:0872e806ab97fcc9bcca36"
+  apiKey: "AIzaSyBvZ-t5rFj6Eo2Eveze5f5eqqRxZ2xiodY",
+  authDomain: "ttr-bar-club.firebaseapp.com",
+  databaseURL: "https://ttr-bar-club-default-rtdb.firebaseio.com",
+  projectId: "ttr-bar-club",
+  storageBucket: "ttr-bar-club.firebasestorage.app",
+  messagingSenderId: "197986436291",
+  appId: "1:197986436291:web:338ddcf70a35962aacce76",
+  measurementId: "G-4QYLLN280Q"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -5017,6 +5018,7 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
   document.body.appendChild(overlay);
 
   const renderOverlay=()=>{
+    const montoConDesc=descPct>0?Math.round(saldoMostrado*(1-descPct/100)):saldoMostrado;
     const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
     const resta=Math.max(0,montoTotal-totalPagado);
     overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto">
