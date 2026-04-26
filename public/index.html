@@ -2103,16 +2103,62 @@ window.waiterMarkCobradoGroup=async(keys)=>{
   const grupoDisc=keys.map(k=>DB.orders[k]).find(o=>o&&o._grupoDescuento!=null);
   const preDisc=grupoDisc?{descuento:grupoDisc._grupoDescuento||0,pct:grupoDisc._grupoPct||0}:null;
   const existingPm=keys.map(k=>DB.orders[k]?.paymentMethod).find(Boolean)||null;
-  const res=await showPaymentChoiceModal(null,total,preDisc,existingPm);
-  if(!res)return;
-  const pm=res.pm;const pmDetail=res.pmDetail||null;const descuento=res.descuento||0;const pct=res.pct||0;
-  const totalFinal=total-descuento;
+
+  // Crédito a favor
+  const creditoInfo=personName?findClienteByName(personName):null;
+  const creditoDisponible=creditoInfo?creditoInfo.credito||0:0;
+  let usarCredito=false;let creditoUsado=0;
+
+  if(creditoDisponible>0){
+    const totalConDesc=preDisc?total-preDisc.descuento:total;
+    const confirmar=await new Promise(res=>{
+      const ov=document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+      const usado=Math.min(creditoDisponible,totalConDesc);
+      const resto=Math.max(0,totalConDesc-usado);
+      ov.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">💚 Crédito a favor</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">👤 ${personName} tiene crédito disponible</div>
+        <div style="background:#f0fdf4;border-radius:10px;padding:12px 14px;margin-bottom:14px;border:0.5px solid #bbf7d0">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;color:#6b7280">Total pedido</span><span style="font-size:14px;font-weight:600">$${totalConDesc.toLocaleString()}</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;color:#059669">Crédito disponible</span><span style="font-size:14px;font-weight:600;color:#059669">-$${creditoDisponible.toLocaleString()}</span></div>
+          <div style="border-top:0.5px solid #bbf7d0;margin:8px 0"></div>
+          <div style="display:flex;justify-content:space-between"><span style="font-size:13px;font-weight:600">A cobrar</span><span style="font-size:18px;font-weight:700;color:${resto===0?'#059669':'var(--accent)'}">$${resto.toLocaleString()}</span></div>
+          ${creditoDisponible>totalConDesc?`<div style="font-size:11px;color:#059669;margin-top:4px">Quedan $${(creditoDisponible-totalConDesc).toLocaleString()} de crédito</div>`:''}
+        </div>
+        <div style="display:flex;gap:8px">
+          <button id="cr-si" style="flex:1;padding:10px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">✓ Aplicar crédito</button>
+          <button id="cr-no" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">No aplicar</button>
+        </div>
+        <button id="cr-cancel" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>`;
+      document.body.appendChild(ov);
+      ov.querySelector('#cr-si').onclick=()=>{ov.remove();res('si');};
+      ov.querySelector('#cr-no').onclick=()=>{ov.remove();res('no');};
+      ov.querySelector('#cr-cancel').onclick=()=>{ov.remove();res(null);};
+    });
+    if(confirmar===null)return;
+    usarCredito=confirmar==='si';
+    if(usarCredito)creditoUsado=Math.min(creditoDisponible,totalConDesc);
+  }
+
+  const totalBaseConDesc=preDisc?total-preDisc.descuento:total;
+  const totalParaPagar=Math.max(0,totalBaseConDesc-creditoUsado);
+  const res=totalParaPagar>0?await showPaymentChoiceModal(null,total,preDisc,existingPm):null;
+  if(totalParaPagar>0&&!res)return;
+  const pm=res?.pm||'credito_cliente';const pmDetail=res?.pmDetail||null;
+  const descuento=(res?.descuento||0)+creditoUsado;const pct=res?.pct||0;
+  const totalFinal=totalParaPagar-(res?.descuento||0);
   const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
   for(const k of keys){
     await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});
   }
+  const hoy=new Date().toISOString().slice(0,10);
+  if(creditoUsado>0){
+    await push(ref(db,'caja'),{tipo:'credito_cliente',concepto:`Crédito aplicado: ${personName} · ${tableLabel}`,monto:creditoUsado,fecha:hoy,ts:Date.now(),paymentMethod:'credito_cliente'});
+    await update(ref(db,`clientes/${creditoInfo.key}`),{credito:Math.max(0,creditoDisponible-creditoUsado)});
+  }
   if(getCajaAbierta()&&totalFinal>0){
-    const hoy=new Date().toISOString().slice(0,10);
     if(pmDetail&&pmDetail.length>1){
       for(const p of pmDetail){
         const montoP=Number(p.monto)||0;if(!montoP)continue;
@@ -4003,7 +4049,6 @@ function renderOrdersTab(){
         ${stChips}
       </div>
       <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-        <span style="font-size:13px;font-weight:700;color:var(--accent)">$${tTotal.toLocaleString()}</span>
         <span style="font-size:14px;color:var(--muted)">${isExpanded?'▲':'▼'}</span>
       </div>
     </div>`;
@@ -4138,9 +4183,10 @@ function renderOrdersTab(){
 // ── DEUDORES TAB ──────────────────────────────────
 function renderClientesTab(){
   const clientes=Object.entries(DB.clientes||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
+  const conCredito=clientes.filter(c=>(c.credito||0)>0);
   let h=`<div style="max-width:600px">`;
   h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">`;
-  h+=`<div><div style="font-size:18px;font-weight:600">👥 Clientes recurrentes</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${clientes.length} cliente${clientes.length!==1?'s':''}</div></div>`;
+  h+=`<div><div style="font-size:18px;font-weight:600">👥 Clientes recurrentes</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${clientes.length} cliente${clientes.length!==1?'s':''}${conCredito.length>0?` · <span style="color:#059669;font-weight:600">${conCredito.length} con crédito a favor</span>`:''}</div></div>`;
   h+=`<button onclick="showAddClienteForm()" style="padding:8px 16px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar cliente</button>`;
   h+=`</div>`;
   if(C._showAddCliente){
@@ -4164,9 +4210,14 @@ function renderClientesTab(){
   } else {
     h+=`<div class="card" style="padding:0;overflow:hidden">`;
     clientes.forEach(c=>{
-      h+=`<div style="display:flex;align-items:center;padding:12px 16px;border-bottom:0.5px solid var(--border)">
-        <div style="flex:1;font-size:14px;font-weight:500">👤 ${c.nombre}</div>
-        <button onclick="editCliente('${c._key}','${c.nombre.replace(/'/g,"\\'")}') " style="width:28px;height:28px;border-radius:50%;border:none;background:#dbeafe;color:#1e40af;font-size:13px;cursor:pointer;line-height:1;margin-right:6px">✏️</button>
+      const credito=c.credito||0;
+      h+=`<div style="display:flex;align-items:center;padding:12px 16px;border-bottom:0.5px solid var(--border);gap:8px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:500">👤 ${c.nombre}</div>
+          ${credito>0?`<div style="font-size:12px;color:#059669;font-weight:600;margin-top:2px">💚 Crédito a favor: $${credito.toLocaleString()}</div>`:''}
+        </div>
+        <button onclick="editCreditoCliente('${c._key}','${c.nombre.replace(/'/g,"\\'")}',${credito})" style="padding:4px 8px;border-radius:6px;border:0.5px solid #059669;background:#f0fdf4;color:#065f46;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">💚 Crédito</button>
+        <button onclick="editCliente('${c._key}','${c.nombre.replace(/'/g,"\\'")}') " style="width:28px;height:28px;border-radius:50%;border:none;background:#dbeafe;color:#1e40af;font-size:13px;cursor:pointer;line-height:1">✏️</button>
         <button onclick="deleteCliente('${c._key}')" style="width:28px;height:28px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:14px;cursor:pointer;line-height:1">✕</button>
       </div>`;
     });
@@ -4174,6 +4225,92 @@ function renderClientesTab(){
   }
   h+=`</div>`;
   return h;
+}
+window.editCreditoCliente=(key,nombre,creditoActual)=>{
+  const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k}));
+  const leaders=waiters.filter(w=>w.isLeader);
+  let pinInput='';let step='pin';
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  const renderO=()=>{
+    if(step==='pin'){
+      const dots='●'.repeat(pinInput.length)+'○'.repeat(4-pinInput.length);
+      overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:280px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
+        <div style="font-size:28px;margin-bottom:8px">🔐</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">Editar crédito</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">PIN de moza líder</div>
+        <div style="font-size:28px;letter-spacing:14px;color:var(--brand);margin-bottom:14px">${dots}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+          ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>k===''?'<div></div>':`<button data-k="${k}" style="padding:14px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);font-size:20px;font-weight:600;cursor:pointer;font-family:inherit">${k}</button>`).join('')}
+        </div>
+        <button id="cc-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>`;
+      overlay.querySelector('#cc-cancel').onclick=()=>overlay.remove();
+      overlay.querySelectorAll('[data-k]').forEach(btn=>{
+        btn.onclick=()=>{
+          const k=btn.dataset.k;
+          if(k==='⌫'){pinInput=pinInput.slice(0,-1);renderO();return;}
+          if(pinInput.length>=4)return;
+          pinInput+=k;
+          if(pinInput.length===4){
+            if(!leaders.find(w=>String(w.pin)===pinInput)){pinInput='';setTimeout(()=>renderO(),600);}
+            else{step='edit';renderO();}
+          } else renderO();
+        };
+      });
+    } else {
+      overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">💚 Crédito a favor</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:16px">👤 ${nombre}</div>
+        <div style="padding:10px 14px;background:#f0fdf4;border-radius:8px;margin-bottom:14px;border:0.5px solid #bbf7d0">
+          <div style="font-size:12px;color:#6b7280">Crédito actual</div>
+          <div style="font-size:22px;font-weight:700;color:#059669">$${creditoActual.toLocaleString()}</div>
+        </div>
+        <div class="form-group" style="margin-bottom:14px">
+          <label>Nuevo monto de crédito</label>
+          <input id="cc-monto" type="number" min="0" value="${creditoActual}" style="font-size:20px;font-weight:700;text-align:center;padding:10px;width:100%;border:1.5px solid var(--brand);border-radius:8px;font-family:inherit;box-sizing:border-box">
+        </div>
+        <div style="display:flex;gap:8px">
+          <button id="cc-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
+          <button id="cc-close" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
+        </div>
+      </div>`;
+      overlay.querySelector('#cc-close').onclick=()=>overlay.remove();
+      overlay.querySelector('#cc-ok').onclick=async()=>{
+        const nuevo=Math.max(0,Number(overlay.querySelector('#cc-monto').value)||0);
+        await update(ref(db,`clientes/${key}`),{credito:nuevo});
+        overlay.remove();render();
+      };
+      setTimeout(()=>{const i=overlay.querySelector('#cc-monto');i?.focus();i?.select();},50);
+    }
+  };
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  renderO();
+};
+
+// Helper: busca cliente por nombre y devuelve {key, credito}
+function findClienteByName(nombre){
+  if(!nombre)return null;
+  const n=nombre.toLowerCase().trim();
+  const entry=Object.entries(DB.clientes||{}).find(([,v])=>(v.nombre||'').toLowerCase().trim()===n);
+  if(!entry)return null;
+  return {key:entry[0],credito:entry[1].credito||0,data:entry[1]};
+}
+
+// Aplica crédito a un cobro: devuelve {creditoUsado, totalFinal, creditoRestante}
+function calcularCredito(nombre,totalBase,usarCredito){
+  const cli=findClienteByName(nombre);
+  if(!cli||!usarCredito||cli.credito<=0)return{creditoUsado:0,totalFinal:totalBase,creditoRestante:cli?cli.credito:0};
+  const usado=Math.min(cli.credito,totalBase);
+  return{creditoUsado:usado,totalFinal:Math.max(0,totalBase-usado),creditoRestante:cli.credito-usado,clienteKey:cli.key};
+}
+
+async function actualizarCreditoCliente(nombre,nuevoCreditoRestante,exceso=0){
+  const cli=findClienteByName(nombre);
+  if(!cli)return;
+  const nuevoCredito=Math.max(0,(cli.credito||0)-cli.credito+nuevoCreditoRestante+exceso);
+  await update(ref(db,`clientes/${cli.key}`),{credito:Math.max(0,nuevoCredito)});
 }
 window.showAddClienteForm=()=>{C._showAddCliente=true;render();setTimeout(()=>document.getElementById('new-cliente-nombre')?.focus(),50);};
 window.addCliente=async()=>{
@@ -5017,6 +5154,7 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
   document.body.appendChild(overlay);
 
   const renderOverlay=()=>{
+    const montoConDesc=descPct>0?Math.round(saldoMostrado*(1-descPct/100)):saldoMostrado;
     const totalPagado=payments.reduce((s,p)=>s+Number(p.monto||0),0);
     const resta=Math.max(0,montoTotal-totalPagado);
     overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto">
@@ -5114,6 +5252,7 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
       overlay.remove();
       const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
       const nuevoSaldo=Math.max(0,saldoMostrado-monto);
+      const exceso=Math.max(0,monto-saldoMostrado); // pagó de más
       const esSaldado=nuevoSaldo===0;
       const pmPrincipal=payments.length===1?payments[0].pm:'mixto';
       if(esSaldado){
@@ -5134,18 +5273,31 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
           restante-=abono;
         }
       }
+      // Si pagó de más → generar crédito a favor
+      if(exceso>0){
+        const cli=findClienteByName(nombreDeudor);
+        if(cli){
+          const nuevoCredito=(cli.credito||0)+exceso;
+          await update(ref(db,`clientes/${cli.key}`),{credito:nuevoCredito});
+        }
+        // También registrar en caja
+        const hoy2=new Date().toISOString().slice(0,10);
+        await push(ref(db,'caja'),{tipo:'credito_cliente',concepto:`Exceso → crédito a favor: ${nombreDeudor} ($${exceso.toLocaleString()})`,monto:0,fecha:hoy2,ts:Date.now(),paymentMethod:'credito_cliente'});
+        showNotif('order',`💚 Crédito generado`,`$${exceso.toLocaleString()} a favor de ${nombreDeudor}`);
+      }
       // Registrar en caja — una línea por medio de pago
       const hoy=new Date().toISOString().slice(0,10);
       const descLabel=descPct>0?` (-${descPct}%)`:'';
+      const montoReal=Math.min(monto,saldoMostrado); // solo lo que cubría la deuda
       if(payments.length===1){
         const pm=payments[0].pm;
         const concepto=`${esSaldado?'Deudor':'Pago parcial'}: ${nombreDeudor} · ${tableLabel} (${pmL[pm]||pm})${descLabel}${!esSaldado?` — quedan $${nuevoSaldo.toLocaleString()}`:''}`;
-        await push(ref(db,'caja'),{tipo:'venta',concepto,monto,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,parcial:!esSaldado,descuento:descPct>0?Math.round(saldoMostrado*descPct/100):0,pct:descPct});
+        await push(ref(db,'caja'),{tipo:'venta',concepto,monto:montoReal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,parcial:!esSaldado,descuento:descPct>0?Math.round(saldoMostrado*descPct/100):0,pct:descPct});
       } else {
         for(const p of payments){
           const montoP=Number(p.monto)||0;if(!montoP)continue;
           const concepto=`${esSaldado?'Deudor':'Pago parcial'}: ${nombreDeudor} · ${tableLabel} (${pmL[p.pm]||p.pm})${descLabel}${!esSaldado?` — quedan $${nuevoSaldo.toLocaleString()}`:''}`;
-          await push(ref(db,'caja'),{tipo:'venta',concepto,monto:montoP,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:p.pm,parcial:!esSaldado,descuento:descPct>0?Math.round(saldoMostrado*descPct/100):0,pct:descPct});
+          await push(ref(db,'caja'),{tipo:'venta',concepto,monto:Math.min(montoP,saldoMostrado),fecha:hoy,ts:Date.now(),desc:'',paymentMethod:p.pm,parcial:!esSaldado,descuento:descPct>0?Math.round(saldoMostrado*descPct/100):0,pct:descPct});
         }
       }
       render();
@@ -6472,21 +6624,74 @@ window.adminGroupCobrado=async keys=>{
   const grupoDisc=keys.map(k=>DB.orders[k]).find(o=>o&&o._grupoDescuento!=null);
   const existingPm=keys.map(k=>DB.orders[k]?.paymentMethod).find(Boolean)||null;
   let pm,pmDetail=null,descuento=0,pct=0;
-  // Siempre mostrar el modal completo con medio de pago
-  // Si hay descuento del grupo, pre-cargarlo; si hay medio de pago existente, pre-cargarlo
   const preDisc=grupoDisc?{descuento:grupoDisc._grupoDescuento||0,pct:grupoDisc._grupoPct||0}:null;
-  const res=await showPaymentChoiceModal(null,total,preDisc,existingPm);
-  if(!res)return;
-  pm=res.pm;pmDetail=res.pmDetail||null;descuento=res.descuento||0;pct=res.pct||0;
-  const totalFinal=total-descuento;
+
+  // Verificar crédito a favor del cliente
+  const creditoInfo=personName3?findClienteByName(personName3):null;
+  const creditoDisponible=creditoInfo?creditoInfo.credito||0:0;
+  let usarCredito=creditoDisponible>0;
+  let creditoUsado=0;
+
+  if(creditoDisponible>0){
+    // Preguntar si aplicar crédito
+    const confirmar=await new Promise(res=>{
+      const ov=document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+      const totalConDesc=preDisc?total-preDisc.descuento:total;
+      const usado=Math.min(creditoDisponible,totalConDesc);
+      const resto=Math.max(0,totalConDesc-usado);
+      ov.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">💚 Crédito a favor</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">👤 ${personName3} tiene crédito disponible</div>
+        <div style="background:#f0fdf4;border-radius:10px;padding:12px 14px;margin-bottom:14px;border:0.5px solid #bbf7d0">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;color:#6b7280">Total pedido</span><span style="font-size:14px;font-weight:600">$${totalConDesc.toLocaleString()}</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;color:#059669">Crédito disponible</span><span style="font-size:14px;font-weight:600;color:#059669">-$${creditoDisponible.toLocaleString()}</span></div>
+          <div style="border-top:0.5px solid #bbf7d0;margin:8px 0"></div>
+          <div style="display:flex;justify-content:space-between"><span style="font-size:13px;font-weight:600">A cobrar</span><span style="font-size:18px;font-weight:700;color:${resto===0?'#059669':'var(--accent)'}">$${resto.toLocaleString()}</span></div>
+          ${creditoDisponible>totalConDesc?`<div style="font-size:11px;color:#059669;margin-top:4px">Quedan $${(creditoDisponible-totalConDesc).toLocaleString()} de crédito</div>`:''}
+        </div>
+        <div style="display:flex;gap:8px">
+          <button id="cr-si" style="flex:1;padding:10px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">✓ Aplicar crédito</button>
+          <button id="cr-no" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">No aplicar</button>
+        </div>
+        <button id="cr-cancel" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>`;
+      document.body.appendChild(ov);
+      ov.querySelector('#cr-si').onclick=()=>{ov.remove();res('si');};
+      ov.querySelector('#cr-no').onclick=()=>{ov.remove();res('no');};
+      ov.querySelector('#cr-cancel').onclick=()=>{ov.remove();res(null);};
+    });
+    if(confirmar===null)return;
+    usarCredito=confirmar==='si';
+  }
+
+  // Calcular total después de crédito
+  const totalBaseConDesc=preDisc?total-preDisc.descuento:total;
+  if(usarCredito&&creditoDisponible>0){
+    creditoUsado=Math.min(creditoDisponible,totalBaseConDesc);
+  }
+  const totalParaPagar=Math.max(0,totalBaseConDesc-creditoUsado);
+
+  // Si queda algo por pagar, mostrar modal de medios de pago
+  const res=totalParaPagar>0?await showPaymentChoiceModal(null,total,preDisc,existingPm):null;
+  if(totalParaPagar>0&&!res)return;
+  pm=res?.pm||'credito_cliente';pmDetail=res?.pmDetail||null;
+  descuento=(res?.descuento||0)+creditoUsado;pct=res?.pct||0;
+  const totalFinal=totalParaPagar-(res?.descuento||0);
+
   const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
   for(const k of keys){
     await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});
   }
+  const hoy=new Date().toISOString().slice(0,10);
+  if(creditoUsado>0){
+    await push(ref(db,'caja'),{tipo:'credito_cliente',concepto:`Crédito aplicado: ${personName3} · ${tableLabel3}`,monto:creditoUsado,fecha:hoy,ts:Date.now(),paymentMethod:'credito_cliente'});
+    // Actualizar crédito del cliente
+    const creditoRestante=creditoDisponible-creditoUsado;
+    await update(ref(db,`clientes/${creditoInfo.key}`),{credito:Math.max(0,creditoRestante)});
+  }
   if(totalFinal>0&&getCajaAbierta()){
-    const hoy=new Date().toISOString().slice(0,10);
     if(pmDetail&&pmDetail.length>1){
-      // Una línea por medio de pago
       for(const p of pmDetail){
         const montoP=Number(p.monto)||0;if(!montoP)continue;
         const concepto=`Venta: ${tableLabel3}${personName3?' · '+personName3:''} (${pmL[p.pm]||p.pm})${pct>0?` -${pct}%`:''}`;
