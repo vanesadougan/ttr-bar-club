@@ -6400,6 +6400,14 @@ window.submitManualOrder=async(modo='pending')=>{
       const creditoDisp=creditoCli?creditoCli.credito||0:0;
       let creditoAplicado=0;
       if(creditoDisp>0){
+        if(creditoDisp>=saldoPendiente){
+          // Crédito cubre todo — cobrar directo, no va a deuda
+          document.body.removeChild(overlay);
+          await push(ref(db,'orders'),{...orderBase,status:'cobrado',paymentMethod:'credito_cliente',cobradoAt:Date.now(),descuento,pct,saldoPendiente:0,personName:nombre,orderMode:'individual'});
+          await update(ref(db,`clientes/${creditoCli.key}`),{credito:Math.max(0,creditoDisp-saldoPendiente)});
+          showNotif('order','💚 Cobrado con crédito',`$${saldoPendiente.toLocaleString()} descontados del crédito de ${nombre}`);
+          clearManualOrder();return;
+        }
         const aplicar=confirm(`💚 ${nombre} tiene $${creditoDisp.toLocaleString()} de crédito a favor.\n¿Aplicarlo a esta deuda?\n\nDeuda: $${saldoPendiente.toLocaleString()}\nCon crédito: $${Math.max(0,saldoPendiente-creditoDisp).toLocaleString()}`);
         if(aplicar){creditoAplicado=Math.min(creditoDisp,saldoPendiente);saldoPendiente=Math.max(0,saldoPendiente-creditoAplicado);}
       }
@@ -6863,6 +6871,18 @@ window.adminGroupDeudor=async keys=>{
     const creditoDisp=creditoCli?creditoCli.credito||0:0;
     let creditoAplicado=0;
     if(creditoDisp>0){
+      if(creditoDisp>=saldoPendiente){
+        // El crédito cubre todo — no puede ir a deuda, cobrar directo
+        cleanup();
+        creditoAplicado=saldoPendiente;
+        for(const k of keys){
+          await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:'credito_cliente',cobradoAt:Date.now(),saldoPendiente:0});
+        }
+        await update(ref(db,`clientes/${creditoCli.key}`),{credito:Math.max(0,creditoDisp-creditoAplicado)});
+        showNotif('order','💚 Cobrado con crédito',`$${creditoAplicado.toLocaleString()} descontados del crédito de ${nombre}`);
+        render();return;
+      }
+      // El crédito cubre parcialmente — preguntar si aplicar
       const aplicar=confirm(`💚 ${nombre} tiene $${creditoDisp.toLocaleString()} de crédito a favor.\n¿Aplicarlo a esta deuda?\n\nDeuda: $${saldoPendiente.toLocaleString()}\nCon crédito: $${Math.max(0,saldoPendiente-creditoDisp).toLocaleString()}`);
       if(aplicar){
         creditoAplicado=Math.min(creditoDisp,saldoPendiente);
