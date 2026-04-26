@@ -2155,7 +2155,6 @@ window.waiterMarkCobradoGroup=async(keys)=>{
   }
   const hoy=new Date().toISOString().slice(0,10);
   if(creditoUsado>0){
-    await push(ref(db,'caja'),{tipo:'credito_cliente',concepto:`Crédito aplicado: ${personName} · ${tableLabel}`,monto:creditoUsado,fecha:hoy,ts:Date.now(),paymentMethod:'credito_cliente'});
     await update(ref(db,`clientes/${creditoInfo.key}`),{credito:Math.max(0,creditoDisponible-creditoUsado)});
   }
   if(getCajaAbierta()&&totalFinal>0){
@@ -6297,7 +6296,6 @@ window.submitManualOrder=async(modo='pending')=>{
     const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
     const hoy=new Date().toISOString().slice(0,10);
     if(creditoUsado>0){
-      await push(ref(db,'caja'),{tipo:'credito_cliente',concepto:`Crédito aplicado: ${personName} · ${tableLabel}`,monto:creditoUsado,fecha:hoy,ts:Date.now(),paymentMethod:'credito_cliente'});
       await update(ref(db,`clientes/${creditoCli.key}`),{credito:Math.max(0,creditoDisp-creditoUsado)});
     }
     if(totalFinal>0){
@@ -6750,8 +6748,6 @@ window.adminGroupCobrado=async keys=>{
   }
   const hoy=new Date().toISOString().slice(0,10);
   if(creditoUsado>0){
-    await push(ref(db,'caja'),{tipo:'credito_cliente',concepto:`Crédito aplicado: ${personName3} · ${tableLabel3}`,monto:creditoUsado,fecha:hoy,ts:Date.now(),paymentMethod:'credito_cliente'});
-    // Actualizar crédito del cliente
     const creditoRestante=creditoDisponible-creditoUsado;
     await update(ref(db,`clientes/${creditoInfo.key}`),{credito:Math.max(0,creditoRestante)});
   }
@@ -6893,8 +6889,6 @@ window.adminGroupDeudor=async keys=>{
       // Si quedó en 0 deuda, marcar como cobrado directamente
       if(saldoPendiente===0){
         for(const k of keys) await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:'credito_cliente',cobradoAt:Date.now(),saldoPendiente:0});
-        const hoy=new Date().toISOString().slice(0,10);
-        await push(ref(db,'caja'),{tipo:'credito_cliente',concepto:`Crédito aplicado: ${nombre} · $${creditoAplicado.toLocaleString()}`,monto:creditoAplicado,fecha:hoy,ts:Date.now(),paymentMethod:'credito_cliente'});
         render();return;
       }
     }
