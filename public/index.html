@@ -2144,7 +2144,7 @@ window.waiterMarkCobradoGroup=async(keys)=>{
 
   const totalBaseConDesc=preDisc?total-preDisc.descuento:total;
   const totalParaPagar=Math.max(0,totalBaseConDesc-creditoUsado);
-  const res=totalParaPagar>0?await showPaymentChoiceModal(null,total,preDisc,existingPm):null;
+  const res=totalParaPagar>0?await showPaymentChoiceModal(null,totalParaPagar,preDisc,existingPm):null;
   if(totalParaPagar>0&&!res)return;
   const pm=res?.pm||'credito_cliente';const pmDetail=res?.pmDetail||null;
   const descuento=(res?.descuento||0)+creditoUsado;const pct=res?.pct||0;
@@ -5289,9 +5289,6 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
           const nuevoCredito=(cli.credito||0)+exceso;
           await update(ref(db,`clientes/${cli.key}`),{credito:nuevoCredito});
         }
-        // También registrar en caja
-        const hoy2=new Date().toISOString().slice(0,10);
-        await push(ref(db,'caja'),{tipo:'credito_cliente',concepto:`Exceso → crédito a favor: ${nombreDeudor} ($${exceso.toLocaleString()})`,monto:0,fecha:hoy2,ts:Date.now(),paymentMethod:'credito_cliente'});
         showNotif('order',`💚 Crédito generado`,`$${exceso.toLocaleString()} a favor de ${nombreDeudor}`);
       }
       // Registrar en caja — el monto completo cobrado (incluye exceso si lo hay)
@@ -6291,7 +6288,7 @@ window.submitManualOrder=async(modo='pending')=>{
       if(confirmar==='si')creditoUsado=Math.min(creditoDisp,total);
     }
     const totalParaPagar=Math.max(0,total-creditoUsado);
-    const res=totalParaPagar>0?await showPaymentChoiceModal(null,total):null;
+    const res=totalParaPagar>0?await showPaymentChoiceModal(null,totalParaPagar):null;
     if(totalParaPagar>0&&!res)return;
     const pm=res?.pm||'credito_cliente';const pmDetail=res?.pmDetail||null;
     const descuento=(res?.descuento||0)+creditoUsado;const pct=res?.pct||0;
@@ -6741,7 +6738,7 @@ window.adminGroupCobrado=async keys=>{
   const totalParaPagar=Math.max(0,totalBaseConDesc-creditoUsado);
 
   // Si queda algo por pagar, mostrar modal de medios de pago
-  const res=totalParaPagar>0?await showPaymentChoiceModal(null,total,preDisc,existingPm):null;
+  const res=totalParaPagar>0?await showPaymentChoiceModal(null,totalParaPagar,preDisc,existingPm):null;
   if(totalParaPagar>0&&!res)return;
   pm=res?.pm||'credito_cliente';pmDetail=res?.pmDetail||null;
   descuento=(res?.descuento||0)+creditoUsado;pct=res?.pct||0;
