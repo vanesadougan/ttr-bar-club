@@ -1665,9 +1665,13 @@ function renderWaiterMesasScreen(mc){
         const pgIdx=window._wqKeys.push([tableId,pKey==='General'?'':pKey,pKey==='General'?'general':'individual'])-1;
         const pmLabels={efectivo:'💵 Ef.',credito:'💳 Créd.',debito:'💳 Déb.',transferencia:'📱 Trans.',mercadopago:'📱 MP',mixto:'🔀 Mixto'};
 
+        const yaPagadoW=pgOrders.reduce((s,o)=>s+(o._pagosParciales||0),0);
+        const pgTotalFinalW=grupoDesc>0?pgTotalConDesc:pgTotal;
+        const saldoRestanteW=Math.max(0,pgTotalFinalW-yaPagadoW);
+        const pagoParcialChipW=yaPagadoW>0?`<span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:6px;font-weight:600">💳$${yaPagadoW.toLocaleString()}</span>`:'';
         const totalDisplay=grupoDesc>0
-          ?`<div style="display:flex;align-items:center;gap:4px"><span style="font-size:11px;text-decoration:line-through;color:var(--muted)">$${pgTotal.toLocaleString()}</span><span style="font-size:13px;font-weight:700;color:#059669">$${pgTotalConDesc.toLocaleString()}</span><span style="font-size:10px;background:#d1fae5;color:#065f46;padding:1px 4px;border-radius:4px">-${grupoPct}%</span></div>`
-          :`<span style="font-size:12px;font-weight:600;color:#1e40af">$${pgTotal.toLocaleString()}</span>`;
+          ?`<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">${pagoParcialChipW}<span style="font-size:11px;text-decoration:line-through;color:var(--muted)">$${pgTotal.toLocaleString()}</span><span style="font-size:13px;font-weight:700;color:#059669">$${saldoRestanteW.toLocaleString()}</span><span style="font-size:10px;background:#d1fae5;color:#065f46;padding:1px 4px;border-radius:4px">-${grupoPct}%</span></div>`
+          :`<div style="display:flex;align-items:center;gap:4px">${pagoParcialChipW}<span style="font-size:12px;font-weight:600;color:#1e40af">$${saldoRestanteW.toLocaleString()}</span>${yaPagadoW>0?`<span style="font-size:10px;color:var(--muted)">de $${pgTotal.toLocaleString()}</span>`:''}</div>`;
 
         // Header del grupo — siempre mostrar
         h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding:4px 6px;background:#f0f4ff;border-radius:6px">`;
@@ -2103,72 +2107,120 @@ window.waiterMarkCobradoGroup=async(keys)=>{
   const grupoDisc=keys.map(k=>DB.orders[k]).find(o=>o&&o._grupoDescuento!=null);
   const preDisc=grupoDisc?{descuento:grupoDisc._grupoDescuento||0,pct:grupoDisc._grupoPct||0}:null;
   const existingPm=keys.map(k=>DB.orders[k]?.paymentMethod).find(Boolean)||null;
+  const yaPagado=keys.reduce((s,k)=>{const o=DB.orders[k];return s+(o?o._pagosParciales||0:0);},0);
+  const totalConDesc=preDisc?total-preDisc.descuento:total;
+  const saldoRestante=Math.max(0,totalConDesc-yaPagado);
 
-  // Crédito a favor
+  // Elección total / parcial
+  const eleccion=await new Promise(res=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px">💳 Cobrar</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px">${tableLabel}${personName?' · '+personName:''}</div>
+      <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:12px">
+        ${yaPagado>0?`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;color:#059669">Ya pagado</span><span style="font-size:13px;font-weight:600;color:#059669">$${yaPagado.toLocaleString()}</span></div>`:''}
+        <div style="display:flex;justify-content:space-between"><span style="font-size:13px;font-weight:600">Saldo</span><span style="font-size:18px;font-weight:700;color:var(--accent)">$${saldoRestante.toLocaleString()}</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="ch-total" style="padding:11px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">💵 Cobrar total ($${saldoRestante.toLocaleString()})</button>
+        <button id="ch-parcial" style="padding:11px;border-radius:8px;border:0.5px solid #d97706;background:#fef3c7;color:#92400e;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">💳 Pago parcial</button>
+        <button id="ch-cancel" style="padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#ch-total').onclick=()=>{ov.remove();res('total');};
+    ov.querySelector('#ch-parcial').onclick=()=>{ov.remove();res('parcial');};
+    ov.querySelector('#ch-cancel').onclick=()=>{ov.remove();res(null);};
+  });
+  if(!eleccion)return;
+
+  if(eleccion==='parcial'){
+    const resultado=await new Promise(res=>{
+      const ov=document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+      const pms=[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}];
+      let montoParcial=saldoRestante;let pmSel=null;
+      const renderOv=()=>{
+        ov.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+          <div style="font-size:16px;font-weight:700;margin-bottom:4px">💳 Pago parcial</div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Saldo: <strong>$${saldoRestante.toLocaleString()}</strong></div>
+          <div class="form-group" style="margin-bottom:12px"><label>Monto a cobrar ahora</label>
+            <input id="pp-monto" type="number" min="1" max="${saldoRestante}" value="${montoParcial}" style="font-size:20px;font-weight:700;text-align:center;padding:10px;width:100%;border:1.5px solid var(--brand);border-radius:8px;font-family:inherit;box-sizing:border-box">
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+            ${pms.map(p=>`<button data-pm="${p.v}" style="padding:7px 10px;border-radius:8px;border:1.5px solid ${pmSel===p.v?'var(--accent)':'var(--border)'};background:${pmSel===p.v?'#fff5f7':'var(--card)'};color:${pmSel===p.v?'var(--accent)':'var(--text)'};font-size:12px;font-weight:${pmSel===p.v?600:400};cursor:pointer;font-family:inherit">${p.l}</button>`).join('')}
+          </div>
+          <button id="pp-ok" ${pmSel?'':' disabled'} style="width:100%;padding:11px;border-radius:8px;border:none;background:${pmSel?'#059669':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${pmSel?'pointer':'not-allowed'};font-family:inherit;margin-bottom:8px;opacity:${pmSel?1:.6}">Registrar pago</button>
+          <button id="pp-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+        </div>`;
+        ov.querySelector('#pp-monto').addEventListener('input',e=>{montoParcial=Math.min(saldoRestante,Math.max(0,Number(e.target.value)||0));});
+        ov.querySelectorAll('[data-pm]').forEach(btn=>{btn.onclick=()=>{pmSel=btn.dataset.pm;renderOv();};});
+        ov.querySelector('#pp-ok')?.addEventListener('click',()=>{const m=Math.max(0,Number(ov.querySelector('#pp-monto').value)||0);if(!m||!pmSel)return;ov.remove();res({monto:m,pm:pmSel});});
+        ov.querySelector('#pp-cancel').onclick=()=>{ov.remove();res(null);};
+      };
+      document.body.appendChild(ov);renderOv();
+    });
+    if(!resultado)return;
+    const {monto:montoCobrado,pm}=resultado;
+    const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+    const hoy=new Date().toISOString().slice(0,10);
+    await push(ref(db,'caja'),{tipo:'venta',concepto:`Pago parcial: ${tableLabel}${personName?' · '+personName:''} (${pmL[pm]||pm}) — quedan $${(saldoRestante-montoCobrado).toLocaleString()}`,monto:montoCobrado,fecha:hoy,ts:Date.now(),paymentMethod:pm,parcial:true});
+    const nuevoYaPagado=yaPagado+montoCobrado;
+    const cubierto=nuevoYaPagado>=totalConDesc;
+    const nuevoPago={monto:montoCobrado,pm,fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
+    for(const k of keys){const o=DB.orders[k];if(!o)continue;const hist=[...(o._historialPagos||[]),nuevoPago];await update(ref(db,`orders/${k}`),{_pagosParciales:nuevoYaPagado,_ultimoPm:pm,_historialPagos:hist,...(cubierto?{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()}:{})});}
+    render();return;
+  }
+
+  // Pago total
   const creditoInfo=personName?findClienteByName(personName):null;
-  const creditoDisponible=creditoInfo?creditoInfo.credito||0:0;
-  let usarCredito=false;let creditoUsado=0;
-
-  if(creditoDisponible>0){
-    const totalConDesc=preDisc?total-preDisc.descuento:total;
+  const creditoDisp2=creditoInfo?creditoInfo.credito||0:0;
+  let creditoUsado=0;
+  if(creditoDisp2>0){
     const confirmar=await new Promise(res=>{
       const ov=document.createElement('div');
       ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
-      const usado=Math.min(creditoDisponible,totalConDesc);
-      const resto=Math.max(0,totalConDesc-usado);
+      const usado=Math.min(creditoDisp2,saldoRestante);const resto=Math.max(0,saldoRestante-usado);
       ov.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-        <div style="font-size:16px;font-weight:700;margin-bottom:4px">💚 Crédito a favor</div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">👤 ${personName} tiene crédito disponible</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:8px">💚 Crédito a favor</div>
         <div style="background:#f0fdf4;border-radius:10px;padding:12px 14px;margin-bottom:14px;border:0.5px solid #bbf7d0">
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;color:#6b7280">Total pedido</span><span style="font-size:14px;font-weight:600">$${totalConDesc.toLocaleString()}</span></div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;color:#059669">Crédito disponible</span><span style="font-size:14px;font-weight:600;color:#059669">-$${creditoDisponible.toLocaleString()}</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px">Saldo</span><span style="font-weight:600">$${saldoRestante.toLocaleString()}</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;color:#059669">Crédito</span><span style="font-weight:600;color:#059669">-$${creditoDisp2.toLocaleString()}</span></div>
           <div style="border-top:0.5px solid #bbf7d0;margin:8px 0"></div>
-          <div style="display:flex;justify-content:space-between"><span style="font-size:13px;font-weight:600">A cobrar</span><span style="font-size:18px;font-weight:700;color:${resto===0?'#059669':'var(--accent)'}">$${resto.toLocaleString()}</span></div>
-          ${creditoDisponible>totalConDesc?`<div style="font-size:11px;color:#059669;margin-top:4px">Quedan $${(creditoDisponible-totalConDesc).toLocaleString()} de crédito</div>`:''}
+          <div style="display:flex;justify-content:space-between"><span style="font-weight:600">A cobrar</span><span style="font-size:18px;font-weight:700;color:${resto===0?'#059669':'var(--accent)'}>$${resto.toLocaleString()}</span></div>
         </div>
         <div style="display:flex;gap:8px">
-          <button id="cr-si" style="flex:1;padding:10px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">✓ Aplicar crédito</button>
-          <button id="cr-no" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">No aplicar</button>
+          <button id="cr-si" style="flex:1;padding:10px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">✓ Aplicar</button>
+          <button id="cr-no" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">No</button>
         </div>
-        <button id="cr-cancel" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
       </div>`;
       document.body.appendChild(ov);
       ov.querySelector('#cr-si').onclick=()=>{ov.remove();res('si');};
       ov.querySelector('#cr-no').onclick=()=>{ov.remove();res('no');};
-      ov.querySelector('#cr-cancel').onclick=()=>{ov.remove();res(null);};
     });
-    if(confirmar===null)return;
-    usarCredito=confirmar==='si';
-    if(usarCredito)creditoUsado=Math.min(creditoDisponible,totalConDesc);
+    if(confirmar==='si')creditoUsado=Math.min(creditoDisp2,saldoRestante);
   }
-
-  const totalBaseConDesc=preDisc?total-preDisc.descuento:total;
-  const totalParaPagar=Math.max(0,totalBaseConDesc-creditoUsado);
+  const totalParaPagar=Math.max(0,saldoRestante-creditoUsado);
   const res=totalParaPagar>0?await showPaymentChoiceModal(null,totalParaPagar,preDisc,existingPm):null;
   if(totalParaPagar>0&&!res)return;
   const pm=res?.pm||'credito_cliente';const pmDetail=res?.pmDetail||null;
   const descuento=(res?.descuento||0)+creditoUsado;const pct=res?.pct||0;
   const totalFinal=totalParaPagar-(res?.descuento||0);
   const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
-  for(const k of keys){
-    await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});
-  }
+  for(const k of keys){await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});}
+  if(creditoUsado>0)await update(ref(db,`clientes/${creditoInfo.key}`),{credito:Math.max(0,creditoDisp2-creditoUsado)});
   const hoy=new Date().toISOString().slice(0,10);
-  if(creditoUsado>0){
-    await update(ref(db,`clientes/${creditoInfo.key}`),{credito:Math.max(0,creditoDisponible-creditoUsado)});
-  }
   if(getCajaAbierta()&&totalFinal>0){
     if(pmDetail&&pmDetail.length>1){
-      for(const p of pmDetail){
-        const montoP=Number(p.monto)||0;if(!montoP)continue;
-        await push(ref(db,'caja'),{tipo:'venta',concepto:`${tableLabel}${personName?' · '+personName:''} (${pmL[p.pm]||p.pm})${pct>0?` -${pct}%`:''}`,monto:montoP,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:p.pm});
-      }
+      for(const p of pmDetail){const montoP=Number(p.monto)||0;if(!montoP)continue;await push(ref(db,'caja'),{tipo:'venta',concepto:`${tableLabel}${personName?' · '+personName:''} (${pmL[p.pm]||p.pm})${pct>0?` -${pct}%`:''}`,monto:montoP,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:p.pm});}
     } else {
       await push(ref(db,'caja'),{tipo:'venta',concepto:`${tableLabel}${personName?' · '+personName:''} (${pmL[pm]||pm})${pct>0?` -${pct}%`:''}`,monto:totalFinal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,descuento,pct});
     }
   }
   render();
 };
+
 window.waiterPrintCuentaGroup=async(keys,tableId)=>{
   const orders=keys.map(k=>DB.orders[k]).filter(Boolean);
   if(!orders.length)return;
@@ -4154,13 +4206,17 @@ function renderOrdersTab(){
       });
 
       // Footer de cobro por persona/grupo
+      const yaPagado=pgOrders.reduce((s,o)=>s+(o._pagosParciales||0),0);
+      const pgTotalFinal=grupoDescuento>0?pgTotalConDesc:pgTotal;
+      const saldoRestante=Math.max(0,pgTotalFinal-yaPagado);
       const canCobrar=!hasPending&&!hasPreparing&&!hasReadyAt&&!isBilled;
       const creditoFooter=pg.personName?findClienteByName(pg.personName):null;
       const creditoDisp=creditoFooter?creditoFooter.credito||0:0;
       const creditoChipFooter=creditoDisp>0?`<span style="font-size:10px;background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:8px;font-weight:600">💚 $${creditoDisp.toLocaleString()}</span>`:'';
+      const pagoParcialChip=yaPagado>0?`<span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 6px;border-radius:8px;font-weight:600">Pagado: $${yaPagado.toLocaleString()}</span>`:'';
       const totalDisplay=grupoDescuento>0
-        ?`<div style="display:flex;align-items:center;gap:6px">${creditoChipFooter}<span style="font-size:11px;text-decoration:line-through;color:var(--muted)">$${pgTotal.toLocaleString()}</span><span style="font-size:13px;font-weight:700;color:#059669">$${pgTotalConDesc.toLocaleString()}</span><span style="font-size:10px;background:#d1fae5;color:#065f46;padding:1px 5px;border-radius:4px">-${grupoPct}%</span></div>`
-        :`<div style="display:flex;align-items:center;gap:6px">${creditoChipFooter}<span style="font-size:13px;font-weight:600;color:var(--accent)">$${pgTotal.toLocaleString()}</span></div>`;
+        ?`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">${creditoChipFooter}${pagoParcialChip}<span style="font-size:11px;text-decoration:line-through;color:var(--muted)">$${pgTotal.toLocaleString()}</span><span style="font-size:13px;font-weight:700;color:#059669">$${saldoRestante.toLocaleString()}</span><span style="font-size:10px;background:#d1fae5;color:#065f46;padding:1px 5px;border-radius:4px">-${grupoPct}%</span></div>`
+        :`<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">${creditoChipFooter}${pagoParcialChip}<span style="font-size:13px;font-weight:600;color:var(--accent)">$${saldoRestante.toLocaleString()}</span>${yaPagado>0?`<span style="font-size:10px;color:var(--muted)">de $${pgTotal.toLocaleString()}</span>`:''}</div>`;
       if(isBilled){
         const pm=pgOrders.find(o=>o.paymentMethod)?.paymentMethod;
         const pmLabels={efectivo:'Efectivo',credito:'Créd.',debito:'Déb.',transferencia:'Transfer.',mercadopago:'Mercado Pago'};
@@ -4823,6 +4879,24 @@ function renderDeudoresTab(){
         h+=`</div>`;
       });
 
+      // Historial de pagos parciales
+      const histPagos=g.orders.flatMap(o=>o._historialPagos||[]).sort((a,b)=>(a.ts||0)-(b.ts||0));
+      const yaPagadoD=g.orders.reduce((s,o)=>s+(o._pagosParciales||0),0);
+      if(histPagos.length>0){
+        const pmL2={efectivo:'💵 Ef.',debito:'💳 Déb.',credito:'💳 Créd.',transferencia:'📱 Trans.',mercadopago:'📱 MP'};
+        h+=`<div style="margin:0 16px 10px;padding:8px 12px;background:#f0f7ff;border-radius:8px;border:0.5px solid #bfdbfe">`;
+        h+=`<div style="font-size:11px;font-weight:700;color:#1e40af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Pagos registrados</div>`;
+        histPagos.forEach(p=>{
+          const fecha=p.fecha||'';const hora=p.ts?new Date(p.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}):'';
+          h+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:0.5px solid #dbeafe">`;
+          h+=`<span style="font-size:11px;color:#3b82f6">${fecha} ${hora} · ${pmL2[p.pm]||p.pm||''}</span>`;
+          h+=`<span style="font-size:12px;font-weight:600;color:#1e40af">$${Number(p.monto||0).toLocaleString()}</span>`;
+          h+=`</div>`;
+        });
+        h+=`<div style="display:flex;justify-content:space-between;margin-top:4px"><span style="font-size:11px;color:#6b7280">Saldo pendiente</span><span style="font-size:13px;font-weight:700;color:#dc2626">$${saldoMostrar.toLocaleString()}</span></div>`;
+        h+=`</div>`;
+      }
+
       // Botón cobro
       const dIdx=window._deudorKeys.push(keys)-1;
       if(!window._deudorSaldos)window._deudorSaldos=[];
@@ -5355,27 +5429,40 @@ function renderHistoryTab(){
   const fmtDate=ts=>{if(!ts)return'';const d=new Date(ts);return d.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});};
   const fmtTime=ts=>{if(!ts)return'';const d=new Date(ts);return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');};
 
-  // Pedidos cobrados normales
-  const ordersCol=Object.entries(DB.orders).map(([k,v])=>({...v,_key:k,_tipo:'pedido'})).filter(o=>o.status==='cobrado'&&!o.fromDeuda);
+  // Pedidos cobrados normales — agrupar por mesa+persona+ventana de cobro (5 min)
+  const ordersAll=Object.entries(DB.orders).map(([k,v])=>({...v,_key:k})).filter(o=>o.status==='cobrado'&&!o.fromDeuda);
 
-  // Pedidos cobrados que vinieron de deuda
+  // Agrupar: misma mesa + misma persona + cobradoAt dentro de 5 minutos = mismo grupo
+  const grupos={};
+  ordersAll.forEach(o=>{
+    const cobradoAt=o.cobradoAt||o.createdAt||0;
+    const tId=o.tableId||'sinmesa';
+    const pName=o.personName||'General';
+    // Bucket de 5 minutos para agrupar cobros simultáneos
+    const bucket=Math.floor(cobradoAt/300000);
+    const gKey=`${tId}|${pName}|${bucket}`;
+    if(!grupos[gKey])grupos[gKey]={tableId:tId,personName:pName,orderMode:o.orderMode,cobradoAt,orders:[],paymentMethod:o.paymentMethod,descuento:o.descuento||0,pct:o.pct||0,isKiosko:o.isKiosko||false,takenBy:o.takenBy||null};
+    grupos[gKey].orders.push(o);
+    // Usar el cobradoAt más reciente del grupo
+    if(cobradoAt>grupos[gKey].cobradoAt)grupos[gKey].cobradoAt=cobradoAt;
+    if(o.paymentMethod&&o.paymentMethod!=='credito_cliente')grupos[gKey].paymentMethod=o.paymentMethod;
+    grupos[gKey].descuento+=(o.descuento||0);
+  });
+
+  // Deudas cobradas (sin agrupar — ya son una sola entrada)
   const deudoresCol=Object.entries(DB.orders)
     .map(([k,v])=>({...v,_key:k,_tipo:'deuda'}))
     .filter(o=>o.status==='cobrado'&&o.fromDeuda===true);
 
-  // Combinar y ordenar por fecha descendente
-  const all=[...ordersCol,...deudoresCol].sort((a,b)=>{
-    const ta=a._tipo==='deuda'?(a.cobradoAt||a.createdAt||0):(a.createdAt||0);
-    const tb=b._tipo==='deuda'?(b.cobradoAt||b.createdAt||0):(b.createdAt||0);
-    return tb-ta;
-  });
+  // Construir lista unificada
+  const gruposList=Object.values(grupos).map(g=>({...g,_tipo:'pedido',_ts:g.cobradoAt}));
+  const deudList=deudoresCol.map(o=>({...o,_ts:o.cobradoAt||o.createdAt||0}));
+  const all=[...gruposList,...deudList].sort((a,b)=>(b._ts||0)-(a._ts||0));
 
-  const cobradoKeys=ordersCol.map(o=>o._key);
-
-  const getTs=o=>o._tipo==='deuda'?(o.cobradoAt||o.createdAt||0):(o.createdAt||0);
+  const cobradoKeys=ordersAll.map(o=>o._key);
 
   const fil=all.filter(o=>{
-    const ts=getTs(o);
+    const ts=o._ts||0;
     if(!ts)return C.historyFilter==='todos';
     const d=new Date(ts).toLocaleDateString('es-AR');
     if(C.historyFilter==='hoy')return d===todayStr;
@@ -5383,7 +5470,10 @@ function renderHistoryTab(){
     return true;
   });
 
-  const totalFil=fil.reduce((s,o)=>(o.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,s),0);
+  const totalFil=fil.reduce((s,g)=>{
+    if(g._tipo==='deuda')return s+(g.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,0);
+    return s+(g.orders||[]).reduce((gs,o)=>(o.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,gs),0)-(g.descuento||0);
+  },0);
 
   let h=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">`;
   h+=`<div style="display:flex;gap:6px;flex-wrap:wrap">`;
@@ -5403,41 +5493,51 @@ function renderHistoryTab(){
     h+=`</div>`;
   }
 
+  const pmLabels={efectivo:'💵 Efectivo',credito:'💳 Créd.',debito:'💳 Déb.',transferencia:'📱 Transfer.',mercadopago:'📱 Mercado Pago',credito_cliente:'💚 Crédito',mixto:'🔀 Mixto'};
+
   h+=`<div class="orders-list">`;
   if(fil.length===0)h+=`<div class="empty-state">No hay registros cobrados${C.historyFilter!=='todos'?' '+C.historyFilter:''}</div>`;
-  const pmLabels={efectivo:'💵 Efectivo',credito:'💳 Créd.',debito:'💳 Déb.',transferencia:'📱 Transfer.',mercadopago:'📱 Mercado Pago'};
 
-  fil.forEach(o=>{
-    const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-    const ts=getTs(o);
-    const dateStr=ts?`${fmtDate(ts)} ${fmtTime(ts)}`:(o.time||'');
-    const pm=o.paymentMethod;
+  fil.forEach(g=>{
+    const ts=g._ts||0;
+    const dateStr=ts?`${fmtDate(ts)} ${fmtTime(ts)}`:'';
 
-    if(o._tipo==='deuda'){
-      // Card de deuda cobrada
+    if(g._tipo==='deuda'){
+      const total=(g.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+      const pm=g.paymentMethod;
       h+=`<div class="order-card" style="border-left:3px solid #dc2626">`;
-      h+=`<div class="order-header">`;
-      h+=`<div class="order-tname">${tableLabel(o.tableId)} <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#fee2e2;color:#b91c1c">💳 Deuda</span> <span style="font-size:13px;font-weight:500;color:var(--text)">${o.deudorNombre||''} ${o.deudorApellido||''}</span></div>`;
-      h+=`<div class="order-time">${dateStr}</div>`;
-      h+=`</div>`;
+      h+=`<div class="order-header"><div class="order-tname">${tableLabel(g.tableId)} <span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#fee2e2;color:#b91c1c">💳 Deuda</span> <span style="font-size:13px;font-weight:500">${g.deudorNombre||''}</span></div><div class="order-time">${dateStr}</div></div>`;
       h+=`<div class="order-items-text">`;
-      (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:''}<br>`;});
+      (g.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:''}<br>`;});
       h+=`</div>`;
       h+=`<div class="order-footer"><span class="status status-cobrado">Cobrado</span>`;
       if(pm)h+=`<span style="font-size:12px;color:var(--muted)">${pmLabels[pm]||pm}</span>`;
       h+=`<span style="font-weight:600;font-size:14px">$${total.toLocaleString()}</span></div></div>`;
     } else {
-      // Card de pedido normal cobrado
-      const chip=o.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${o.personName}</span>`:`<span class="order-type-chip ot-general">👥 General</span>`;
-      const kioskChip=o.isKiosko?`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">🏪 Kiosko</span>`:'';
-      const waiterChip=o.takenBy?`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px;font-weight:500">👩 ${o.takenBy}</span>`:'';
-      const descuento=o.descuento||0;const pct=o.pct||0;
-      const totalFinal=total-descuento;
-      h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${o.isKiosko?kioskChip:tableLabel(o.tableId)+chip}${waiterChip}</div><div class="order-time">${dateStr}</div></div>`;
+      // Grupo de pedidos cobrados
+      const orders=g.orders||[];
+      const totalBruto=orders.reduce((s,o)=>(o.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,ss),0);
+      const desc=g.descuento||0;const pct=g.pct||0;
+      const totalFinal=totalBruto-desc;
+      const pm=g.paymentMethod;
+      const chip=g.isKiosko?`<span style="font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;background:#d1fae5;color:#065f46">🏪 Kiosko</span>`
+        :g.orderMode==='individual'?`<span class="order-type-chip ot-individual">👤 ${g.personName}</span>`
+        :`<span class="order-type-chip ot-general">👥 General</span>`;
+      const waiterChip=g.takenBy?`<span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:6px;font-weight:500">👩 ${g.takenBy}</span>`:'';
+      h+=`<div class="order-card"><div class="order-header"><div class="order-tname">${g.isKiosko?chip:tableLabel(g.tableId)+' '+chip}${waiterChip}</div><div class="order-time">${dateStr}</div></div>`;
       h+=`<div class="order-items-text">`;
-      (o.items||[]).forEach(i=>{h+=`${i.qty}× <strong>${i.name}</strong>${i.selectedType?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.selectedType}</span>`:''}${i.excluded&&i.excluded.length>0?` <span class="removed-ing">sin: ${i.excluded.join(', ')}</span>`:''}<br>`;});
+      // Mostrar todos los items agrupados
+      const itemMap={};
+      orders.forEach(o=>(o.items||[]).forEach(i=>{
+        const k=i.name+(i.selectedType?'|'+i.selectedType:'');
+        if(!itemMap[k])itemMap[k]={name:i.name,type:i.selectedType||null,qty:0,excl:i.excluded||[]};
+        itemMap[k].qty+=i.qty;
+      }));
+      Object.values(itemMap).forEach(i=>{
+        h+=`${i.qty}× <strong>${i.name}</strong>${i.type?` <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:4px">${i.type}</span>`:''}${i.excl.length>0?` <span class="removed-ing">sin: ${i.excl.join(', ')}</span>`:''}<br>`;
+      });
       h+=`</div>`;
-      if(descuento>0)h+=`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#059669"><span>Descuento ${pct}%</span><span>-$${descuento.toLocaleString()}</span></div>`;
+      if(desc>0)h+=`<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#059669"><span>Descuento ${pct}%</span><span>-$${desc.toLocaleString()}</span></div>`;
       h+=`<div class="order-footer"><span class="status status-cobrado">Cobrado</span>`;
       if(pm)h+=`<span style="font-size:12px;color:var(--muted)">${pmLabels[pm]||pm}</span>`;
       h+=`<span style="font-weight:600;font-size:14px">$${totalFinal.toLocaleString()}</span></div></div>`;
@@ -6693,86 +6793,125 @@ window.adminGroupCobrado=async keys=>{
     if(!personName3&&o.personName)personName3=o.personName;
   }
   const grupoDisc=keys.map(k=>DB.orders[k]).find(o=>o&&o._grupoDescuento!=null);
-  const existingPm=keys.map(k=>DB.orders[k]?.paymentMethod).find(Boolean)||null;
-  let pm,pmDetail=null,descuento=0,pct=0;
   const preDisc=grupoDisc?{descuento:grupoDisc._grupoDescuento||0,pct:grupoDisc._grupoPct||0}:null;
-
-  // Verificar crédito a favor del cliente
+  const existingPm=keys.map(k=>DB.orders[k]?.paymentMethod).find(Boolean)||null;
+  const yaPagado=keys.reduce((s,k)=>{const o=DB.orders[k];return s+(o?o._pagosParciales||0:0);},0);
+  const totalConDesc=preDisc?total-preDisc.descuento:total;
+  const saldoRestante=Math.max(0,totalConDesc-yaPagado);
   const creditoInfo=personName3?findClienteByName(personName3):null;
-  const creditoDisponible=creditoInfo?creditoInfo.credito||0:0;
-  let usarCredito=creditoDisponible>0;
-  let creditoUsado=0;
+  const creditoDisp=creditoInfo?creditoInfo.credito||0:0;
 
-  if(creditoDisponible>0){
-    // Preguntar si aplicar crédito
+  const eleccion=await new Promise(res=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+      <div style="font-size:16px;font-weight:700;margin-bottom:4px">💳 Cobrar</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:12px">${tableLabel3}${personName3?' · '+personName3:''}</div>
+      <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:12px">
+        ${yaPagado>0?`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;color:#059669">Ya pagado</span><span style="font-size:13px;font-weight:600;color:#059669">$${yaPagado.toLocaleString()}</span></div>`:''}
+        <div style="display:flex;justify-content:space-between"><span style="font-size:13px;font-weight:600">Saldo</span><span style="font-size:18px;font-weight:700;color:var(--accent)">$${saldoRestante.toLocaleString()}</span></div>
+        ${creditoDisp>0?`<div style="font-size:11px;color:#059669;margin-top:4px">💚 Crédito: $${creditoDisp.toLocaleString()}</div>`:''}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="ch-total" style="padding:11px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">💵 Cobrar total ($${saldoRestante.toLocaleString()})</button>
+        <button id="ch-parcial" style="padding:11px;border-radius:8px;border:0.5px solid #d97706;background:#fef3c7;color:#92400e;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">💳 Pago parcial</button>
+        ${yaPagado>0?'<button id="ch-deudor" style="padding:11px;border-radius:8px;border:0.5px solid #dc2626;background:#fef2f2;color:#dc2626;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">💳 Mandar resto a deudor</button>':''}
+        <button id="ch-cancel" style="padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>
+    </div>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#ch-total').onclick=()=>{ov.remove();res('total');};
+    ov.querySelector('#ch-parcial').onclick=()=>{ov.remove();res('parcial');};
+    ov.querySelector('#ch-deudor')?.addEventListener('click',()=>{ov.remove();res('deudor');});
+    ov.querySelector('#ch-cancel').onclick=()=>{ov.remove();res(null);};
+  });
+  if(!eleccion)return;
+  if(eleccion==='deudor'){adminGroupDeudor(keys);return;}
+
+  if(eleccion==='parcial'){
+    const resultado=await new Promise(res=>{
+      const ov=document.createElement('div');
+      ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
+      const pms=[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}];
+      let montoParcial=saldoRestante;let pmSel=null;
+      const renderOv=()=>{
+        ov.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+          <div style="font-size:16px;font-weight:700;margin-bottom:4px">💳 Pago parcial</div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Saldo total: <strong>$${saldoRestante.toLocaleString()}</strong></div>
+          <div class="form-group" style="margin-bottom:12px"><label>Monto a cobrar ahora</label>
+            <input id="pp-monto" type="number" min="1" max="${saldoRestante}" value="${montoParcial}" style="font-size:20px;font-weight:700;text-align:center;padding:10px;width:100%;border:1.5px solid var(--brand);border-radius:8px;font-family:inherit;box-sizing:border-box">
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+            ${pms.map(p=>`<button data-pm="${p.v}" style="padding:7px 10px;border-radius:8px;border:1.5px solid ${pmSel===p.v?'var(--accent)':'var(--border)'};background:${pmSel===p.v?'#fff5f7':'var(--card)'};color:${pmSel===p.v?'var(--accent)':'var(--text)'};font-size:12px;font-weight:${pmSel===p.v?600:400};cursor:pointer;font-family:inherit">${p.l}</button>`).join('')}
+          </div>
+          <button id="pp-ok" ${pmSel?'':' disabled'} style="width:100%;padding:11px;border-radius:8px;border:none;background:${pmSel?'#059669':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${pmSel?'pointer':'not-allowed'};font-family:inherit;margin-bottom:8px;opacity:${pmSel?1:.6}">Registrar pago</button>
+          <button id="pp-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+        </div>`;
+        ov.querySelector('#pp-monto').addEventListener('input',e=>{montoParcial=Math.min(saldoRestante,Math.max(0,Number(e.target.value)||0));});
+        ov.querySelectorAll('[data-pm]').forEach(btn=>{btn.onclick=()=>{pmSel=btn.dataset.pm;renderOv();};});
+        ov.querySelector('#pp-ok')?.addEventListener('click',()=>{const m=Math.max(0,Number(ov.querySelector('#pp-monto').value)||0);if(!m||!pmSel)return;ov.remove();res({monto:m,pm:pmSel});});
+        ov.querySelector('#pp-cancel').onclick=()=>{ov.remove();res(null);};
+      };
+      document.body.appendChild(ov);renderOv();
+    });
+    if(!resultado)return;
+    const {monto:montoCobrado,pm}=resultado;
+    const pmL2={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+    const hoy=new Date().toISOString().slice(0,10);
+    await push(ref(db,'caja'),{tipo:'venta',concepto:`Pago parcial: ${tableLabel3}${personName3?' · '+personName3:''} (${pmL2[pm]||pm}) — quedan $${(saldoRestante-montoCobrado).toLocaleString()}`,monto:montoCobrado,fecha:hoy,ts:Date.now(),paymentMethod:pm,parcial:true});
+    const nuevoYaPagado=yaPagado+montoCobrado;
+    const cubierto=nuevoYaPagado>=totalConDesc;
+    const nuevoPago2={monto:montoCobrado,pm,fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
+    for(const k of keys){const o=DB.orders[k];if(!o)continue;const hist=[...(o._historialPagos||[]),nuevoPago2];await update(ref(db,`orders/${k}`),{_pagosParciales:nuevoYaPagado,_ultimoPm:pm,_historialPagos:hist,...(cubierto?{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()}:{})});}
+    render();return;
+  }
+
+  // Pago total + crédito
+  let creditoUsado=0;
+  if(creditoDisp>0){
     const confirmar=await new Promise(res=>{
       const ov=document.createElement('div');
       ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
-      const totalConDesc=preDisc?total-preDisc.descuento:total;
-      const usado=Math.min(creditoDisponible,totalConDesc);
-      const resto=Math.max(0,totalConDesc-usado);
+      const resto=Math.max(0,saldoRestante-Math.min(creditoDisp,saldoRestante));
       ov.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-        <div style="font-size:16px;font-weight:700;margin-bottom:4px">💚 Crédito a favor</div>
-        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">👤 ${personName3} tiene crédito disponible</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:8px">💚 Crédito a favor</div>
         <div style="background:#f0fdf4;border-radius:10px;padding:12px 14px;margin-bottom:14px;border:0.5px solid #bbf7d0">
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;color:#6b7280">Total pedido</span><span style="font-size:14px;font-weight:600">$${totalConDesc.toLocaleString()}</span></div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:13px;color:#059669">Crédito disponible</span><span style="font-size:14px;font-weight:600;color:#059669">-$${creditoDisponible.toLocaleString()}</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>Saldo</span><span style="font-weight:600">$${saldoRestante.toLocaleString()}</span></div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="color:#059669">Crédito</span><span style="font-weight:600;color:#059669">-$${creditoDisp.toLocaleString()}</span></div>
           <div style="border-top:0.5px solid #bbf7d0;margin:8px 0"></div>
-          <div style="display:flex;justify-content:space-between"><span style="font-size:13px;font-weight:600">A cobrar</span><span style="font-size:18px;font-weight:700;color:${resto===0?'#059669':'var(--accent)'}">$${resto.toLocaleString()}</span></div>
-          ${creditoDisponible>totalConDesc?`<div style="font-size:11px;color:#059669;margin-top:4px">Quedan $${(creditoDisponible-totalConDesc).toLocaleString()} de crédito</div>`:''}
+          <div style="display:flex;justify-content:space-between"><span style="font-weight:600">A cobrar</span><span style="font-size:18px;font-weight:700;color:${resto===0?'#059669':'var(--accent)'}>$${resto.toLocaleString()}</span></div>
         </div>
         <div style="display:flex;gap:8px">
-          <button id="cr-si" style="flex:1;padding:10px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">✓ Aplicar crédito</button>
-          <button id="cr-no" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">No aplicar</button>
+          <button id="cr-si" style="flex:1;padding:10px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">✓ Aplicar</button>
+          <button id="cr-no" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">No</button>
         </div>
-        <button id="cr-cancel" style="width:100%;margin-top:8px;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
       </div>`;
       document.body.appendChild(ov);
       ov.querySelector('#cr-si').onclick=()=>{ov.remove();res('si');};
       ov.querySelector('#cr-no').onclick=()=>{ov.remove();res('no');};
-      ov.querySelector('#cr-cancel').onclick=()=>{ov.remove();res(null);};
     });
-    if(confirmar===null)return;
-    usarCredito=confirmar==='si';
+    if(confirmar==='si')creditoUsado=Math.min(creditoDisp,saldoRestante);
   }
-
-  // Calcular total después de crédito
-  const totalBaseConDesc=preDisc?total-preDisc.descuento:total;
-  if(usarCredito&&creditoDisponible>0){
-    creditoUsado=Math.min(creditoDisponible,totalBaseConDesc);
-  }
-  const totalParaPagar=Math.max(0,totalBaseConDesc-creditoUsado);
-
-  // Si queda algo por pagar, mostrar modal de medios de pago
+  const totalParaPagar=Math.max(0,saldoRestante-creditoUsado);
   const res=totalParaPagar>0?await showPaymentChoiceModal(null,totalParaPagar,preDisc,existingPm):null;
   if(totalParaPagar>0&&!res)return;
-  pm=res?.pm||'credito_cliente';pmDetail=res?.pmDetail||null;
-  descuento=(res?.descuento||0)+creditoUsado;pct=res?.pct||0;
+  const pm=res?.pm||'credito_cliente';const pmDetail=res?.pmDetail||null;
+  const descuento=(res?.descuento||0)+creditoUsado;const pct=res?.pct||0;
   const totalFinal=totalParaPagar-(res?.descuento||0);
-
   const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
-  for(const k of keys){
-    await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});
-  }
+  for(const k of keys){await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});}
+  if(creditoUsado>0)await update(ref(db,`clientes/${creditoInfo.key}`),{credito:Math.max(0,creditoDisp-creditoUsado)});
   const hoy=new Date().toISOString().slice(0,10);
-  if(creditoUsado>0){
-    const creditoRestante=creditoDisponible-creditoUsado;
-    await update(ref(db,`clientes/${creditoInfo.key}`),{credito:Math.max(0,creditoRestante)});
-  }
   if(totalFinal>0&&getCajaAbierta()){
     if(pmDetail&&pmDetail.length>1){
-      for(const p of pmDetail){
-        const montoP=Number(p.monto)||0;if(!montoP)continue;
-        const concepto=`Venta: ${tableLabel3}${personName3?' · '+personName3:''} (${pmL[p.pm]||p.pm})${pct>0?` -${pct}%`:''}`;
-        await push(ref(db,'caja'),{tipo:'venta',concepto,monto:montoP,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:p.pm,descuento:0,pct:0});
-      }
+      for(const p of pmDetail){const montoP=Number(p.monto)||0;if(!montoP)continue;await push(ref(db,'caja'),{tipo:'venta',concepto:`Venta: ${tableLabel3}${personName3?' · '+personName3:''} (${pmL[p.pm]||p.pm})${pct>0?` -${pct}%`:''}`,monto:montoP,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:p.pm,descuento:0,pct:0});}
     } else {
-      const concepto=`Venta: ${tableLabel3}${personName3?' · '+personName3:''} (${pmL[pm]||pm})${pct>0?` -${pct}%`:''}`;
-      await push(ref(db,'caja'),{tipo:'venta',concepto,monto:totalFinal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,descuento,pct});
+      await push(ref(db,'caja'),{tipo:'venta',concepto:`Venta: ${tableLabel3}${personName3?' · '+personName3:''} (${pmL[pm]||pm})${pct>0?` -${pct}%`:''}`,monto:totalFinal,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,descuento,pct});
     }
   }
   render();
 };
+
 window.adminGroupDeudor=async keys=>{
   let totalBase=0;let existingName='';
   for(const k of keys){
