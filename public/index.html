@@ -5337,6 +5337,7 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
       const exceso=Math.max(0,monto-saldoMostrado); // pagó de más
       const esSaldado=nuevoSaldo===0;
       const pmPrincipal=payments.length===1?payments[0].pm:'mixto';
+      const nuevoPagoDeuda={monto,pm:pmPrincipal,fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
       if(esSaldado){
         for(const k of keys){
           await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pmPrincipal,fromDeuda:true,cobradoAt:Date.now(),saldoPendiente:0});
@@ -5350,7 +5351,8 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
           const saldoK=o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
           const abono=Math.min(saldoK,restante);
           const nuevoSaldoK=Math.max(0,saldoK-abono);
-          await update(ref(db,`orders/${k}`),{saldoPendiente:nuevoSaldoK});
+          const histExist=o._historialPagos?Object.values(o._historialPagos):[];
+          await update(ref(db,`orders/${k}`),{saldoPendiente:nuevoSaldoK,_historialPagos:[...histExist,nuevoPagoDeuda]});
           if(DB.orders[k])DB.orders[k].saldoPendiente=nuevoSaldoK;
           restante-=abono;
         }
