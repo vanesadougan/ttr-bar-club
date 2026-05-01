@@ -4880,7 +4880,7 @@ function renderDeudoresTab(){
       });
 
       // Historial de pagos parciales
-      const histPagos=g.orders.flatMap(o=>o._historialPagos||[]).sort((a,b)=>(a.ts||0)-(b.ts||0));
+      const histPagos=g.orders.flatMap(o=>{const h=o._historialPagos;if(!h)return[];return Array.isArray(h)?h:Object.values(h);}).sort((a,b)=>(a.ts||0)-(b.ts||0));
       const yaPagadoD=g.orders.reduce((s,o)=>s+(o._pagosParciales||0),0);
       if(histPagos.length>0){
         const pmL2={efectivo:'💵 Ef.',debito:'💳 Déb.',credito:'💳 Créd.',transferencia:'📱 Trans.',mercadopago:'📱 MP'};
@@ -5516,7 +5516,7 @@ function renderHistoryTab(){
     } else {
       // Grupo de pedidos cobrados
       const orders=g.orders||[];
-      const totalBruto=orders.reduce((s,o)=>(o.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,ss),0);
+      const totalBruto=orders.reduce((s,o)=>s+(o.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,0),0);
       const desc=g.descuento||0;const pct=g.pct||0;
       const totalFinal=totalBruto-desc;
       const pm=g.paymentMethod;
@@ -6826,7 +6826,7 @@ window.adminGroupCobrado=async keys=>{
     ov.querySelector('#ch-cancel').onclick=()=>{ov.remove();res(null);};
   });
   if(!eleccion)return;
-  if(eleccion==='deudor'){adminGroupDeudor(keys);return;}
+  if(eleccion==='deudor'){adminGroupDeudor(keys,saldoRestante);return;}
 
   if(eleccion==='parcial'){
     const resultado=await new Promise(res=>{
@@ -6912,13 +6912,16 @@ window.adminGroupCobrado=async keys=>{
   render();
 };
 
-window.adminGroupDeudor=async keys=>{
+window.adminGroupDeudor=async(keys,saldoOverride)=>{
   let totalBase=0;let existingName='';
   for(const k of keys){
     const o=DB.orders[k];if(!o)continue;
     totalBase+=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
     if(!existingName&&o.personName)existingName=o.personName;
   }
+  // Si viene de pago parcial, usar el saldo restante como base
+  const yaPagadoDeudor=keys.reduce((s,k)=>{const o=DB.orders[k];return s+(o?o._pagosParciales||0:0);},0);
+  const baseDeudor=saldoOverride!=null?saldoOverride:Math.max(0,totalBase-yaPagadoDeudor);
   // Leer descuento guardado del grupo
   const grupoDisc=keys.map(k=>DB.orders[k]).find(o=>o&&o._grupoDescuento!=null);
   const preDescuento=grupoDisc?grupoDisc._grupoDescuento:0;
@@ -6929,7 +6932,7 @@ window.adminGroupDeudor=async keys=>{
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
   overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="font-size:16px;font-weight:600;margin-bottom:4px">💳 Registrar deudor</div>
-    <div style="font-size:13px;color:#6b7280;margin-bottom:14px">Total: <strong style="color:#dc2626">$${totalBase.toLocaleString()}</strong></div>
+    <div style="font-size:13px;color:#6b7280;margin-bottom:14px">Total: <strong style="color:#dc2626">$${baseDeudor.toLocaleString()}</strong>${yaPagadoDeudor>0?` <span style="font-size:11px;color:#059669">(ya pagado: $${yaPagadoDeudor.toLocaleString()})</span>`:''}</div>
     <div id="deudor-credito-info" style="display:none;padding:8px 12px;background:#f0fdf4;border-radius:8px;margin-bottom:10px;font-size:12px;color:#065f46;font-weight:600;border:0.5px solid #bbf7d0">💚 Tiene crédito a favor</div>
     <div class="form-group" style="margin-bottom:12px;position:relative">
       <label>Nombre del deudor <span style="color:var(--danger)">*</span></label>
@@ -7002,8 +7005,8 @@ window.adminGroupDeudor=async keys=>{
     if(!nombre){inp.focus();return;}
     const conDesc=discCheck.checked;
     const pct=conDesc?Math.min(100,Math.max(1,Number(discPct.value)||10)):0;
-    const descuento=conDesc?Math.round(totalBase*(pct/100)):0;
-    let saldoPendiente=totalBase-descuento;
+    const descuento=conDesc?Math.round(baseDeudor*(pct/100)):0;
+    let saldoPendiente=baseDeudor-descuento;
 
     // Aplicar crédito a favor si tiene
     const creditoCli=findClienteByName(nombre);
@@ -7034,7 +7037,10 @@ window.adminGroupDeudor=async keys=>{
       const o=DB.orders[k];
       const oTotal=o?(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0):0;
       const oDesc=conDesc?Math.round(oTotal*(pct/100)):0;
-      const oSaldo=Math.max(0,oTotal-oDesc-Math.min(creditoAplicado,oTotal-oDesc));
+      // Saldo proporcional: si hay pago parcial previo, distribuirlo
+      const oSaldoBruto=Math.max(0,oTotal-oDesc);
+      const proporcion=totalBase>0?oTotal/totalBase:1;
+      const oSaldo=Math.max(0,Math.round(saldoPendiente*proporcion));
       await update(ref(db,`orders/${k}`),{
         status:'deudor',deudorNombre:nombre,deudorApellido:'',
         deudorRegistradoAt:Date.now(),saldoPendiente:oSaldo,
