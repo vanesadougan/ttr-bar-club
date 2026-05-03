@@ -2170,7 +2170,7 @@ window.waiterMarkCobradoGroup=async(keys)=>{
     const nuevoYaPagado=yaPagado+montoCobrado;
     const cubierto=nuevoYaPagado>=totalConDesc;
     const nuevoPago={monto:montoCobrado,pm,fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
-    for(const k of keys){const o=DB.orders[k];if(!o)continue;const hist=[...(o._historialPagos||[]),nuevoPago];await update(ref(db,`orders/${k}`),{_pagosParciales:nuevoYaPagado,_ultimoPm:pm,_historialPagos:hist,...(cubierto?{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()}:{})});}
+    let isFirst1=true;for(const k of keys){const o=DB.orders[k];if(!o)continue;const histData=isFirst1?[...( Array.isArray(o._historialPagos)?o._historialPagos:Object.values(o._historialPagos||{})),nuevoPago]:undefined;isFirst1=false;const upd={_pagosParciales:nuevoYaPagado,_ultimoPm:pm,...(histData!==undefined?{_historialPagos:histData}:{}),...(cubierto?{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()}:{})};await update(ref(db,`orders/${k}`),upd);}
     render();return;
   }
 
@@ -2203,10 +2203,10 @@ window.waiterMarkCobradoGroup=async(keys)=>{
     if(confirmar==='si')creditoUsado=Math.min(creditoDisp2,saldoRestante);
   }
   const totalParaPagar=Math.max(0,saldoRestante-creditoUsado);
-  const res=totalParaPagar>0?await showPaymentChoiceModal(null,totalParaPagar,preDisc,existingPm):null;
+  const res=totalParaPagar>0?await showPaymentChoiceModal(null,totalParaPagar,null,existingPm):null;
   if(totalParaPagar>0&&!res)return;
   const pm=res?.pm||'credito_cliente';const pmDetail=res?.pmDetail||null;
-  const descuento=(res?.descuento||0)+creditoUsado;const pct=res?.pct||0;
+  const descuento=(res?.descuento||0)+creditoUsado+(preDisc?.descuento||0);const pct=preDisc?.pct||res?.pct||0;
   const totalFinal=totalParaPagar-(res?.descuento||0);
   const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
   for(const k of keys){await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});}
@@ -5346,14 +5346,20 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
         }
       } else {
         let restante=monto;
+        let primerOrder=true;
         for(const k of keys){
           if(restante<=0)break;
           const o=DB.orders[k];if(!o)continue;
           const saldoK=o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
           const abono=Math.min(saldoK,restante);
           const nuevoSaldoK=Math.max(0,saldoK-abono);
-          const histExist=o._historialPagos?Object.values(o._historialPagos):[];
-          await update(ref(db,`orders/${k}`),{saldoPendiente:nuevoSaldoK,_historialPagos:[...histExist,nuevoPagoDeuda]});
+          const updateData={saldoPendiente:nuevoSaldoK};
+          if(primerOrder){
+            const histExist=o._historialPagos?Object.values(o._historialPagos):[];
+            updateData._historialPagos=[...histExist,nuevoPagoDeuda];
+            primerOrder=false;
+          }
+          await update(ref(db,`orders/${k}`),updateData);
           if(DB.orders[k])DB.orders[k].saldoPendiente=nuevoSaldoK;
           restante-=abono;
         }
@@ -6865,7 +6871,7 @@ window.adminGroupCobrado=async keys=>{
     const nuevoYaPagado=yaPagado+montoCobrado;
     const cubierto=nuevoYaPagado>=totalConDesc;
     const nuevoPago2={monto:montoCobrado,pm,fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
-    for(const k of keys){const o=DB.orders[k];if(!o)continue;const hist=[...(o._historialPagos||[]),nuevoPago2];await update(ref(db,`orders/${k}`),{_pagosParciales:nuevoYaPagado,_ultimoPm:pm,_historialPagos:hist,...(cubierto?{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()}:{})});}
+    let isFirst2=true;for(const k of keys){const o=DB.orders[k];if(!o)continue;const histData2=isFirst2?[...(Array.isArray(o._historialPagos)?o._historialPagos:Object.values(o._historialPagos||{})),nuevoPago2]:undefined;isFirst2=false;const upd2={_pagosParciales:nuevoYaPagado,_ultimoPm:pm,...(histData2!==undefined?{_historialPagos:histData2}:{}),...(cubierto?{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()}:{})};await update(ref(db,`orders/${k}`),upd2);}
     render();return;
   }
 
@@ -6896,10 +6902,10 @@ window.adminGroupCobrado=async keys=>{
     if(confirmar==='si')creditoUsado=Math.min(creditoDisp,saldoRestante);
   }
   const totalParaPagar=Math.max(0,saldoRestante-creditoUsado);
-  const res=totalParaPagar>0?await showPaymentChoiceModal(null,totalParaPagar,preDisc,existingPm):null;
+  const res=totalParaPagar>0?await showPaymentChoiceModal(null,totalParaPagar,null,existingPm):null;
   if(totalParaPagar>0&&!res)return;
   const pm=res?.pm||'credito_cliente';const pmDetail=res?.pmDetail||null;
-  const descuento=(res?.descuento||0)+creditoUsado;const pct=res?.pct||0;
+  const descuento=(res?.descuento||0)+creditoUsado+(preDisc?.descuento||0);const pct=preDisc?.pct||res?.pct||0;
   const totalFinal=totalParaPagar-(res?.descuento||0);
   const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
   for(const k of keys){await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});}
