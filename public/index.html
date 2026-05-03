@@ -4881,15 +4881,17 @@ function renderDeudoresTab(){
       });
 
       // Historial de pagos parciales
-      const histPagos=g.orders.flatMap(o=>{const h=o._historialPagos;if(!h)return[];return Array.isArray(h)?h:Object.values(h);}).sort((a,b)=>(a.ts||0)-(b.ts||0));
+      const allPagos=g.orders.flatMap(o=>{const h=o._historialPagos;if(!h)return[];return Array.isArray(h)?h:Object.values(h);});
+      // Deduplicar por timestamp
+      const seen=new Set();
+      const histPagos=allPagos.filter(p=>{const k=String(p.ts||p.fecha);if(seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>(a.ts||0)-(b.ts||0));
       const yaPagadoD=g.orders.reduce((s,o)=>s+(o._pagosParciales||0),0);
       if(histPagos.length>0){
         const pmL2={efectivo:'💵 Ef.',debito:'💳 Déb.',credito:'💳 Créd.',transferencia:'📱 Trans.',mercadopago:'📱 MP'};
         h+=`<div style="margin:0 16px 10px;padding:8px 12px;background:#f0f7ff;border-radius:8px;border:0.5px solid #bfdbfe">`;
         h+=`<div style="font-size:11px;font-weight:700;color:#1e40af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Pagos registrados</div>`;
         histPagos.forEach(p=>{
-          const fecha=p.fecha||'';const hora=p.ts?new Date(p.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}):'';
-          h+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:0.5px solid #dbeafe">`;
+          const fecha=p.fecha||'';const hora=p.ts?new Date(p.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';          h+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:0.5px solid #dbeafe">`;
           h+=`<span style="font-size:11px;color:#3b82f6">${fecha} ${hora} · ${pmL2[p.pm]||p.pm||''}</span>`;
           h+=`<span style="font-size:12px;font-weight:600;color:#1e40af">$${Number(p.monto||0).toLocaleString()}</span>`;
           h+=`</div>`;
