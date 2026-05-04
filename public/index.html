@@ -4493,39 +4493,48 @@ function renderComprasTab(){
         porProveedor[pk].compras.push(c);
       });
 
-      Object.values(porProveedor).forEach(grupo=>{
+      Object.entries(porProveedor).forEach(([pk,grupo])=>{
+        // Ordenar por fecha más antigua primero (para pagar en orden)
+        grupo.compras.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
         const totalGrupo=grupo.compras.reduce((s,c)=>s+(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta),0);
+        const keysGrupo=JSON.stringify(grupo.compras.map(c=>c._key));
+
         h+=`<div class="card" style="margin-bottom:1rem;padding:0;overflow:hidden;border-left:3px solid #dc2626">`;
-        // Header proveedor
-        h+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:#fff1f2;border-bottom:0.5px solid #fca5a5">`;
+
+        // Header proveedor con botones de pago
+        h+=`<div style="padding:12px 16px;background:#fff1f2;border-bottom:0.5px solid #fca5a5">`;
+        h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">`;
         h+=`<span style="font-size:16px;font-weight:700">🏭 ${grupo.nombre}</span>`;
         h+=`<span style="font-size:18px;font-weight:700;color:#dc2626">$${totalGrupo.toLocaleString()}</span>`;
         h+=`</div>`;
+        h+=`<div style="display:flex;gap:6px">`;
+        h+=`<button onclick="pagarProveedorTotal('${pk}')" style="flex:1;padding:8px 10px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">💵 Pagar total</button>`;
+        h+=`<button onclick="pagarProveedorParcial('${pk}')" style="flex:1;padding:8px 10px;border-radius:8px;border:0.5px solid #d97706;background:#fef3c7;color:#92400e;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">💳 Pago parcial</button>`;
+        h+=`</div></div>`;
 
-        // Cada deuda del proveedor
+        // Detalle de cada boleta (sin botones de pago)
         grupo.compras.forEach(c=>{
           const saldo=c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta;
           const pagado=c.totalBoleta-saldo;
           const histPagos=c._historialPagos?(Array.isArray(c._historialPagos)?c._historialPagos:Object.values(c._historialPagos)):[];
           const pmL={efectivo:'💵 Ef.',debito:'💳 Déb.',credito:'💳 Créd.',transferencia:'📱 Trans.',mercadopago:'📱 MP'};
 
-          h+=`<div style="padding:12px 16px;border-bottom:0.5px solid #fee2e2">`;
-          // Info boleta
-          h+=`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px">`;
+          h+=`<div style="padding:10px 16px;border-bottom:0.5px solid #fee2e2">`;
+          h+=`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px">`;
           h+=`<div style="flex:1">`;
           h+=`<div style="font-size:12px;color:var(--muted)">${c.fecha||''}${c.boleta?` · Boleta: ${c.boleta}`:''}</div>`;
           if(c.descripcion)h+=`<div style="font-size:13px;color:var(--text);margin-top:2px">${c.descripcion}</div>`;
           h+=`</div>`;
           h+=`<div style="text-align:right;flex-shrink:0">`;
-          h+=`<div style="font-size:17px;font-weight:700;color:#dc2626">$${saldo.toLocaleString()}</div>`;
+          h+=`<div style="font-size:15px;font-weight:700;color:#dc2626">$${saldo.toLocaleString()}</div>`;
           h+=`<div style="font-size:11px;color:var(--muted)">de $${c.totalBoleta.toLocaleString()}</div>`;
           if(pagado>0)h+=`<div style="font-size:11px;color:#059669">Pagado: $${pagado.toLocaleString()}</div>`;
           h+=`</div></div>`;
 
-          // Historial de pagos parciales
+          // Historial de pagos
           if(histPagos.length>0){
-            h+=`<div style="background:#f0f7ff;border-radius:8px;padding:8px 10px;margin-bottom:8px;border:0.5px solid #bfdbfe">`;
-            h+=`<div style="font-size:10px;font-weight:700;color:#1e40af;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em">Pagos realizados</div>`;
+            h+=`<div style="background:#f0f7ff;border-radius:8px;padding:7px 10px;border:0.5px solid #bfdbfe">`;
+            h+=`<div style="font-size:10px;font-weight:700;color:#1e40af;margin-bottom:4px;text-transform:uppercase">Pagos realizados</div>`;
             histPagos.filter(p=>p.ts&&p.ts>1000000000).sort((a,b)=>(a.ts||0)-(b.ts||0)).forEach(p=>{
               const hora=new Date(p.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false});
               h+=`<div style="display:flex;justify-content:space-between;padding:2px 0;font-size:11px">`;
@@ -4536,11 +4545,8 @@ function renderComprasTab(){
             h+=`</div>`;
           }
 
-          // Botones
-          h+=`<div style="display:flex;gap:6px">`;
-          h+=`<button onclick="pagarCompraModal('${c._key}')" style="flex:1;padding:7px 10px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">💵 Pagar total</button>`;
-          h+=`<button onclick="pagarCompraModalParcial('${c._key}')" style="flex:1;padding:7px 10px;border-radius:8px;border:0.5px solid #d97706;background:#fef3c7;color:#92400e;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit">💳 Parcial</button>`;
-          h+=`<button onclick="if(confirm('¿Eliminar esta compra?'))eliminarCompra('${c._key}')" style="padding:7px 10px;border-radius:8px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:12px;cursor:pointer;font-family:inherit">✕</button>`;
+          h+=`<div style="display:flex;justify-content:flex-end;margin-top:6px">`;
+          h+=`<button onclick="if(confirm('¿Eliminar esta compra?'))eliminarCompra('${c._key}')" style="padding:4px 10px;border-radius:6px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:11px;cursor:pointer;font-family:inherit">✕ Eliminar</button>`;
           h+=`</div>`;
           h+=`</div>`;
         });
@@ -4612,6 +4618,77 @@ window.abrirPagoCompra=async(tipo)=>{
   C._addingCompra=false;C._newCompra={};C._comprasSubTab=estado==='pagado'?'historial':'deudas';render();
 };
 
+window.pagarProveedorTotal=async(provKey)=>{
+  const compras=Object.entries(DB.compras||{}).map(([k,v])=>({...v,_key:k}))
+    .filter(c=>c.estado==='pendiente'&&(c.proveedorKey||c.proveedorNombre||'sin-proveedor')===provKey)
+    .sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  if(!compras.length)return;
+  const totalGrupo=compras.reduce((s,c)=>s+(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta),0);
+  const nombreProv=compras[0].proveedorNombre||'Proveedor';
+  const resultado=await modalPagoCompra(nombreProv,totalGrupo,totalGrupo,totalGrupo);
+  if(!resultado)return;
+  const {monto,payments}=resultado;
+  await aplicarPagoProveedor(compras,monto,payments,nombreProv);
+};
+
+window.pagarProveedorParcial=async(provKey)=>{
+  const compras=Object.entries(DB.compras||{}).map(([k,v])=>({...v,_key:k}))
+    .filter(c=>c.estado==='pendiente'&&(c.proveedorKey||c.proveedorNombre||'sin-proveedor')===provKey)
+    .sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  if(!compras.length)return;
+  const totalGrupo=compras.reduce((s,c)=>s+(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta),0);
+  const nombreProv=compras[0].proveedorNombre||'Proveedor';
+  // Modal parcial
+  const resultado=await new Promise(res=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
+    const pms=[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}];
+    let monto=totalGrupo;let pmSel=null;
+    const renderOv=()=>{
+      ov.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">💳 Pago parcial</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px">🏭 ${nombreProv} · Total: <strong style="color:#dc2626">$${totalGrupo.toLocaleString()}</strong></div>
+        <div class="form-group" style="margin-bottom:12px"><label>Monto a pagar ahora</label>
+          <input id="pp-monto" type="number" min="1" max="${totalGrupo}" value="${monto}" style="font-size:20px;font-weight:700;text-align:center;padding:10px;width:100%;border:1.5px solid var(--brand);border-radius:8px;font-family:inherit;box-sizing:border-box">
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+          ${pms.map(p=>`<button data-pm="${p.v}" style="padding:7px 10px;border-radius:8px;border:1.5px solid ${pmSel===p.v?'var(--accent)':'var(--border)'};background:${pmSel===p.v?'#fff5f7':'var(--card)'};color:${pmSel===p.v?'var(--accent)':'var(--text)'};font-size:12px;font-weight:${pmSel===p.v?600:400};cursor:pointer;font-family:inherit">${p.l}</button>`).join('')}
+        </div>
+        <button id="pp-ok" ${pmSel?'':'disabled'} style="width:100%;padding:11px;border-radius:8px;border:none;background:${pmSel?'#059669':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${pmSel?'pointer':'not-allowed'};font-family:inherit;margin-bottom:8px;opacity:${pmSel?1:.6}">Registrar pago</button>
+        <button id="pp-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>`;
+      ov.querySelector('#pp-monto').addEventListener('input',e=>{monto=Math.min(totalGrupo,Math.max(0,Number(e.target.value)||0));});
+      ov.querySelectorAll('[data-pm]').forEach(btn=>{btn.onclick=()=>{pmSel=btn.dataset.pm;renderOv();};});
+      ov.querySelector('#pp-ok')?.addEventListener('click',()=>{const m=Math.max(0,Number(ov.querySelector('#pp-monto').value)||0);if(!m||!pmSel)return;ov.remove();res({monto:m,pm:pmSel});});
+      ov.querySelector('#pp-cancel').onclick=()=>{ov.remove();res(null);};
+    };
+    document.body.appendChild(ov);renderOv();
+  });
+  if(!resultado)return;
+  await aplicarPagoProveedor(compras,resultado.monto,[{pm:resultado.pm,monto:resultado.monto}],nombreProv);
+};
+
+async function aplicarPagoProveedor(compras,montoTotal,payments,nombreProv){
+  // Pagar boletas de la más antigua a la más nueva
+  let restante=montoTotal;
+  const nuevoPago={monto:montoTotal,pm:payments[0]?.pm||'efectivo',fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
+  for(const c of compras){
+    if(restante<=0)break;
+    const saldo=c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta;
+    if(saldo<=0)continue;
+    const abono=Math.min(saldo,restante);
+    const nuevoSaldo=Math.max(0,saldo-abono);
+    const estado=nuevoSaldo===0?'pagado':'pendiente';
+    // Solo guardar historial en la primera boleta que se abona
+    const histExist=c._historialPagos?(Array.isArray(c._historialPagos)?c._historialPagos:Object.values(c._historialPagos)):[];
+    const pagoProporcional={...nuevoPago,monto:abono};
+    await update(ref(db,`compras/${c._key}`),{saldoPendiente:nuevoSaldo,estado,_historialPagos:[...histExist,pagoProporcional]});
+    restante-=abono;
+  }
+  // Registrar en caja
+  await registrarPagoEnCaja(payments,montoTotal,nombreProv,'proveedor');
+  render();
+}
 window.pagarCompraModal=async(key)=>{
   const c=DB.compras[key];if(!c)return;
   const saldo=c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta;
