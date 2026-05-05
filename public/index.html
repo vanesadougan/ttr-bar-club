@@ -684,7 +684,7 @@ function renderAdmin(){
     ratings:'⭐ Calificaciones',
     clientes:'👥 Clientes',
     proveedores:'🏭 Proveedores',
-    compras:`🛒 Compras${(()=>{const n=Object.values(DB.compras||{}).filter(c=>c.estado==='pendiente').length;return n>0?` <span class="badge">${n}</span>`:''})()}`
+    compras:`🛒 Compras${(()=>{const n=new Set(Object.values(DB.compras||{}).filter(c=>c.estado==='pendiente'||(c.estado!=='pagado'&&(c.saldoPendiente==null||c.saldoPendiente>0))).map(c=>c.proveedorKey||c.proveedorNombre||'?')).size;return n>0?` <span class="badge">${n}</span>`:''})()}`
   };
   // Determinar tab activo de nivel 1
   const dishTabs=['dishes','cafeteria','kiosko'];
@@ -4416,11 +4416,14 @@ window.editCliente=(key,nombreActual)=>{
   inp.addEventListener('keydown',e=>{if(e.key==='Enter')overlay.querySelector('#edit-cliente-ok').click();});
 };
 function renderComprasTab(){
-  const compras=Object.entries(DB.compras||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(b.fecha||0)-(a.fecha||0));
-  const ahora=Date.now();
-  const hace60=ahora-60*24*60*60*1000;
-  const pendientes=compras.filter(c=>c.estado==='pendiente');
-  const historial=compras.filter(c=>c.estado==='pagado'&&(c.creadoAt||0)>=hace60);
+  const compras=Object.entries(DB.compras||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  const ahora=new Date();
+  const hace60=new Date(ahora);hace60.setDate(hace60.getDate()-60);
+  const hace60Str=hace60.toISOString().slice(0,10);
+  const getSaldo=c=>c.saldoPendiente!=null?Number(c.saldoPendiente):Number(c.totalBoleta||0);
+  const fmtFecha=f=>{if(!f)return'';const[y,m,d]=f.split('-');return`${d||''}/${m||''}/${y||''}`;};
+  const pendientes=compras.filter(c=>getSaldo(c)>0&&c.estado!=='pagado');
+  const historial=compras.filter(c=>c.estado==='pagado'||(getSaldo(c)===0&&c.totalBoleta>0)).filter(c=>(c.fecha||'')>=hace60Str);
   const proveedores=Object.entries(DB.proveedores||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
   const addF=C._addingCompra||false;
   const newC=C._newCompra||{};
@@ -4486,29 +4489,79 @@ function renderComprasTab(){
         <div style="font-size:16px;font-weight:500">Sin deudas pendientes</div>
       </div>`;
     } else {
+      // Agrupar por proveedor
+      const porProveedor={};
       pendientes.forEach(c=>{
-        const pagado=c.totalBoleta-(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta);
-        h+=`<div class="card" style="margin-bottom:.875rem;border-left:3px solid #dc2626">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px">
-            <div style="flex:1">
-              <div style="font-size:15px;font-weight:700">🏭 ${c.proveedorNombre||'Sin proveedor'}</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px">${c.fecha||''} ${c.boleta?`· Boleta: ${c.boleta}`:''}</div>
-              ${c.descripcion?`<div style="font-size:13px;color:var(--muted);margin-top:4px">${c.descripcion}</div>`:''}
-            </div>
-            <div style="text-align:right;flex-shrink:0">
-              <div style="font-size:20px;font-weight:700;color:#dc2626">$${(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta).toLocaleString()}</div>
-              <div style="font-size:11px;color:var(--muted)">de $${c.totalBoleta.toLocaleString()}</div>
-              ${pagado>0?`<div style="font-size:11px;color:#059669">Ya pagado: $${pagado.toLocaleString()}</div>`:''}
-            </div>
-          </div>
-          <div style="display:flex;gap:6px">
-            <button onclick="abrirPagoCompraPendiente('${c._key}')" style="flex:1;padding:7px 12px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">💵 Pagar</button>
-            <button onclick="if(confirm('¿Eliminar esta compra?'))eliminarCompra('${c._key}')" style="padding:7px 10px;border-radius:8px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:13px;cursor:pointer;font-family:inherit">✕</button>
-          </div>
-        </div>`;
+        const pk=c.proveedorKey||c.proveedorNombre||'sin-proveedor';
+        if(!porProveedor[pk])porProveedor[pk]={nombre:c.proveedorNombre||'Sin proveedor',compras:[]};
+        porProveedor[pk].compras.push(c);
+      });
+
+      Object.entries(porProveedor).forEach(([pk,grupo])=>{
+        grupo.compras.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+        // Solo las que realmente tienen saldo pendiente
+        const comprasPendientes=grupo.compras.filter(c=>(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta)>0&&c.estado!=='pagado');
+        if(!comprasPendientes.length)return; // Skip si todas pagadas
+        const totalGrupo=comprasPendientes.reduce((s,c)=>s+(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta),0);
+        const totalOriginal=comprasPendientes.reduce((s,c)=>s+c.totalBoleta,0);
+        const totalPagado=totalOriginal-totalGrupo;
+
+        h+=`<div class="card" style="margin-bottom:1rem;padding:0;overflow:hidden;border-left:3px solid #dc2626">`;
+
+        // Header proveedor — estilo deudores
+        h+=`<div style="padding:12px 16px;background:#fff1f2;border-bottom:0.5px solid #fca5a5">`;
+        h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${totalPagado>0?8:0}px">`;
+        h+=`<span style="font-size:16px;font-weight:700">🏭 ${grupo.nombre}</span>`;
+        h+=`</div>`;
+        if(totalPagado>0){
+          h+=`<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:2px"><span style="color:var(--muted)">Pendiente de pago:</span><span style="font-weight:700;color:#dc2626">$${totalGrupo.toLocaleString()}</span></div>`;
+          h+=`<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:2px"><span style="color:var(--muted)">Ya se pagó:</span><span style="font-weight:600;color:#059669">$${totalPagado.toLocaleString()}</span></div>`;
+          h+=`<div style="display:flex;justify-content:space-between;font-size:13px;border-top:0.5px solid #fca5a5;margin-top:4px;padding-top:4px"><span style="color:var(--muted)">Deuda inicial:</span><span style="font-weight:700;color:#dc2626">$${totalOriginal.toLocaleString()}</span></div>`;
+        } else {
+          h+=`<div style="font-size:18px;font-weight:700;color:#dc2626">$${totalGrupo.toLocaleString()}</div>`;
+        }
+        h+=`</div>`;
+
+        // Boletas pendientes
+        comprasPendientes.forEach(c=>{
+          const saldo=c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta;
+          h+=`<div style="padding:10px 16px;border-bottom:0.5px solid #fee2e2">`;
+          h+=`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">`;
+          h+=`<div style="flex:1"><div style="font-size:12px;color:var(--muted)">${fmtFecha(c.fecha)}${c.boleta?` · Boleta: ${c.boleta}`:''}</div>`;
+          if(c.descripcion)h+=`<div style="font-size:13px;color:var(--text);margin-top:2px">${c.descripcion}</div>`;
+          h+=`</div><div style="text-align:right;flex-shrink:0"><div style="font-size:15px;font-weight:700;color:#dc2626">$${saldo.toLocaleString()}</div></div></div>`;
+          h+=`<div style="display:flex;justify-content:flex-end;margin-top:4px"><button onclick="if(confirm('¿Eliminar esta compra?'))eliminarCompra('${c._key}')" style="padding:3px 8px;border-radius:6px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:11px;cursor:pointer;font-family:inherit">✕ Eliminar</button></div>`;
+          h+=`</div>`;
+        });
+
+        // Pagos realizados
+        const todosLosPagos=comprasPendientes.flatMap(c=>{
+          const h2=c._historialPagos;if(!h2)return[];
+          return (Array.isArray(h2)?h2:Object.values(h2)).filter(p=>p.ts&&p.ts>1000000000);
+        }).sort((a,b)=>(a.ts||0)-(b.ts||0));
+        const pmL={efectivo:'💵 Ef.',debito:'💳 Déb.',credito:'💳 Créd.',transferencia:'📱 Trans.',mercadopago:'📱 MP'};
+        if(todosLosPagos.length>0){
+          h+=`<div style="padding:10px 16px;border-bottom:0.5px solid #fca5a5;background:#f8f9ff">`;
+          h+=`<div style="font-size:11px;font-weight:700;color:#1e40af;margin-bottom:6px;text-transform:uppercase">Pagos realizados</div>`;
+          todosLosPagos.forEach(p=>{
+            const hora=new Date(p.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false});
+            h+=`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;border-bottom:0.5px solid #e0e7ff">`;
+            h+=`<span style="color:#3b82f6">${fmtFecha(p.fecha)} ${hora} · ${pmL[p.pm]||p.pm||''}</span>`;
+            h+=`<span style="font-weight:600;color:#1e40af">$${Number(p.monto||0).toLocaleString()}</span>`;
+            h+=`</div>`;
+          });
+          h+=`</div>`;
+        }
+
+        // Botón único de pago
+        h+=`<div style="padding:12px 16px;background:#fff1f2;border-top:0.5px solid #fca5a5">`;
+        h+=`<button onclick="pagarProveedorModal('${pk}')" style="width:100%;padding:10px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">💵 Pagar a ${grupo.nombre}</button>`;
+        h+=`</div>`;
+
+        h+=`</div>`;
       });
     }
-  } else {
+  } else if(subTab==='historial'){
     if(historial.length===0){
       h+=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">
         <div style="font-size:40px;margin-bottom:12px">📜</div>
@@ -4520,7 +4573,7 @@ function renderComprasTab(){
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
             <div style="flex:1">
               <div style="font-size:14px;font-weight:600">🏭 ${c.proveedorNombre||'Sin proveedor'}</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px">${c.fecha||''} ${c.boleta?`· Boleta: ${c.boleta}`:''}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">${fmtFecha(c.fecha)} ${c.boleta?`· Boleta: ${c.boleta}`:''}</div>
               ${c.descripcion?`<div style="font-size:13px;color:var(--muted);margin-top:2px">${c.descripcion}</div>`:''}
             </div>
             <div style="text-align:right;flex-shrink:0">
@@ -4572,6 +4625,170 @@ window.abrirPagoCompra=async(tipo)=>{
   C._addingCompra=false;C._newCompra={};C._comprasSubTab=estado==='pagado'?'historial':'deudas';render();
 };
 
+window.pagarProveedorModal=async(provKey)=>{
+  const compras=Object.entries(DB.compras||{}).map(([k,v])=>({...v,_key:k}))
+    .filter(c=>c.estado==='pendiente'&&(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta)>0&&(c.proveedorKey||c.proveedorNombre||'sin-proveedor')===provKey)
+    .sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  if(!compras.length)return;
+  const totalGrupo=compras.reduce((s,c)=>s+(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta),0);
+  const nombreProv=compras[0].proveedorNombre||'Proveedor';
+  const pms=[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}];
+
+  const resultado=await new Promise(res=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
+    let monto=totalGrupo;let pmSel=null;
+    const renderOv=()=>{
+      ov.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">💳 Pago a proveedor</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px">🏭 ${nombreProv} · Total pendiente: <strong style="color:#dc2626">$${totalGrupo.toLocaleString()}</strong></div>
+        <div class="form-group" style="margin-bottom:12px"><label>Monto a pagar</label>
+          <input id="pp-monto" type="number" min="1" max="${totalGrupo}" value="${monto}" style="font-size:20px;font-weight:700;text-align:center;padding:10px;width:100%;border:1.5px solid var(--brand);border-radius:8px;font-family:inherit;box-sizing:border-box">
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+          ${pms.map(p=>`<button data-pm="${p.v}" style="padding:7px 10px;border-radius:8px;border:1.5px solid ${pmSel===p.v?'var(--accent)':'var(--border)'};background:${pmSel===p.v?'#fff5f7':'var(--card)'};color:${pmSel===p.v?'var(--accent)':'var(--text)'};font-size:12px;font-weight:${pmSel===p.v?600:400};cursor:pointer;font-family:inherit">${p.l}</button>`).join('')}
+        </div>
+        <button id="pp-ok" ${pmSel?'':'disabled'} style="width:100%;padding:11px;border-radius:8px;border:none;background:${pmSel?'#059669':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${pmSel?'pointer':'not-allowed'};font-family:inherit;margin-bottom:8px;opacity:${pmSel?1:.6}">Registrar pago</button>
+        <button id="pp-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>`;
+      ov.querySelector('#pp-monto').addEventListener('input',e=>{monto=Math.min(totalGrupo,Math.max(0,Number(e.target.value)||0));});
+      ov.querySelectorAll('[data-pm]').forEach(btn=>{btn.onclick=()=>{pmSel=btn.dataset.pm;renderOv();};});
+      ov.querySelector('#pp-ok')?.addEventListener('click',()=>{const m=Math.max(0,Number(ov.querySelector('#pp-monto').value)||0);if(!m||!pmSel)return;ov.remove();res({monto:m,pm:pmSel});});
+      ov.querySelector('#pp-cancel').onclick=()=>{ov.remove();res(null);};
+    };
+    document.body.appendChild(ov);renderOv();
+  });
+  if(!resultado)return;
+  await aplicarPagoProveedor(compras,resultado.monto,[{pm:resultado.pm,monto:resultado.monto}],nombreProv);
+};
+window.pagarProveedorTotal=async(provKey)=>{
+  const compras=Object.entries(DB.compras||{}).map(([k,v])=>({...v,_key:k}))
+    .filter(c=>c.estado==='pendiente'&&(c.proveedorKey||c.proveedorNombre||'sin-proveedor')===provKey)
+    .sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  if(!compras.length)return;
+  const totalGrupo=compras.reduce((s,c)=>s+(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta),0);
+  const nombreProv=compras[0].proveedorNombre||'Proveedor';
+  const resultado=await modalPagoCompra(nombreProv,totalGrupo,totalGrupo,totalGrupo);
+  if(!resultado)return;
+  const {monto,payments}=resultado;
+  await aplicarPagoProveedor(compras,monto,payments,nombreProv);
+};
+
+window.pagarProveedorParcial=async(provKey)=>{
+  const compras=Object.entries(DB.compras||{}).map(([k,v])=>({...v,_key:k}))
+    .filter(c=>c.estado==='pendiente'&&(c.proveedorKey||c.proveedorNombre||'sin-proveedor')===provKey)
+    .sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  if(!compras.length)return;
+  const totalGrupo=compras.reduce((s,c)=>s+(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta),0);
+  const nombreProv=compras[0].proveedorNombre||'Proveedor';
+  // Modal parcial
+  const resultado=await new Promise(res=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
+    const pms=[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}];
+    let monto=totalGrupo;let pmSel=null;
+    const renderOv=()=>{
+      ov.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">💳 Pago parcial</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px">🏭 ${nombreProv} · Total: <strong style="color:#dc2626">$${totalGrupo.toLocaleString()}</strong></div>
+        <div class="form-group" style="margin-bottom:12px"><label>Monto a pagar ahora</label>
+          <input id="pp-monto" type="number" min="1" max="${totalGrupo}" value="${monto}" style="font-size:20px;font-weight:700;text-align:center;padding:10px;width:100%;border:1.5px solid var(--brand);border-radius:8px;font-family:inherit;box-sizing:border-box">
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+          ${pms.map(p=>`<button data-pm="${p.v}" style="padding:7px 10px;border-radius:8px;border:1.5px solid ${pmSel===p.v?'var(--accent)':'var(--border)'};background:${pmSel===p.v?'#fff5f7':'var(--card)'};color:${pmSel===p.v?'var(--accent)':'var(--text)'};font-size:12px;font-weight:${pmSel===p.v?600:400};cursor:pointer;font-family:inherit">${p.l}</button>`).join('')}
+        </div>
+        <button id="pp-ok" ${pmSel?'':'disabled'} style="width:100%;padding:11px;border-radius:8px;border:none;background:${pmSel?'#059669':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${pmSel?'pointer':'not-allowed'};font-family:inherit;margin-bottom:8px;opacity:${pmSel?1:.6}">Registrar pago</button>
+        <button id="pp-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>`;
+      ov.querySelector('#pp-monto').addEventListener('input',e=>{monto=Math.min(totalGrupo,Math.max(0,Number(e.target.value)||0));});
+      ov.querySelectorAll('[data-pm]').forEach(btn=>{btn.onclick=()=>{pmSel=btn.dataset.pm;renderOv();};});
+      ov.querySelector('#pp-ok')?.addEventListener('click',()=>{const m=Math.max(0,Number(ov.querySelector('#pp-monto').value)||0);if(!m||!pmSel)return;ov.remove();res({monto:m,pm:pmSel});});
+      ov.querySelector('#pp-cancel').onclick=()=>{ov.remove();res(null);};
+    };
+    document.body.appendChild(ov);renderOv();
+  });
+  if(!resultado)return;
+  await aplicarPagoProveedor(compras,resultado.monto,[{pm:resultado.pm,monto:resultado.monto}],nombreProv);
+};
+
+async function aplicarPagoProveedor(compras,montoTotal,payments,nombreProv){
+  let restante=montoTotal;
+  const pm=payments[0]?.pm||'efectivo';
+  const fecha=new Date().toISOString().slice(0,10);
+  const ts=Date.now();
+  for(const c of compras){
+    if(restante<=0)break;
+    const saldo=c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta;
+    if(saldo<=0)continue;
+    const abono=Math.min(saldo,restante);
+    const nuevoSaldo=Math.max(0,saldo-abono);
+    const estado=nuevoSaldo===0?'pagado':'pendiente';
+    // Guardar el pago como nuevo nodo (push) para no pisar historial existente
+    await push(ref(db,`compras/${c._key}/_historialPagos`),{monto:abono,pm,fecha,ts});
+    await update(ref(db,`compras/${c._key}`),{saldoPendiente:nuevoSaldo,estado});
+    restante-=abono;
+  }
+  await registrarPagoEnCaja(payments,montoTotal,nombreProv,'proveedor');
+  render();
+}
+window.pagarCompraModal=async(key)=>{
+  const c=DB.compras[key];if(!c)return;
+  const saldo=c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta;
+  const resultado=await modalPagoCompra(c.proveedorNombre||'Proveedor',c.totalBoleta,saldo,saldo);
+  if(!resultado)return;
+  const {monto,payments}=resultado;
+  const nuevoSaldo=Math.max(0,saldo-monto);
+  const estado=nuevoSaldo===0?'pagado':'pendiente';
+  const nuevoPago={monto,pm:payments[0]?.pm||'efectivo',fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
+  await push(ref(db,`compras/${key}/_historialPagos`),nuevoPago);
+  await update(ref(db,`compras/${key}`),{saldoPendiente:nuevoSaldo,estado});
+  await registrarPagoEnCaja(payments,monto,c.proveedorNombre||'',key);
+  render();
+};
+
+window.pagarCompraModalParcial=async(key)=>{
+  const c=DB.compras[key];if(!c)return;
+  const saldo=c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta;
+  // Modal pago parcial
+  const resultado=await new Promise(res=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
+    const pms=[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}];
+    let monto=saldo;let pmSel=null;
+    const renderOv=()=>{
+      ov.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">💳 Pago parcial</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px">🏭 ${c.proveedorNombre||'Proveedor'} · Saldo: <strong style="color:#dc2626">$${saldo.toLocaleString()}</strong></div>
+        <div class="form-group" style="margin-bottom:12px"><label>Monto a pagar ahora</label>
+          <input id="pp-monto" type="number" min="1" max="${saldo}" value="${monto}" style="font-size:20px;font-weight:700;text-align:center;padding:10px;width:100%;border:1.5px solid var(--brand);border-radius:8px;font-family:inherit;box-sizing:border-box">
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+          ${pms.map(p=>`<button data-pm="${p.v}" style="padding:7px 10px;border-radius:8px;border:1.5px solid ${pmSel===p.v?'var(--accent)':'var(--border)'};background:${pmSel===p.v?'#fff5f7':'var(--card)'};color:${pmSel===p.v?'var(--accent)':'var(--text)'};font-size:12px;font-weight:${pmSel===p.v?600:400};cursor:pointer;font-family:inherit">${p.l}</button>`).join('')}
+        </div>
+        <button id="pp-ok" ${pmSel?'':'disabled'} style="width:100%;padding:11px;border-radius:8px;border:none;background:${pmSel?'#059669':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${pmSel?'pointer':'not-allowed'};font-family:inherit;margin-bottom:8px;opacity:${pmSel?1:.6}">Registrar pago</button>
+        <button id="pp-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>`;
+      ov.querySelector('#pp-monto').addEventListener('input',e=>{monto=Math.min(saldo,Math.max(0,Number(e.target.value)||0));});
+      ov.querySelectorAll('[data-pm]').forEach(btn=>{btn.onclick=()=>{pmSel=btn.dataset.pm;renderOv();};});
+      ov.querySelector('#pp-ok')?.addEventListener('click',()=>{const m=Math.max(0,Number(ov.querySelector('#pp-monto').value)||0);if(!m||!pmSel)return;ov.remove();res({monto:m,pm:pmSel});});
+      ov.querySelector('#pp-cancel').onclick=()=>{ov.remove();res(null);};
+    };
+    document.body.appendChild(ov);renderOv();
+  });
+  if(!resultado)return;
+  const {monto:montoParcial,pm}=resultado;
+  const nuevoSaldo=Math.max(0,saldo-montoParcial);
+  const estado=nuevoSaldo===0?'pagado':'pendiente';
+  const nuevoPago={monto:montoParcial,pm,fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
+  await push(ref(db,`compras/${key}/_historialPagos`),nuevoPago);
+  await update(ref(db,`compras/${key}`),{saldoPendiente:nuevoSaldo,estado});
+  const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+  const hoy=new Date().toISOString().slice(0,10);
+  if(getCajaAbierta()){
+    await push(ref(db,'caja'),{tipo:'gasto',concepto:`Pago parcial proveedor ${c.proveedorNombre||''} (${pmL[pm]||pm}) — quedan $${nuevoSaldo.toLocaleString()}`,monto:-montoParcial,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:pm,compraKey:key});
+  }
+  render();
+};
 window.abrirPagoCompraPendiente=async(key)=>{
   const c=DB.compras[key];if(!c)return;
   const saldo=c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta;
@@ -4891,7 +5108,7 @@ function renderDeudoresTab(){
         h+=`<div style="margin:0 16px 10px;padding:8px 12px;background:#f0f7ff;border-radius:8px;border:0.5px solid #bfdbfe">`;
         h+=`<div style="font-size:11px;font-weight:700;color:#1e40af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Pagos registrados</div>`;
         histPagos.forEach(p=>{
-          const fecha=p.fecha||'';const hora=p.ts?new Date(p.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';          h+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:0.5px solid #dbeafe">`;
+          const fecha=p.fecha||'';const hora=(p.ts&&p.ts>1000000000)?new Date(p.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';'';          h+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:3px 0;border-bottom:0.5px solid #dbeafe">`;
           h+=`<span style="font-size:11px;color:#3b82f6">${fecha} ${hora} · ${pmL2[p.pm]||p.pm||''}</span>`;
           h+=`<span style="font-size:12px;font-weight:600;color:#1e40af">$${Number(p.monto||0).toLocaleString()}</span>`;
           h+=`</div>`;
@@ -5452,12 +5669,12 @@ function renderHistoryTab(){
     // Bucket de 5 minutos para agrupar cobros simultáneos
     const bucket=Math.floor(cobradoAt/300000);
     const gKey=`${tId}|${pName}|${bucket}`;
-    if(!grupos[gKey])grupos[gKey]={tableId:tId,personName:pName,orderMode:o.orderMode,cobradoAt,orders:[],paymentMethod:o.paymentMethod,descuento:o.descuento||0,pct:o.pct||0,isKiosko:o.isKiosko||false,takenBy:o.takenBy||null};
+    if(!grupos[gKey])grupos[gKey]={tableId:tId,personName:pName,orderMode:o.orderMode,cobradoAt,orders:[],paymentMethod:o.paymentMethod,descuento:0,pct:o.pct||0,isKiosko:o.isKiosko||false,takenBy:o.takenBy||null};
     grupos[gKey].orders.push(o);
-    // Usar el cobradoAt más reciente del grupo
     if(cobradoAt>grupos[gKey].cobradoAt)grupos[gKey].cobradoAt=cobradoAt;
     if(o.paymentMethod&&o.paymentMethod!=='credito_cliente')grupos[gKey].paymentMethod=o.paymentMethod;
-    grupos[gKey].descuento+=(o.descuento||0);
+    // Solo tomar el descuento del order que lo tiene (no acumular — el descuento es del grupo entero)
+    if((o.descuento||0)>0){grupos[gKey].descuento=o.descuento||0;grupos[gKey].pct=o.pct||0;}
   });
 
   // Deudas cobradas (sin agrupar — ya son una sola entrada)
