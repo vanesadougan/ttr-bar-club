@@ -683,7 +683,7 @@ function renderAdmin(){
     ratings:'⭐ Calificaciones',
     clientes:'👥 Clientes',
     proveedores:'🏭 Proveedores',
-    compras:`🛒 Compras${(()=>{const n=Object.values(DB.compras||{}).filter(c=>c.estado==='pendiente').length;return n>0?` <span class="badge">${n}</span>`:''})()}`
+    compras:`🛒 Compras${(()=>{const n=new Set(Object.values(DB.compras||{}).filter(c=>c.estado==='pendiente'||(c.estado!=='pagado'&&(c.saldoPendiente==null||c.saldoPendiente>0))).map(c=>c.proveedorKey||c.proveedorNombre||'?')).size;return n>0?` <span class="badge">${n}</span>`:''})()}`
   };
   // Determinar tab activo de nivel 1
   const dishTabs=['dishes','cafeteria','kiosko'];
@@ -4415,11 +4415,12 @@ window.editCliente=(key,nombreActual)=>{
   inp.addEventListener('keydown',e=>{if(e.key==='Enter')overlay.querySelector('#edit-cliente-ok').click();});
 };
 function renderComprasTab(){
-  const compras=Object.entries(DB.compras||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(b.fecha||0)-(a.fecha||0));
-  const ahora=Date.now();
-  const hace60=ahora-60*24*60*60*1000;
-  const pendientes=compras.filter(c=>c.estado==='pendiente');
-  const historial=compras.filter(c=>c.estado==='pagado'&&(c.creadoAt||0)>=hace60);
+  const compras=Object.entries(DB.compras||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||''));
+  const ahora=new Date();
+  const hace60=new Date(ahora);hace60.setDate(hace60.getDate()-60);
+  const hace60Str=hace60.toISOString().slice(0,10);
+  const pendientes=compras.filter(c=>c.estado==='pendiente'||(c.estado!=='pagado'&&(c.saldoPendiente==null||c.saldoPendiente>0)));
+  const historial=compras.filter(c=>c.estado==='pagado'&&(c.fecha||'')>=hace60Str);
   const proveedores=Object.entries(DB.proveedores||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
   const addF=C._addingCompra||false;
   const newC=C._newCompra||{};
