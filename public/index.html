@@ -4499,17 +4499,22 @@ function renderComprasTab(){
         const totalGrupo=grupo.compras.reduce((s,c)=>s+(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta),0);
         const keysGrupo=JSON.stringify(grupo.compras.map(c=>c._key));
 
+        const totalOriginal=grupo.compras.reduce((s,c)=>s+c.totalBoleta,0);
+        const totalPagado=totalOriginal-totalGrupo;
+
         h+=`<div class="card" style="margin-bottom:1rem;padding:0;overflow:hidden;border-left:3px solid #dc2626">`;
 
-        // Header proveedor con botones de pago
+        // Header proveedor — solo nombre
         h+=`<div style="padding:12px 16px;background:#fff1f2;border-bottom:0.5px solid #fca5a5">`;
-        h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">`;
-        h+=`<span style="font-size:16px;font-weight:700">🏭 ${grupo.nombre}</span>`;
-        h+=`<span style="font-size:18px;font-weight:700;color:#dc2626">$${totalGrupo.toLocaleString()}</span>`;
-        h+=`</div>`;
-        h+=`<div style="display:flex;gap:6px">`;
-        h+=`<button onclick="pagarProveedorTotal('${pk}')" style="flex:1;padding:8px 10px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">💵 Pagar total</button>`;
-        h+=`<button onclick="pagarProveedorParcial('${pk}')" style="flex:1;padding:8px 10px;border-radius:8px;border:0.5px solid #d97706;background:#fef3c7;color:#92400e;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">💳 Pago parcial</button>`;
+        h+=`<div style="font-size:16px;font-weight:700;margin-bottom:8px">🏭 ${grupo.nombre}</div>`;
+        h+=`<div style="display:flex;flex-direction:column;gap:3px;font-size:13px">`;
+        if(totalOriginal>totalGrupo){
+          h+=`<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Pendiente:</span><span style="font-weight:600;color:#dc2626">$${totalGrupo.toLocaleString()}</span></div>`;
+          h+=`<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Ya pagó:</span><span style="font-weight:600;color:#059669">$${totalPagado.toLocaleString()}</span></div>`;
+          h+=`<div style="display:flex;justify-content:space-between;border-top:0.5px solid #fca5a5;margin-top:4px;padding-top:4px"><span style="color:var(--muted)">Total deuda:</span><span style="font-weight:700;color:#dc2626">$${totalOriginal.toLocaleString()}</span></div>`;
+        } else {
+          h+=`<div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">Total deuda:</span><span style="font-weight:700;color:#dc2626">$${totalGrupo.toLocaleString()}</span></div>`;
+        }
         h+=`</div></div>`;
 
         // Detalle de cada boleta (sin botones de pago)
@@ -4551,10 +4556,15 @@ function renderComprasTab(){
           h+=`</div>`;
         });
 
+        // Botones de pago al final
+        h+=`<div style="padding:12px 16px;background:#fff1f2;border-top:0.5px solid #fca5a5;display:flex;gap:8px">`;
+        h+=`<button onclick="pagarProveedorTotal('${pk}')" style="flex:1;padding:9px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">💵 Pagar total</button>`;
+        h+=`<button onclick="pagarProveedorParcial('${pk}')" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid #d97706;background:#fef3c7;color:#92400e;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">💳 Pago parcial</button>`;
+        h+=`</div>`;
+
         h+=`</div>`;
       });
     }
-  } else {
     if(historial.length===0){
       h+=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">
         <div style="font-size:40px;margin-bottom:12px">📜</div>
