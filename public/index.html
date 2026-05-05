@@ -5689,12 +5689,21 @@ function renderHistoryTab(){
 
   const cobradoKeys=ordersAll.map(o=>o._key);
 
+  const now2=new Date();
+  const curMonthStr=`${now2.getFullYear()}-${String(now2.getMonth()+1).padStart(2,'0')}`;
+  const prevMonth=new Date(now2.getFullYear(),now2.getMonth()-1,1);
+  const prevMonthStr=`${prevMonth.getFullYear()}-${String(prevMonth.getMonth()+1).padStart(2,'0')}`;
+
   const fil=all.filter(o=>{
     const ts=o._ts||0;
     if(!ts)return C.historyFilter==='todos';
-    const d=new Date(ts).toLocaleDateString('es-AR');
-    if(C.historyFilter==='hoy')return d===todayStr;
-    if(C.historyFilter==='ayer')return d===yesterdayStr;
+    const d=new Date(ts);
+    const dStr=d.toLocaleDateString('es-AR');
+    const mStr=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    if(C.historyFilter==='hoy')return dStr===todayStr;
+    if(C.historyFilter==='ayer')return dStr===yesterdayStr;
+    if(C.historyFilter==='mes')return mStr===curMonthStr;
+    if(C.historyFilter==='mes_ant')return mStr===prevMonthStr;
     return true;
   });
 
@@ -5705,7 +5714,7 @@ function renderHistoryTab(){
 
   let h=`<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:1rem">`;
   h+=`<div style="display:flex;gap:6px;flex-wrap:wrap">`;
-  [['hoy','Hoy'],['ayer','Ayer'],['todos','Todos']].forEach(([val,lbl])=>{
+  [['hoy','Hoy'],['ayer','Ayer'],['mes','Este mes'],['mes_ant','Mes anterior'],['todos','Todos']].forEach(([val,lbl])=>{
     const a=C.historyFilter===val;
     h+=`<button onclick="setHistFilter('${val}')" style="padding:5px 12px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:${a?'var(--brand)':'var(--card)'};color:${a?'#fff':'var(--muted)'}">${lbl}</button>`;
   });
@@ -5722,43 +5731,13 @@ function renderHistoryTab(){
   }
 
   const pmLabels={efectivo:'💵 Efectivo',credito:'💳 Créd.',debito:'💳 Déb.',transferencia:'📱 Transfer.',mercadopago:'📱 Mercado Pago',credito_cliente:'💚 Crédito',mixto:'🔀 Mixto'};
-  const meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
   h+=`<div class="orders-list">`;
   if(fil.length===0)h+=`<div class="empty-state">No hay registros cobrados${C.historyFilter!=='todos'?' '+C.historyFilter:''}</div>`;
 
-  // Agrupar por mes si estamos en "todos"
-  let lastMonthKey='';
   fil.forEach(g=>{
     const ts=g._ts||0;
     const dateStr=ts?`${fmtDate(ts)} ${fmtTime(ts)}`:'';
-
-    // Separador de mes (solo en "todos")
-    if(C.historyFilter==='todos'&&ts){
-      const d=new Date(ts);
-      const monthKey=`${d.getFullYear()}-${d.getMonth()}`;
-      if(monthKey!==lastMonthKey){
-        lastMonthKey=monthKey;
-        const now=new Date();
-        const isCurMonth=d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();
-        const isPrevMonth=d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()-1||
-          (now.getMonth()===0&&d.getFullYear()===now.getFullYear()-1&&d.getMonth()===11);
-        const label=isCurMonth?'Mes actual':isPrevMonth?'Mes anterior':`${meses[d.getMonth()]} ${d.getFullYear()}`;
-        // Total del mes
-        const monthTotal=fil.filter(gg=>{
-          const t=gg._ts||0;if(!t)return false;
-          const dd=new Date(t);
-          return dd.getFullYear()===d.getFullYear()&&dd.getMonth()===d.getMonth();
-        }).reduce((s,gg)=>{
-          if(gg._tipo==='deuda')return s+(gg.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,0);
-          return s+(gg.orders||[]).reduce((gs,o)=>(o.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,gs),0)-(gg.descuento||0);
-        },0);
-        h+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;margin-top:${lastMonthKey===monthKey?0:4}px;border-bottom:2px solid var(--border);margin-bottom:8px">`;
-        h+=`<span style="font-size:14px;font-weight:700;color:var(--text)">${label}</span>`;
-        h+=`<span style="font-size:13px;font-weight:600;color:var(--accent)">$${monthTotal.toLocaleString()}</span>`;
-        h+=`</div>`;
-      }
-    }
 
     if(g._tipo==='deuda'){
       const total=(g.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
