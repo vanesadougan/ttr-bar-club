@@ -4494,12 +4494,12 @@ function renderComprasTab(){
       });
 
       Object.entries(porProveedor).forEach(([pk,grupo])=>{
-        // Ordenar por fecha más antigua primero (para pagar en orden)
         grupo.compras.sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
-        const totalGrupo=grupo.compras.reduce((s,c)=>s+(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta),0);
-        const keysGrupo=JSON.stringify(grupo.compras.map(c=>c._key));
-
-        const totalOriginal=grupo.compras.reduce((s,c)=>s+c.totalBoleta,0);
+        // Solo las que realmente tienen saldo pendiente
+        const comprasPendientes=grupo.compras.filter(c=>(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta)>0&&c.estado!=='pagado');
+        if(!comprasPendientes.length)return; // Skip si todas pagadas
+        const totalGrupo=comprasPendientes.reduce((s,c)=>s+(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta),0);
+        const totalOriginal=comprasPendientes.reduce((s,c)=>s+c.totalBoleta,0);
         const totalPagado=totalOriginal-totalGrupo;
 
         h+=`<div class="card" style="margin-bottom:1rem;padding:0;overflow:hidden;border-left:3px solid #dc2626">`;
@@ -4518,34 +4518,27 @@ function renderComprasTab(){
         }
         h+=`</div>`;
 
-        // Solo boletas con saldo pendiente > 0
-        grupo.compras.filter(c=>(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta)>0).forEach(c=>{
+        // Boletas pendientes
+        comprasPendientes.forEach(c=>{
           const saldo=c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta;
-
           h+=`<div style="padding:10px 16px;border-bottom:0.5px solid #fee2e2">`;
           h+=`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">`;
-          h+=`<div style="flex:1">`;
-          h+=`<div style="font-size:12px;color:var(--muted)">${c.fecha||''}${c.boleta?` · Boleta: ${c.boleta}`:''}</div>`;
+          h+=`<div style="flex:1"><div style="font-size:12px;color:var(--muted)">${c.fecha||''}${c.boleta?` · Boleta: ${c.boleta}`:''}</div>`;
           if(c.descripcion)h+=`<div style="font-size:13px;color:var(--text);margin-top:2px">${c.descripcion}</div>`;
-          h+=`</div>`;
-          h+=`<div style="text-align:right;flex-shrink:0">`;
-          h+=`<div style="font-size:15px;font-weight:700;color:#dc2626">$${saldo.toLocaleString()}</div>`;
-          h+=`</div></div>`;
-          h+=`<div style="display:flex;justify-content:flex-end;margin-top:4px">`;
-          h+=`<button onclick="if(confirm('¿Eliminar esta compra?'))eliminarCompra('${c._key}')" style="padding:3px 8px;border-radius:6px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:11px;cursor:pointer;font-family:inherit">✕ Eliminar</button>`;
-          h+=`</div>`;
+          h+=`</div><div style="text-align:right;flex-shrink:0"><div style="font-size:15px;font-weight:700;color:#dc2626">$${saldo.toLocaleString()}</div></div></div>`;
+          h+=`<div style="display:flex;justify-content:flex-end;margin-top:4px"><button onclick="if(confirm('¿Eliminar esta compra?'))eliminarCompra('${c._key}')" style="padding:3px 8px;border-radius:6px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:11px;cursor:pointer;font-family:inherit">✕ Eliminar</button></div>`;
           h+=`</div>`;
         });
 
-        // Pagos realizados — todos los del proveedor juntos al final
-        const todosLosPagos=grupo.compras.flatMap(c=>{
+        // Pagos realizados
+        const todosLosPagos=comprasPendientes.flatMap(c=>{
           const h2=c._historialPagos;if(!h2)return[];
           return (Array.isArray(h2)?h2:Object.values(h2)).filter(p=>p.ts&&p.ts>1000000000);
         }).sort((a,b)=>(a.ts||0)-(b.ts||0));
         const pmL={efectivo:'💵 Ef.',debito:'💳 Déb.',credito:'💳 Créd.',transferencia:'📱 Trans.',mercadopago:'📱 MP'};
         if(todosLosPagos.length>0){
           h+=`<div style="padding:10px 16px;border-bottom:0.5px solid #fca5a5;background:#f8f9ff">`;
-          h+=`<div style="font-size:11px;font-weight:700;color:#1e40af;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em">Pagos realizados</div>`;
+          h+=`<div style="font-size:11px;font-weight:700;color:#1e40af;margin-bottom:6px;text-transform:uppercase">Pagos realizados</div>`;
           todosLosPagos.forEach(p=>{
             const hora=new Date(p.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false});
             h+=`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;border-bottom:0.5px solid #e0e7ff">`;
@@ -4556,10 +4549,9 @@ function renderComprasTab(){
           h+=`</div>`;
         }
 
-        // Botones de pago al final
-        h+=`<div style="padding:12px 16px;background:#fff1f2;border-top:0.5px solid #fca5a5;display:flex;gap:8px">`;
-        h+=`<button onclick="pagarProveedorTotal('${pk}')" style="flex:1;padding:9px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">💵 Pagar total</button>`;
-        h+=`<button onclick="pagarProveedorParcial('${pk}')" style="flex:1;padding:9px;border-radius:8px;border:0.5px solid #d97706;background:#fef3c7;color:#92400e;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">💳 Pago parcial</button>`;
+        // Botón único de pago
+        h+=`<div style="padding:12px 16px;background:#fff1f2;border-top:0.5px solid #fca5a5">`;
+        h+=`<button onclick="pagarProveedorModal('${pk}')" style="width:100%;padding:10px;border-radius:8px;border:none;background:#059669;color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">💵 Pagar a ${grupo.nombre}</button>`;
         h+=`</div>`;
 
         h+=`</div>`;
@@ -4628,6 +4620,42 @@ window.abrirPagoCompra=async(tipo)=>{
   C._addingCompra=false;C._newCompra={};C._comprasSubTab=estado==='pagado'?'historial':'deudas';render();
 };
 
+window.pagarProveedorModal=async(provKey)=>{
+  const compras=Object.entries(DB.compras||{}).map(([k,v])=>({...v,_key:k}))
+    .filter(c=>c.estado==='pendiente'&&(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta)>0&&(c.proveedorKey||c.proveedorNombre||'sin-proveedor')===provKey)
+    .sort((a,b)=>(a.fecha||'').localeCompare(b.fecha||''));
+  if(!compras.length)return;
+  const totalGrupo=compras.reduce((s,c)=>s+(c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta),0);
+  const nombreProv=compras[0].proveedorNombre||'Proveedor';
+  const pms=[{v:'efectivo',l:'💵 Efectivo'},{v:'debito',l:'💳 Débito'},{v:'credito',l:'💳 Crédito'},{v:'transferencia',l:'📱 Transferencia'},{v:'mercadopago',l:'📱 Mercado Pago'}];
+
+  const resultado=await new Promise(res=>{
+    const ov=document.createElement('div');
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
+    let monto=totalGrupo;let pmSel=null;
+    const renderOv=()=>{
+      ov.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">💳 Pago a proveedor</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px">🏭 ${nombreProv} · Total pendiente: <strong style="color:#dc2626">$${totalGrupo.toLocaleString()}</strong></div>
+        <div class="form-group" style="margin-bottom:12px"><label>Monto a pagar</label>
+          <input id="pp-monto" type="number" min="1" max="${totalGrupo}" value="${monto}" style="font-size:20px;font-weight:700;text-align:center;padding:10px;width:100%;border:1.5px solid var(--brand);border-radius:8px;font-family:inherit;box-sizing:border-box">
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px">
+          ${pms.map(p=>`<button data-pm="${p.v}" style="padding:7px 10px;border-radius:8px;border:1.5px solid ${pmSel===p.v?'var(--accent)':'var(--border)'};background:${pmSel===p.v?'#fff5f7':'var(--card)'};color:${pmSel===p.v?'var(--accent)':'var(--text)'};font-size:12px;font-weight:${pmSel===p.v?600:400};cursor:pointer;font-family:inherit">${p.l}</button>`).join('')}
+        </div>
+        <button id="pp-ok" ${pmSel?'':'disabled'} style="width:100%;padding:11px;border-radius:8px;border:none;background:${pmSel?'#059669':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${pmSel?'pointer':'not-allowed'};font-family:inherit;margin-bottom:8px;opacity:${pmSel?1:.6}">Registrar pago</button>
+        <button id="pp-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>`;
+      ov.querySelector('#pp-monto').addEventListener('input',e=>{monto=Math.min(totalGrupo,Math.max(0,Number(e.target.value)||0));});
+      ov.querySelectorAll('[data-pm]').forEach(btn=>{btn.onclick=()=>{pmSel=btn.dataset.pm;renderOv();};});
+      ov.querySelector('#pp-ok')?.addEventListener('click',()=>{const m=Math.max(0,Number(ov.querySelector('#pp-monto').value)||0);if(!m||!pmSel)return;ov.remove();res({monto:m,pm:pmSel});});
+      ov.querySelector('#pp-cancel').onclick=()=>{ov.remove();res(null);};
+    };
+    document.body.appendChild(ov);renderOv();
+  });
+  if(!resultado)return;
+  await aplicarPagoProveedor(compras,resultado.monto,[{pm:resultado.pm,monto:resultado.monto}],nombreProv);
+};
 window.pagarProveedorTotal=async(provKey)=>{
   const compras=Object.entries(DB.compras||{}).map(([k,v])=>({...v,_key:k}))
     .filter(c=>c.estado==='pendiente'&&(c.proveedorKey||c.proveedorNombre||'sin-proveedor')===provKey)
