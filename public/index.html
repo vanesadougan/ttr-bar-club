@@ -4681,9 +4681,10 @@ window.pagarProveedorParcial=async(provKey)=>{
 };
 
 async function aplicarPagoProveedor(compras,montoTotal,payments,nombreProv){
-  // Pagar boletas de la más antigua a la más nueva
   let restante=montoTotal;
-  const nuevoPago={monto:montoTotal,pm:payments[0]?.pm||'efectivo',fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
+  const pm=payments[0]?.pm||'efectivo';
+  const fecha=new Date().toISOString().slice(0,10);
+  const ts=Date.now();
   for(const c of compras){
     if(restante<=0)break;
     const saldo=c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta;
@@ -4691,13 +4692,11 @@ async function aplicarPagoProveedor(compras,montoTotal,payments,nombreProv){
     const abono=Math.min(saldo,restante);
     const nuevoSaldo=Math.max(0,saldo-abono);
     const estado=nuevoSaldo===0?'pagado':'pendiente';
-    // Solo guardar historial en la primera boleta que se abona
-    const histExist=c._historialPagos?(Array.isArray(c._historialPagos)?c._historialPagos:Object.values(c._historialPagos)):[];
-    const pagoProporcional={...nuevoPago,monto:abono};
-    await update(ref(db,`compras/${c._key}`),{saldoPendiente:nuevoSaldo,estado,_historialPagos:[...histExist,pagoProporcional]});
+    // Guardar el pago como nuevo nodo (push) para no pisar historial existente
+    await push(ref(db,`compras/${c._key}/_historialPagos`),{monto:abono,pm,fecha,ts});
+    await update(ref(db,`compras/${c._key}`),{saldoPendiente:nuevoSaldo,estado});
     restante-=abono;
   }
-  // Registrar en caja
   await registrarPagoEnCaja(payments,montoTotal,nombreProv,'proveedor');
   render();
 }
@@ -4710,8 +4709,8 @@ window.pagarCompraModal=async(key)=>{
   const nuevoSaldo=Math.max(0,saldo-monto);
   const estado=nuevoSaldo===0?'pagado':'pendiente';
   const nuevoPago={monto,pm:payments[0]?.pm||'efectivo',fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
-  const histExist=c._historialPagos?(Array.isArray(c._historialPagos)?c._historialPagos:Object.values(c._historialPagos)):[];
-  await update(ref(db,`compras/${key}`),{saldoPendiente:nuevoSaldo,estado,_historialPagos:[...histExist,nuevoPago]});
+  await push(ref(db,`compras/${key}/_historialPagos`),nuevoPago);
+  await update(ref(db,`compras/${key}`),{saldoPendiente:nuevoSaldo,estado});
   await registrarPagoEnCaja(payments,monto,c.proveedorNombre||'',key);
   render();
 };
@@ -4750,8 +4749,8 @@ window.pagarCompraModalParcial=async(key)=>{
   const nuevoSaldo=Math.max(0,saldo-montoParcial);
   const estado=nuevoSaldo===0?'pagado':'pendiente';
   const nuevoPago={monto:montoParcial,pm,fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
-  const histExist=c._historialPagos?(Array.isArray(c._historialPagos)?c._historialPagos:Object.values(c._historialPagos)):[];
-  await update(ref(db,`compras/${key}`),{saldoPendiente:nuevoSaldo,estado,_historialPagos:[...histExist,nuevoPago]});
+  await push(ref(db,`compras/${key}/_historialPagos`),nuevoPago);
+  await update(ref(db,`compras/${key}`),{saldoPendiente:nuevoSaldo,estado});
   const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
   const hoy=new Date().toISOString().slice(0,10);
   if(getCajaAbierta()){
