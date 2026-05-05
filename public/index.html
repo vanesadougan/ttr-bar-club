@@ -4419,8 +4419,10 @@ function renderComprasTab(){
   const ahora=new Date();
   const hace60=new Date(ahora);hace60.setDate(hace60.getDate()-60);
   const hace60Str=hace60.toISOString().slice(0,10);
-  const pendientes=compras.filter(c=>c.estado==='pendiente'||(c.estado!=='pagado'&&(c.saldoPendiente==null||c.saldoPendiente>0)));
-  const historial=compras.filter(c=>c.estado==='pagado'&&(c.fecha||'')>=hace60Str);
+  const getSaldo=c=>c.saldoPendiente!=null?Number(c.saldoPendiente):Number(c.totalBoleta||0);
+  const fmtFecha=f=>{if(!f)return'';const[y,m,d]=f.split('-');return`${d||''}/${m||''}/${y||''}`;};
+  const pendientes=compras.filter(c=>getSaldo(c)>0&&c.estado!=='pagado');
+  const historial=compras.filter(c=>c.estado==='pagado'||(getSaldo(c)===0&&c.totalBoleta>0)).filter(c=>(c.fecha||'')>=hace60Str);
   const proveedores=Object.entries(DB.proveedores||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
   const addF=C._addingCompra||false;
   const newC=C._newCompra||{};
@@ -4524,7 +4526,7 @@ function renderComprasTab(){
           const saldo=c.saldoPendiente!=null?c.saldoPendiente:c.totalBoleta;
           h+=`<div style="padding:10px 16px;border-bottom:0.5px solid #fee2e2">`;
           h+=`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">`;
-          h+=`<div style="flex:1"><div style="font-size:12px;color:var(--muted)">${c.fecha||''}${c.boleta?` · Boleta: ${c.boleta}`:''}</div>`;
+          h+=`<div style="flex:1"><div style="font-size:12px;color:var(--muted)">${fmtFecha(c.fecha)}${c.boleta?` · Boleta: ${c.boleta}`:''}</div>`;
           if(c.descripcion)h+=`<div style="font-size:13px;color:var(--text);margin-top:2px">${c.descripcion}</div>`;
           h+=`</div><div style="text-align:right;flex-shrink:0"><div style="font-size:15px;font-weight:700;color:#dc2626">$${saldo.toLocaleString()}</div></div></div>`;
           h+=`<div style="display:flex;justify-content:flex-end;margin-top:4px"><button onclick="if(confirm('¿Eliminar esta compra?'))eliminarCompra('${c._key}')" style="padding:3px 8px;border-radius:6px;border:0.5px solid #fca5a5;background:#fff1f2;color:#b91c1c;font-size:11px;cursor:pointer;font-family:inherit">✕ Eliminar</button></div>`;
@@ -4543,7 +4545,7 @@ function renderComprasTab(){
           todosLosPagos.forEach(p=>{
             const hora=new Date(p.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false});
             h+=`<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;border-bottom:0.5px solid #e0e7ff">`;
-            h+=`<span style="color:#3b82f6">${p.fecha||''} ${hora} · ${pmL[p.pm]||p.pm||''}</span>`;
+            h+=`<span style="color:#3b82f6">${fmtFecha(p.fecha)} ${hora} · ${pmL[p.pm]||p.pm||''}</span>`;
             h+=`<span style="font-weight:600;color:#1e40af">$${Number(p.monto||0).toLocaleString()}</span>`;
             h+=`</div>`;
           });
@@ -4569,7 +4571,7 @@ function renderComprasTab(){
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
             <div style="flex:1">
               <div style="font-size:14px;font-weight:600">🏭 ${c.proveedorNombre||'Sin proveedor'}</div>
-              <div style="font-size:12px;color:var(--muted);margin-top:2px">${c.fecha||''} ${c.boleta?`· Boleta: ${c.boleta}`:''}</div>
+              <div style="font-size:12px;color:var(--muted);margin-top:2px">${fmtFecha(c.fecha)} ${c.boleta?`· Boleta: ${c.boleta}`:''}</div>
               ${c.descripcion?`<div style="font-size:13px;color:var(--muted);margin-top:2px">${c.descripcion}</div>`:''}
             </div>
             <div style="text-align:right;flex-shrink:0">
