@@ -5722,13 +5722,43 @@ function renderHistoryTab(){
   }
 
   const pmLabels={efectivo:'💵 Efectivo',credito:'💳 Créd.',debito:'💳 Déb.',transferencia:'📱 Transfer.',mercadopago:'📱 Mercado Pago',credito_cliente:'💚 Crédito',mixto:'🔀 Mixto'};
+  const meses=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
   h+=`<div class="orders-list">`;
   if(fil.length===0)h+=`<div class="empty-state">No hay registros cobrados${C.historyFilter!=='todos'?' '+C.historyFilter:''}</div>`;
 
+  // Agrupar por mes si estamos en "todos"
+  let lastMonthKey='';
   fil.forEach(g=>{
     const ts=g._ts||0;
     const dateStr=ts?`${fmtDate(ts)} ${fmtTime(ts)}`:'';
+
+    // Separador de mes (solo en "todos")
+    if(C.historyFilter==='todos'&&ts){
+      const d=new Date(ts);
+      const monthKey=`${d.getFullYear()}-${d.getMonth()}`;
+      if(monthKey!==lastMonthKey){
+        lastMonthKey=monthKey;
+        const now=new Date();
+        const isCurMonth=d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();
+        const isPrevMonth=d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth()-1||
+          (now.getMonth()===0&&d.getFullYear()===now.getFullYear()-1&&d.getMonth()===11);
+        const label=isCurMonth?'Mes actual':isPrevMonth?'Mes anterior':`${meses[d.getMonth()]} ${d.getFullYear()}`;
+        // Total del mes
+        const monthTotal=fil.filter(gg=>{
+          const t=gg._ts||0;if(!t)return false;
+          const dd=new Date(t);
+          return dd.getFullYear()===d.getFullYear()&&dd.getMonth()===d.getMonth();
+        }).reduce((s,gg)=>{
+          if(gg._tipo==='deuda')return s+(gg.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,0);
+          return s+(gg.orders||[]).reduce((gs,o)=>(o.items||[]).reduce((ss,i)=>ss+(i.finalPrice||i.price)*i.qty,gs),0)-(gg.descuento||0);
+        },0);
+        h+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 4px;margin-top:${lastMonthKey===monthKey?0:4}px;border-bottom:2px solid var(--border);margin-bottom:8px">`;
+        h+=`<span style="font-size:14px;font-weight:700;color:var(--text)">${label}</span>`;
+        h+=`<span style="font-size:13px;font-weight:600;color:var(--accent)">$${monthTotal.toLocaleString()}</span>`;
+        h+=`</div>`;
+      }
+    }
 
     if(g._tipo==='deuda'){
       const total=(g.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
