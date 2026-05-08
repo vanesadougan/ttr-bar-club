@@ -2135,7 +2135,7 @@ window.waiterMarkCobradoGroup=async(keys)=>{
       ${deudaTotalW>0?`<div style="padding:10px 14px;background:#fef2f2;border:0.5px solid #fca5a5;border-radius:10px;margin-bottom:12px">
         <div style="font-size:13px;font-weight:600;color:#dc2626;margin-bottom:2px">⚠️ Tiene una deuda de $${deudaTotalW.toLocaleString()}</div>
         <div style="font-size:11px;color:#b91c1c">¿Desea cobrarla junto con este pedido?</div>
-        <button id="ch-cobrar-deuda" style="margin-top:8px;width:100%;padding:7px;border-radius:7px;border:none;background:#dc2626;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrar deuda ($${deudaTotalW.toLocaleString()}) ahora</button>
+        <button id="ch-cobrar-deuda" style="margin-top:8px;width:100%;padding:7px;border-radius:7px;border:none;background:#dc2626;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">→ Ir a Deudores</button>
       </div>`:''}
       <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:12px">
         ${yaPagado>0?`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;color:#059669">Ya pagado</span><span style="font-size:13px;font-weight:600;color:#059669">$${yaPagado.toLocaleString()}</span></div>`:''}
@@ -2148,13 +2148,13 @@ window.waiterMarkCobradoGroup=async(keys)=>{
       </div>
     </div>`;
     document.body.appendChild(ov);
-    ov.querySelector('#ch-cobrar-deuda')?.addEventListener('click',()=>{ov.remove();res('cobrar-deuda');});
+    ov.querySelector('#ch-cobrar-deuda')?.addEventListener('click',()=>{ov.remove();res('ir-deudores');});
     ov.querySelector('#ch-total').onclick=()=>{ov.remove();res('total');};
     ov.querySelector('#ch-parcial').onclick=()=>{ov.remove();res('parcial');};
     ov.querySelector('#ch-cancel').onclick=()=>{ov.remove();res(null);};
   });
   if(!eleccion)return;
-  if(eleccion==='cobrar-deuda'){window.cobrarDeuda(deudaPersonaW.map(o=>o._key),deudaTotalW);return;}
+  if(eleccion==='ir-deudores'){adminMainTab('deudores');return;}
 
   if(eleccion==='parcial'){
     const resultado=await new Promise(res=>{
@@ -7078,7 +7078,7 @@ window.adminGroupCobrado=async keys=>{
       ${deudaTotal>0?`<div style="padding:10px 14px;background:#fef2f2;border:0.5px solid #fca5a5;border-radius:10px;margin-bottom:12px">
         <div style="font-size:13px;font-weight:600;color:#dc2626;margin-bottom:2px">⚠️ Tiene una deuda de $${deudaTotal.toLocaleString()}</div>
         <div style="font-size:11px;color:#b91c1c">¿Desea cobrarla junto con este pedido?</div>
-        <button id="ch-cobrar-deuda" style="margin-top:8px;width:100%;padding:7px;border-radius:7px;border:none;background:#dc2626;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Cobrar deuda ($${deudaTotal.toLocaleString()}) ahora</button>
+        <button id="ch-cobrar-deuda" style="margin-top:8px;width:100%;padding:7px;border-radius:7px;border:none;background:#dc2626;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">→ Ir a Deudores</button>
       </div>`:''}
       <div style="background:var(--bg);border-radius:10px;padding:10px 14px;margin-bottom:12px">
         ${yaPagado>0?`<div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font-size:12px;color:#059669">Ya pagado</span><span style="font-size:13px;font-weight:600;color:#059669">$${yaPagado.toLocaleString()}</span></div>`:''}
@@ -7093,19 +7093,14 @@ window.adminGroupCobrado=async keys=>{
       </div>
     </div>`;
     document.body.appendChild(ov);
-    ov.querySelector('#ch-cobrar-deuda')?.addEventListener('click',()=>{ov.remove();res('cobrar-deuda');});
+    ov.querySelector('#ch-cobrar-deuda')?.addEventListener('click',()=>{ov.remove();res('ir-deudores');});
     ov.querySelector('#ch-total').onclick=()=>{ov.remove();res('total');};
     ov.querySelector('#ch-parcial').onclick=()=>{ov.remove();res('parcial');};
     ov.querySelector('#ch-deudor')?.addEventListener('click',()=>{ov.remove();res('deudor');});
     ov.querySelector('#ch-cancel').onclick=()=>{ov.remove();res(null);};
   });
   if(!eleccion)return;
-  if(eleccion==='cobrar-deuda'){
-    // Ir directo a cobrar la deuda de ese cliente
-    const deudaKeys=deudaPersona.map(o=>o._key);
-    window.cobrarDeuda(deudaKeys,deudaTotal);
-    return;
-  }
+  if(eleccion==='ir-deudores'){adminMainTab('deudores');return;}
   if(eleccion==='deudor'){adminGroupDeudor(keys,saldoRestante);return;}
 
   if(eleccion==='parcial'){
