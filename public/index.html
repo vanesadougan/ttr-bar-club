@@ -4522,48 +4522,87 @@ function renderEstadisticasTab(){
 }
 function renderTop5Platos(){
   const hace30=Date.now()-30*24*60*60*1000;
-  const counts={};
+  const countsFoods={};
+  const countsDrinks={};
+  const NO_PRINT_CATS=['bebida','trago','drink','bar'];
 
   Object.values(DB.orders||{}).forEach(o=>{
     if(o.status!=='cobrado')return;
     if((o.cobradoAt||0)<hace30)return;
     (o.items||[]).forEach(i=>{
       if(i.isKiosko||i.isCafeteria)return;
-      // Filtrar bebidas por categoría
-      const dish=Object.values(DB.dishes||{}).find(d=>d.name===i.name);
-      if(dish){
-        const cat=DB.categories?.[dish.cat];
-        const label=(cat?.label||'').toLowerCase();
-        if(['bebida','trago','drink','bar'].some(nc=>label.includes(nc)))return;
-      }
       const nombre=i.name||'';if(!nombre)return;
-      counts[nombre]=(counts[nombre]||0)+(i.qty||1);
+      const dish=Object.values(DB.dishes||{}).find(d=>d.name===nombre);
+      const cat=dish?DB.categories?.[dish.cat]:null;
+      const label=(cat?.label||'').toLowerCase();
+      const isBebida=NO_PRINT_CATS.some(nc=>label.includes(nc));
+      // Incluir variante en el nombre para bebidas
+      const key=isBebida?(i.selectedType?`${nombre} (${i.selectedType})`:nombre):nombre;
+      if(isBebida){
+        countsDrinks[key]=(countsDrinks[key]||0)+(i.qty||1);
+      } else {
+        countsFoods[nombre]=(countsFoods[nombre]||0)+(i.qty||1);
+      }
     });
   });
 
-  const top5=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
-  if(!top5.length)return`<div class="card" style="margin-top:1rem;padding:14px 16px;color:var(--muted);font-size:13px;text-align:center">Sin datos de pedidos cobrados en los últimos 30 días</div>`;
-  const maxQty=top5[0][1]||1;
+  const top5=Object.entries(countsFoods).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const top3drinks=Object.entries(countsDrinks).sort((a,b)=>b[1]-a[1]).slice(0,3);
   const medals=['🥇','🥈','🥉','4°','5°'];
 
-  return`<div class="card" style="margin-top:1rem;padding:0;overflow:hidden">
-    <div style="padding:10px 14px;background:var(--bg);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:0.5px solid var(--border)">🍽 Top 5 platos — últimos 30 días</div>
-    ${top5.map(([nombre,qty],i)=>{
-      const pct=Math.round((qty/maxQty)*100);
-      return`<div style="padding:10px 16px;border-bottom:0.5px solid var(--border)">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
-          <div style="display:flex;align-items:center;gap:8px">
-            <span style="font-size:18px">${medals[i]}</span>
-            <span style="font-size:13px;font-weight:600">${nombre}</span>
+  let h='';
+
+  // Top 5 platos
+  if(top5.length){
+    const maxQty=top5[0][1]||1;
+    h+=`<div class="card" style="margin-top:1rem;padding:0;overflow:hidden">
+      <div style="padding:10px 14px;background:var(--bg);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:0.5px solid var(--border)">🍽 Top 5 platos — últimos 30 días</div>
+      ${top5.map(([nombre,qty],i)=>{
+        const pct=Math.round((qty/maxQty)*100);
+        return`<div style="padding:10px 16px;border-bottom:0.5px solid var(--border)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:18px">${medals[i]}</span>
+              <span style="font-size:13px;font-weight:600">${nombre}</span>
+            </div>
+            <span style="font-size:14px;font-weight:700;color:var(--accent)">${qty} unid.</span>
           </div>
-          <span style="font-size:14px;font-weight:700;color:var(--accent)">${qty} unid.</span>
-        </div>
-        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
-          <div style="height:100%;width:${pct}%;background:${i===0?'#f59e0b':i===1?'#94a3b8':i===2?'#b45309':'#3b82f6'};border-radius:3px"></div>
-        </div>
-      </div>`;
-    }).join('')}
-  </div>`;
+          <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${i===0?'#f59e0b':i===1?'#94a3b8':i===2?'#b45309':'#3b82f6'};border-radius:3px"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  // Top 3 bebidas
+  if(top3drinks.length){
+    const maxD=top3drinks[0][1]||1;
+    const drinkMedals=['🥇','🥈','🥉'];
+    h+=`<div class="card" style="margin-top:1rem;padding:0;overflow:hidden">
+      <div style="padding:10px 14px;background:var(--bg);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:0.5px solid var(--border)">🍹 Top 3 bebidas — últimos 30 días</div>
+      ${top3drinks.map(([nombre,qty],i)=>{
+        const pct=Math.round((qty/maxD)*100);
+        return`<div style="padding:10px 16px;border-bottom:0.5px solid var(--border)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:18px">${drinkMedals[i]}</span>
+              <span style="font-size:13px;font-weight:600">${nombre}</span>
+            </div>
+            <span style="font-size:14px;font-weight:700;color:#3b82f6">${qty} unid.</span>
+          </div>
+          <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${i===0?'#6366f1':i===1?'#3b82f6':'#7dd3fc'};border-radius:3px"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  if(!top5.length&&!top3drinks.length)
+    return`<div class="card" style="margin-top:1rem;padding:14px 16px;color:var(--muted);font-size:13px;text-align:center">Sin datos de pedidos cobrados en los últimos 30 días</div>`;
+
+  return h;
 }
 window.showAddClienteForm=()=>{C._showAddCliente=true;render();setTimeout(()=>document.getElementById('new-cliente-nombre')?.focus(),50);};
 window.addCliente=async()=>{
