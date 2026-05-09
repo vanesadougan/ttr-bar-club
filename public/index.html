@@ -221,6 +221,7 @@
     .new-order-pulse{animation:pulse-border 1s ease-in-out 3}
     @keyframes pulse-border{0%,100%{border-color:var(--border)}50%{border-color:var(--accent);box-shadow:0 0 0 3px rgba(233,69,96,0.15)}}
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <div style="display:flex;flex-direction:column;min-height:100vh">
@@ -256,13 +257,14 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
 // ─── FIREBASE CONFIG ───────────────────────────────
 // Reemplazá estos valores con los de tu proyecto Firebase
 const firebaseConfig = {
-  apiKey: "AIzaSyBdskPCYx2Nelq-IVeGshM-hv8rBz9WkjA",
-  authDomain: "ttr-bar-club-dev.firebaseapp.com",
-  databaseURL: "https://ttr-bar-club-dev-default-rtdb.firebaseio.com",
-  projectId: "ttr-bar-club-dev",
-  storageBucket: "ttr-bar-club-dev.firebasestorage.app",
-  messagingSenderId: "635056829443",
-  appId: "1:635056829443:web:0872e806ab97fcc9bcca36"
+  apiKey: "AIzaSyBvZ-t5rFj6Eo2Eveze5f5eqqRxZ2xiodY",
+  authDomain: "ttr-bar-club.firebaseapp.com",
+  databaseURL: "https://ttr-bar-club-default-rtdb.firebaseio.com",
+  projectId: "ttr-bar-club",
+  storageBucket: "ttr-bar-club.firebasestorage.app",
+  messagingSenderId: "197986436291",
+  appId: "1:197986436291:web:338ddcf70a35962aacce76",
+  measurementId: "G-4QYLLN280Q"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -676,7 +678,7 @@ function renderAdmin(){
   const pc=pendingCount();
 
   // ── Nivel 1: pestañas principales ──
-  const mainTabs=['tables','mozas','menu','orders','history','deudores','caja','stock','clientes','proveedores','compras'];
+  const mainTabs=['tables','mozas','menu','orders','history','deudores','caja','stock','clientes','proveedores','compras','estadisticas'];
   const mainLabels={
     tables:'🪑 Mesas',
     mozas:'👩 Mozas',
@@ -689,7 +691,8 @@ function renderAdmin(){
     ratings:'⭐ Calificaciones',
     clientes:'👥 Clientes',
     proveedores:'🏭 Proveedores',
-    compras:`🛒 Compras${(()=>{const n=new Set(Object.values(DB.compras||{}).filter(c=>c.estado==='pendiente'||(c.estado!=='pagado'&&(c.saldoPendiente==null||c.saldoPendiente>0))).map(c=>c.proveedorKey||c.proveedorNombre||'?')).size;return n>0?` <span class="badge">${n}</span>`:''})()}`
+    compras:`🛒 Compras${(()=>{const n=new Set(Object.values(DB.compras||{}).filter(c=>c.estado==='pendiente'||(c.estado!=='pagado'&&(c.saldoPendiente==null||c.saldoPendiente>0))).map(c=>c.proveedorKey||c.proveedorNombre||'?')).size;return n>0?` <span class="badge">${n}</span>`:''})()}`,
+    estadisticas:'📊 Estadísticas'
   };
   // Determinar tab activo de nivel 1
   const dishTabs=['dishes','cafeteria','kiosko'];
@@ -730,6 +733,7 @@ function renderAdmin(){
   else if(activeMain==='clientes') h+=renderClientesTab();
   else if(activeMain==='proveedores') h+=renderProveedoresTab();
   else if(activeMain==='compras') h+=renderComprasTab();
+  else if(activeMain==='estadisticas') h+=renderEstadisticasTab();
 
   h+=`</div>`;
   mc.innerHTML=h;
@@ -4399,6 +4403,114 @@ async function actualizarCreditoCliente(nombre,nuevoCreditoRestante,exceso=0){
   if(!cli)return;
   const nuevoCredito=Math.max(0,(cli.credito||0)-cli.credito+nuevoCreditoRestante+exceso);
   await update(ref(db,`clientes/${cli.key}`),{credito:Math.max(0,nuevoCredito)});
+}
+function renderEstadisticasTab(){
+  // Agrupar caja por mes
+  const mesesNombres=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const ventas={};const gastos={};
+
+  // Ingresos desde caja (tipo=venta o deudor)
+  Object.values(DB.caja||{}).forEach(e=>{
+    if(!e.fecha)return;
+    const mes=e.fecha.slice(0,7); // YYYY-MM
+    if(e.tipo==='venta'||e.tipo==='deudor'||(e.monto>0&&e.tipo!=='gasto')){
+      ventas[mes]=(ventas[mes]||0)+Math.abs(Number(e.monto)||0);
+    }
+  });
+
+  // Gastos desde compras pagadas + caja tipo gasto
+  Object.values(DB.compras||{}).forEach(c=>{
+    if(!c.fecha)return;
+    const mes=c.fecha.slice(0,7);
+    if(c.estado==='pagado'){
+      gastos[mes]=(gastos[mes]||0)+(Number(c.totalBoleta)||0);
+    }
+  });
+  Object.values(DB.caja||{}).forEach(e=>{
+    if(!e.fecha)return;
+    const mes=e.fecha.slice(0,7);
+    if(e.tipo==='gasto'||(e.monto<0)){
+      gastos[mes]=(gastos[mes]||0)+Math.abs(Number(e.monto)||0);
+    }
+  });
+
+  // Obtener todos los meses con datos, ordenados
+  const allMeses=[...new Set([...Object.keys(ventas),...Object.keys(gastos)])].sort();
+  if(allMeses.length===0){
+    return`<div style="max-width:700px"><div style="font-size:18px;font-weight:600;margin-bottom:1rem">📊 Estadísticas</div>
+      <div style="text-align:center;padding:3rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">
+        <div style="font-size:40px;margin-bottom:12px">📊</div>
+        <div style="font-size:16px;font-weight:500">Sin datos aún</div>
+        <div style="font-size:13px;margin-top:4px">Los datos aparecen cuando hay movimientos en caja o compras pagadas</div>
+      </div></div>`;
+  }
+
+  const labels=allMeses.map(m=>{
+    const[y,mo]=m.split('-');
+    return`${mesesNombres[parseInt(mo)-1]} ${y}`;
+  });
+  const dataVentas=allMeses.map(m=>ventas[m]||0);
+  const dataGastos=allMeses.map(m=>gastos[m]||0);
+  const totalVentas=dataVentas.reduce((a,b)=>a+b,0);
+  const totalGastos=dataGastos.reduce((a,b)=>a+b,0);
+  const balance=totalVentas-totalGastos;
+
+  const chartId='estadisticasChart_'+Date.now();
+
+  setTimeout(()=>{
+    const canvas=document.getElementById(chartId);
+    if(!canvas)return;
+    if(window._estadChart)try{window._estadChart.destroy();}catch(e){}
+    const ctx=canvas.getContext('2d');
+    window._estadChart=new Chart(ctx,{
+      type:'bar',
+      data:{
+        labels,
+        datasets:[
+          {label:'Ventas',data:dataVentas,backgroundColor:'rgba(59,130,246,0.7)',borderColor:'rgba(59,130,246,1)',borderWidth:1,borderRadius:4},
+          {label:'Gastos',data:dataGastos,backgroundColor:'rgba(239,68,68,0.7)',borderColor:'rgba(239,68,68,1)',borderWidth:1,borderRadius:4}
+        ]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'top'},tooltip:{callbacks:{label:ctx=>`$${Number(ctx.raw).toLocaleString('es-AR')}`}}},
+        scales:{y:{beginAtZero:true,ticks:{callback:v=>`$${Number(v).toLocaleString('es-AR')}`}}}
+      }
+    });
+  },50);
+
+  return`<div style="max-width:760px">
+    <div style="font-size:18px;font-weight:600;margin-bottom:1rem">📊 Estadísticas</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem">
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Total Ventas</div>
+        <div style="font-size:20px;font-weight:700;color:#3b82f6">$${totalVentas.toLocaleString('es-AR')}</div>
+      </div>
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Total Gastos</div>
+        <div style="font-size:20px;font-weight:700;color:#ef4444">$${totalGastos.toLocaleString('es-AR')}</div>
+      </div>
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Balance</div>
+        <div style="font-size:20px;font-weight:700;color:${balance>=0?'#059669':'#dc2626'}">$${balance.toLocaleString('es-AR')}</div>
+      </div>
+    </div>
+    <div class="card" style="padding:16px">
+      <div style="height:340px"><canvas id="${chartId}"></canvas></div>
+    </div>
+    <div class="card" style="margin-top:1rem;padding:0;overflow:hidden">
+      <div style="padding:10px 14px;background:var(--bg);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:0.5px solid var(--border)">Detalle por mes</div>
+      ${allMeses.map((m,i)=>{
+        const v=dataVentas[i];const g=dataGastos[i];const b=v-g;
+        return`<div style="display:flex;align-items:center;padding:10px 14px;border-bottom:0.5px solid var(--border);gap:8px">
+          <div style="flex:1;font-size:13px;font-weight:600">${labels[i]}</div>
+          <div style="text-align:right;min-width:80px"><div style="font-size:11px;color:#3b82f6">Ventas</div><div style="font-size:13px;font-weight:600">$${v.toLocaleString('es-AR')}</div></div>
+          <div style="text-align:right;min-width:80px"><div style="font-size:11px;color:#ef4444">Gastos</div><div style="font-size:13px;font-weight:600">$${g.toLocaleString('es-AR')}</div></div>
+          <div style="text-align:right;min-width:80px"><div style="font-size:11px;color:var(--muted)">Balance</div><div style="font-size:13px;font-weight:700;color:${b>=0?'#059669':'#dc2626'}">$${b.toLocaleString('es-AR')}</div></div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
 }
 window.showAddClienteForm=()=>{C._showAddCliente=true;render();setTimeout(()=>document.getElementById('new-cliente-nombre')?.focus(),50);};
 window.addCliente=async()=>{
