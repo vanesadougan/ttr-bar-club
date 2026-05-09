@@ -221,6 +221,7 @@
     .new-order-pulse{animation:pulse-border 1s ease-in-out 3}
     @keyframes pulse-border{0%,100%{border-color:var(--border)}50%{border-color:var(--accent);box-shadow:0 0 0 3px rgba(233,69,96,0.15)}}
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <div style="display:flex;flex-direction:column;min-height:100vh">
@@ -416,6 +417,7 @@ onValue(ref(db,'kioskItems'), snap=>{ DB.kioskItems = snap.val()||{}; _markLoade
 onValue(ref(db,'clientes'), snap=>{ DB.clientes = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'proveedores'), snap=>{ DB.proveedores = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'compras'), snap=>{ DB.compras = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'estadisticasMensuales'), snap=>{ DB.estadisticasMensuales = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'kioskCategories'), snap=>{ DB.kioskCategories = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
 onValue(ref(db,'ingredients'), snap=>{
   DB.ingredients = snap.val()||{};
@@ -677,7 +679,7 @@ function renderAdmin(){
   const pc=pendingCount();
 
   // ── Nivel 1: pestañas principales ──
-  const mainTabs=['tables','mozas','menu','orders','history','deudores','caja','stock','clientes','proveedores','compras'];
+  const mainTabs=['tables','mozas','menu','orders','history','deudores','caja','stock','clientes','proveedores','compras','estadisticas'];
   const mainLabels={
     tables:'🪑 Mesas',
     mozas:'👩 Mozas',
@@ -690,7 +692,8 @@ function renderAdmin(){
     ratings:'⭐ Calificaciones',
     clientes:'👥 Clientes',
     proveedores:'🏭 Proveedores',
-    compras:`🛒 Compras${(()=>{const n=new Set(Object.values(DB.compras||{}).filter(c=>c.estado==='pendiente'||(c.estado!=='pagado'&&(c.saldoPendiente==null||c.saldoPendiente>0))).map(c=>c.proveedorKey||c.proveedorNombre||'?')).size;return n>0?` <span class="badge">${n}</span>`:''})()}`
+    compras:`🛒 Compras${(()=>{const n=new Set(Object.values(DB.compras||{}).filter(c=>c.estado==='pendiente'||(c.estado!=='pagado'&&(c.saldoPendiente==null||c.saldoPendiente>0))).map(c=>c.proveedorKey||c.proveedorNombre||'?')).size;return n>0?` <span class="badge">${n}</span>`:''})()}`,
+    estadisticas:'📊 Estadísticas'
   };
   // Determinar tab activo de nivel 1
   const dishTabs=['dishes','cafeteria','kiosko'];
@@ -731,6 +734,7 @@ function renderAdmin(){
   else if(activeMain==='clientes') h+=renderClientesTab();
   else if(activeMain==='proveedores') h+=renderProveedoresTab();
   else if(activeMain==='compras') h+=renderComprasTab();
+  else if(activeMain==='estadisticas') h+=renderEstadisticasTab();
 
   h+=`</div>`;
   mc.innerHTML=h;
@@ -1066,10 +1070,25 @@ window.cajaCierre=async()=>{
   if(!ok)return;
   // 3. Descargar CSV
   cajaDescargarArchivo(movs);
-  // 4. Eliminar todos los movimientos: borrar todo /caja y recrear solo el estado
+  // 4. Acumular en resumen mensual para estadísticas
+  const mes=hoy.slice(0,7); // YYYY-MM
+  const ventasDia=movs.filter(m=>m.tipo==='venta').reduce((s,m)=>s+Math.abs(m.monto||0),0);
+  const gastosDia=movs.filter(m=>m.tipo==='gasto'||m.monto<0).reduce((s,m)=>s+Math.abs(m.monto||0),0);
+  if(ventasDia>0||gastosDia>0){
+    const mesRef=ref(db,`estadisticasMensuales/${mes}`);
+    const snap=await get(mesRef);
+    const prev=snap.val()||{ventas:0,gastos:0};
+    await set(mesRef,{
+      ventas:(prev.ventas||0)+ventasDia,
+      gastos:(prev.gastos||0)+gastosDia,
+      mes,
+      ultimoUpdate:hoy
+    });
+  }
+  // 5. Eliminar todos los movimientos: borrar todo /caja y recrear solo el estado
   const hoy2=new Date().toISOString().slice(0,10);
   await remove(ref(db,'caja'));
-  // 5. Escribir solo el flag de cierre
+  // 6. Escribir solo el flag de cierre
   await set(ref(db,'caja/_cajaEstado'),{abierta:false,fechaCierre:hoy2,ts:Date.now()});
   render();
 };
@@ -4400,6 +4419,190 @@ async function actualizarCreditoCliente(nombre,nuevoCreditoRestante,exceso=0){
   if(!cli)return;
   const nuevoCredito=Math.max(0,(cli.credito||0)-cli.credito+nuevoCreditoRestante+exceso);
   await update(ref(db,`clientes/${cli.key}`),{credito:Math.max(0,nuevoCredito)});
+}
+function renderEstadisticasTab(){
+  const mesesNombres=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  const ventas={};const gastos={};
+
+  // 1. Datos históricos acumulados (de cierres de caja anteriores)
+  Object.entries(DB.estadisticasMensuales||{}).forEach(([mes,data])=>{
+    ventas[mes]=(ventas[mes]||0)+(data.ventas||0);
+    gastos[mes]=(gastos[mes]||0)+(data.gastos||0);
+  });
+
+  // 2. Datos del día actual (caja abierta, aún no cerrada)
+  Object.values(DB.caja||{}).forEach(e=>{
+    if(!e.fecha||typeof e.fecha!=='string')return;
+    const mes=e.fecha.slice(0,7);
+    if(e.tipo==='venta'){
+      ventas[mes]=(ventas[mes]||0)+Math.abs(Number(e.monto)||0);
+    } else if(e.tipo==='gasto'||Number(e.monto)<0){
+      gastos[mes]=(gastos[mes]||0)+Math.abs(Number(e.monto)||0);
+    }
+  });
+
+  // Obtener todos los meses con datos, ordenados
+  const allMeses=[...new Set([...Object.keys(ventas),...Object.keys(gastos)])].sort();
+  if(allMeses.length===0){
+    return`<div style="max-width:700px"><div style="font-size:18px;font-weight:600;margin-bottom:1rem">📊 Estadísticas</div>
+      <div style="text-align:center;padding:3rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">
+        <div style="font-size:40px;margin-bottom:12px">📊</div>
+        <div style="font-size:16px;font-weight:500">Sin datos aún</div>
+        <div style="font-size:13px;margin-top:4px">Los datos aparecen cuando hay movimientos en caja o compras pagadas</div>
+      </div></div>`;
+  }
+
+  const labels=allMeses.map(m=>{
+    const[y,mo]=m.split('-');
+    return`${mesesNombres[parseInt(mo)-1]} ${y}`;
+  });
+  const dataVentas=allMeses.map(m=>ventas[m]||0);
+  const dataGastos=allMeses.map(m=>gastos[m]||0);
+  const totalVentas=dataVentas.reduce((a,b)=>a+b,0);
+  const totalGastos=dataGastos.reduce((a,b)=>a+b,0);
+  const balance=totalVentas-totalGastos;
+
+  const chartId='estadisticasChart_'+Date.now();
+
+  setTimeout(()=>{
+    const canvas=document.getElementById(chartId);
+    if(!canvas)return;
+    if(window._estadChart)try{window._estadChart.destroy();}catch(e){}
+    const ctx=canvas.getContext('2d');
+    window._estadChart=new Chart(ctx,{
+      type:'bar',
+      data:{
+        labels,
+        datasets:[
+          {label:'Ventas',data:dataVentas,backgroundColor:'rgba(59,130,246,0.7)',borderColor:'rgba(59,130,246,1)',borderWidth:1,borderRadius:4},
+          {label:'Gastos',data:dataGastos,backgroundColor:'rgba(239,68,68,0.7)',borderColor:'rgba(239,68,68,1)',borderWidth:1,borderRadius:4}
+        ]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{position:'top'},tooltip:{callbacks:{label:ctx=>`$${Number(ctx.raw).toLocaleString('es-AR')}`}}},
+        scales:{y:{beginAtZero:true,ticks:{callback:v=>`$${Number(v).toLocaleString('es-AR')}`}}}
+      }
+    });
+  },50);
+
+  return`<div style="max-width:760px">
+    <div style="font-size:18px;font-weight:600;margin-bottom:1rem">📊 Estadísticas</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem">
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Total Ventas</div>
+        <div style="font-size:20px;font-weight:700;color:#3b82f6">$${totalVentas.toLocaleString('es-AR')}</div>
+      </div>
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Total Gastos</div>
+        <div style="font-size:20px;font-weight:700;color:#ef4444">$${totalGastos.toLocaleString('es-AR')}</div>
+      </div>
+      <div class="card" style="text-align:center;padding:14px">
+        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Balance</div>
+        <div style="font-size:20px;font-weight:700;color:${balance>=0?'#059669':'#dc2626'}">$${balance.toLocaleString('es-AR')}</div>
+      </div>
+    </div>
+    <div class="card" style="padding:16px">
+      <div style="height:340px"><canvas id="${chartId}"></canvas></div>
+    </div>
+    <div class="card" style="margin-top:1rem;padding:0;overflow:hidden">
+      <div style="padding:10px 14px;background:var(--bg);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:0.5px solid var(--border)">Detalle por mes</div>
+      ${allMeses.map((m,i)=>{
+        const v=dataVentas[i];const g=dataGastos[i];const b=v-g;
+        return`<div style="display:flex;align-items:center;padding:10px 14px;border-bottom:0.5px solid var(--border);gap:8px">
+          <div style="flex:1;font-size:13px;font-weight:600">${labels[i]}</div>
+          <div style="text-align:right;min-width:80px"><div style="font-size:11px;color:#3b82f6">Ventas</div><div style="font-size:13px;font-weight:600">$${v.toLocaleString('es-AR')}</div></div>
+          <div style="text-align:right;min-width:80px"><div style="font-size:11px;color:#ef4444">Gastos</div><div style="font-size:13px;font-weight:600">$${g.toLocaleString('es-AR')}</div></div>
+          <div style="text-align:right;min-width:80px"><div style="font-size:11px;color:var(--muted)">Balance</div><div style="font-size:13px;font-weight:700;color:${b>=0?'#059669':'#dc2626'}">$${b.toLocaleString('es-AR')}</div></div>
+        </div>`;
+      }).join('')}
+    </div>
+    ${renderTop5Platos()}
+  </div>`;
+}
+function renderTop5Platos(){
+  const hace30=Date.now()-30*24*60*60*1000;
+  const countsFoods={};
+  const countsDrinks={};
+  const NO_PRINT_CATS=['bebida','trago','drink','bar'];
+
+  Object.values(DB.orders||{}).forEach(o=>{
+    if(o.status!=='cobrado')return;
+    if((o.cobradoAt||0)<hace30)return;
+    (o.items||[]).forEach(i=>{
+      if(i.isKiosko||i.isCafeteria)return;
+      const nombre=i.name||'';if(!nombre)return;
+      const dish=Object.values(DB.dishes||{}).find(d=>d.name===nombre);
+      const cat=dish?DB.categories?.[dish.cat]:null;
+      const label=(cat?.label||'').toLowerCase();
+      const isBebida=NO_PRINT_CATS.some(nc=>label.includes(nc));
+      // Incluir variante en el nombre para bebidas
+      const key=isBebida?(i.selectedType?`${nombre} (${i.selectedType})`:nombre):nombre;
+      if(isBebida){
+        countsDrinks[key]=(countsDrinks[key]||0)+(i.qty||1);
+      } else {
+        countsFoods[nombre]=(countsFoods[nombre]||0)+(i.qty||1);
+      }
+    });
+  });
+
+  const top5=Object.entries(countsFoods).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const top3drinks=Object.entries(countsDrinks).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  const medals=['🥇','🥈','🥉','4°','5°'];
+
+  let h='';
+
+  // Top 5 platos
+  if(top5.length){
+    const maxQty=top5[0][1]||1;
+    h+=`<div class="card" style="margin-top:1rem;padding:0;overflow:hidden">
+      <div style="padding:10px 14px;background:var(--bg);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:0.5px solid var(--border)">🍽 Top 5 platos — últimos 30 días</div>
+      ${top5.map(([nombre,qty],i)=>{
+        const pct=Math.round((qty/maxQty)*100);
+        return`<div style="padding:10px 16px;border-bottom:0.5px solid var(--border)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:18px">${medals[i]}</span>
+              <span style="font-size:13px;font-weight:600">${nombre}</span>
+            </div>
+            <span style="font-size:14px;font-weight:700;color:var(--accent)">${qty} unid.</span>
+          </div>
+          <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${i===0?'#f59e0b':i===1?'#94a3b8':i===2?'#b45309':'#3b82f6'};border-radius:3px"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  // Top 3 bebidas
+  if(top3drinks.length){
+    const maxD=top3drinks[0][1]||1;
+    const drinkMedals=['🥇','🥈','🥉'];
+    h+=`<div class="card" style="margin-top:1rem;padding:0;overflow:hidden">
+      <div style="padding:10px 14px;background:var(--bg);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:0.5px solid var(--border)">🍹 Top 3 bebidas — últimos 30 días</div>
+      ${top3drinks.map(([nombre,qty],i)=>{
+        const pct=Math.round((qty/maxD)*100);
+        return`<div style="padding:10px 16px;border-bottom:0.5px solid var(--border)">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:18px">${drinkMedals[i]}</span>
+              <span style="font-size:13px;font-weight:600">${nombre}</span>
+            </div>
+            <span style="font-size:14px;font-weight:700;color:#3b82f6">${qty} unid.</span>
+          </div>
+          <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+            <div style="height:100%;width:${pct}%;background:${i===0?'#6366f1':i===1?'#3b82f6':'#7dd3fc'};border-radius:3px"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  if(!top5.length&&!top3drinks.length)
+    return`<div class="card" style="margin-top:1rem;padding:14px 16px;color:var(--muted);font-size:13px;text-align:center">Sin datos de pedidos cobrados en los últimos 30 días</div>`;
+
+  return h;
 }
 window.showAddClienteForm=()=>{C._showAddCliente=true;render();setTimeout(()=>document.getElementById('new-cliente-nombre')?.focus(),50);};
 window.addCliente=async()=>{
