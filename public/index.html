@@ -417,6 +417,7 @@ onValue(ref(db,'kioskItems'), snap=>{ DB.kioskItems = snap.val()||{}; _markLoade
 onValue(ref(db,'clientes'), snap=>{ DB.clientes = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'proveedores'), snap=>{ DB.proveedores = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'compras'), snap=>{ DB.compras = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'estadisticasMensuales'), snap=>{ DB.estadisticasMensuales = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'kioskCategories'), snap=>{ DB.kioskCategories = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
 onValue(ref(db,'ingredients'), snap=>{
   DB.ingredients = snap.val()||{};
@@ -1069,10 +1070,25 @@ window.cajaCierre=async()=>{
   if(!ok)return;
   // 3. Descargar CSV
   cajaDescargarArchivo(movs);
-  // 4. Eliminar todos los movimientos: borrar todo /caja y recrear solo el estado
+  // 4. Acumular en resumen mensual para estadísticas
+  const mes=hoy.slice(0,7); // YYYY-MM
+  const ventasDia=movs.filter(m=>m.tipo==='venta').reduce((s,m)=>s+Math.abs(m.monto||0),0);
+  const gastosDia=movs.filter(m=>m.tipo==='gasto'||m.monto<0).reduce((s,m)=>s+Math.abs(m.monto||0),0);
+  if(ventasDia>0||gastosDia>0){
+    const mesRef=ref(db,`estadisticasMensuales/${mes}`);
+    const snap=await get(mesRef);
+    const prev=snap.val()||{ventas:0,gastos:0};
+    await set(mesRef,{
+      ventas:(prev.ventas||0)+ventasDia,
+      gastos:(prev.gastos||0)+gastosDia,
+      mes,
+      ultimoUpdate:hoy
+    });
+  }
+  // 5. Eliminar todos los movimientos: borrar todo /caja y recrear solo el estado
   const hoy2=new Date().toISOString().slice(0,10);
   await remove(ref(db,'caja'));
-  // 5. Escribir solo el flag de cierre
+  // 6. Escribir solo el flag de cierre
   await set(ref(db,'caja/_cajaEstado'),{abierta:false,fechaCierre:hoy2,ts:Date.now()});
   render();
 };
@@ -4405,24 +4421,22 @@ async function actualizarCreditoCliente(nombre,nuevoCreditoRestante,exceso=0){
   await update(ref(db,`clientes/${cli.key}`),{credito:Math.max(0,nuevoCredito)});
 }
 function renderEstadisticasTab(){
-  // Agrupar caja por mes
   const mesesNombres=['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
   const ventas={};const gastos={};
 
-  // Ingresos desde caja: solo tipo='venta'
+  // 1. Datos históricos acumulados (de cierres de caja anteriores)
+  Object.entries(DB.estadisticasMensuales||{}).forEach(([mes,data])=>{
+    ventas[mes]=(ventas[mes]||0)+(data.ventas||0);
+    gastos[mes]=(gastos[mes]||0)+(data.gastos||0);
+  });
+
+  // 2. Datos del día actual (caja abierta, aún no cerrada)
   Object.values(DB.caja||{}).forEach(e=>{
     if(!e.fecha||typeof e.fecha!=='string')return;
     const mes=e.fecha.slice(0,7);
     if(e.tipo==='venta'){
       ventas[mes]=(ventas[mes]||0)+Math.abs(Number(e.monto)||0);
-    }
-  });
-
-  // Gastos desde caja: tipo='gasto' o monto negativo
-  Object.values(DB.caja||{}).forEach(e=>{
-    if(!e.fecha||typeof e.fecha!=='string')return;
-    const mes=e.fecha.slice(0,7);
-    if(e.tipo==='gasto'||Number(e.monto)<0){
+    } else if(e.tipo==='gasto'||Number(e.monto)<0){
       gastos[mes]=(gastos[mes]||0)+Math.abs(Number(e.monto)||0);
     }
   });
@@ -4503,6 +4517,45 @@ function renderEstadisticasTab(){
         </div>`;
       }).join('')}
     </div>
+    ${renderTop5Platos()}
+  </div>`;
+}
+function renderTop5Platos(){
+  const hace30=Date.now()-30*24*60*60*1000;
+  const counts={};
+
+  Object.values(DB.orders||{}).forEach(o=>{
+    if(o.status!=='cobrado')return;
+    if((o.cobradoAt||0)<hace30)return;
+    (o.items||[]).forEach(i=>{
+      if(i.isKiosko||i.isCafeteria)return;
+      const nombre=i.name||'';if(!nombre)return;
+      counts[nombre]=(counts[nombre]||0)+(i.qty||1);
+    });
+  });
+
+  const top5=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  if(!top5.length)return`<div class="card" style="margin-top:1rem;padding:14px 16px;color:var(--muted);font-size:13px;text-align:center">Sin datos de pedidos cobrados en los últimos 30 días</div>`;
+  const maxQty=top5[0][1]||1;
+  const medals=['🥇','🥈','🥉','4°','5°'];
+
+  return`<div class="card" style="margin-top:1rem;padding:0;overflow:hidden">
+    <div style="padding:10px 14px;background:var(--bg);font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:0.5px solid var(--border)">🍽 Top 5 platos — últimos 30 días</div>
+    ${top5.map(([nombre,qty],i)=>{
+      const pct=Math.round((qty/maxQty)*100);
+      return`<div style="padding:10px 16px;border-bottom:0.5px solid var(--border)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:18px">${medals[i]}</span>
+            <span style="font-size:13px;font-weight:600">${nombre}</span>
+          </div>
+          <span style="font-size:14px;font-weight:700;color:var(--accent)">${qty} unid.</span>
+        </div>
+        <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${pct}%;background:${i===0?'#f59e0b':i===1?'#94a3b8':i===2?'#b45309':'#3b82f6'};border-radius:3px"></div>
+        </div>
+      </div>`;
+    }).join('')}
   </div>`;
 }
 window.showAddClienteForm=()=>{C._showAddCliente=true;render();setTimeout(()=>document.getElementById('new-cliente-nombre')?.focus(),50);};
