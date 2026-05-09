@@ -4529,6 +4529,13 @@ function renderTop5Platos(){
     if((o.cobradoAt||0)<hace30)return;
     (o.items||[]).forEach(i=>{
       if(i.isKiosko||i.isCafeteria)return;
+      // Filtrar bebidas por categoría
+      const dish=Object.values(DB.dishes||{}).find(d=>d.name===i.name);
+      if(dish){
+        const cat=DB.categories?.[dish.cat];
+        const label=(cat?.label||'').toLowerCase();
+        if(['bebida','trago','drink','bar'].some(nc=>label.includes(nc)))return;
+      }
       const nombre=i.name||'';if(!nombre)return;
       counts[nombre]=(counts[nombre]||0)+(i.qty||1);
     });
