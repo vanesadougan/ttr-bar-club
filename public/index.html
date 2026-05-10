@@ -5273,7 +5273,7 @@ function renderDeudoresTab(){
       const _dIdx=window._deudorKeys.push(keys)-1;
       if(!window._deudorSaldos)window._deudorSaldos=[];
       window._deudorSaldos[_dIdx]=saldoMostrar;
-      const isExpanded=C._deudorExpanded?.[g.nombre]!==false; // expandido por defecto
+      const isExpanded=C._deudorExpanded?.[g.nombre]===true; // colapsado por defecto
 
       h+=`<div class="card" style="margin-bottom:.875rem;border-left:3px solid #dc2626;padding:0;overflow:hidden">`;
 
