@@ -257,14 +257,13 @@ import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
 // ─── FIREBASE CONFIG ───────────────────────────────
 // Reemplazá estos valores con los de tu proyecto Firebase
 const firebaseConfig = {
-  apiKey: "AIzaSyBvZ-t5rFj6Eo2Eveze5f5eqqRxZ2xiodY",
-  authDomain: "ttr-bar-club.firebaseapp.com",
-  databaseURL: "https://ttr-bar-club-default-rtdb.firebaseio.com",
-  projectId: "ttr-bar-club",
-  storageBucket: "ttr-bar-club.firebasestorage.app",
-  messagingSenderId: "197986436291",
-  appId: "1:197986436291:web:338ddcf70a35962aacce76",
-  measurementId: "G-4QYLLN280Q"
+  apiKey: "AIzaSyBdskPCYx2Nelq-IVeGshM-hv8rBz9WkjA",
+  authDomain: "ttr-bar-club-dev.firebaseapp.com",
+  databaseURL: "https://ttr-bar-club-dev-default-rtdb.firebaseio.com",
+  projectId: "ttr-bar-club-dev",
+  storageBucket: "ttr-bar-club-dev.firebasestorage.app",
+  messagingSenderId: "635056829443",
+  appId: "1:635056829443:web:0872e806ab97fcc9bcca36"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -823,8 +822,9 @@ function renderCajaTab(){
 
   // Calcular saldo
   const saldo=movs.reduce((s,m)=>s+(m.monto||0),0);
-  const ingresos=movs.filter(m=>m.monto>0).reduce((s,m)=>s+m.monto,0);
-  const egresos=movs.filter(m=>m.monto<0).reduce((s,m)=>s+m.monto,0);
+  const ingresos=movs.filter(m=>m.tipo==='venta'||(m.tipo!=='gasto'&&m.tipo!=='apertura'&&m.tipo!=='credito_cliente'&&m.monto>0)).reduce((s,m)=>s+m.monto,0);
+  const egresos=movs.filter(m=>m.tipo==='gasto'||m.monto<0).reduce((s,m)=>s+Math.abs(m.monto),0);
+  const balance=ingresos-egresos;
 
   let h='<div style="max-width:720px">';
 
@@ -860,8 +860,8 @@ function renderCajaTab(){
     // Métricas resumen
     h+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem">`;
     h+=`<div class="card" style="text-align:center;padding:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Ingresos</div><div style="font-size:20px;font-weight:700;color:#065f46">$${ingresos.toLocaleString('es-AR')}</div></div>`;
-    h+=`<div class="card" style="text-align:center;padding:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Egresos</div><div style="font-size:20px;font-weight:700;color:#b91c1c">$${Math.abs(egresos).toLocaleString('es-AR')}</div></div>`;
-    h+=`<div class="card" style="text-align:center;padding:14px;border-color:${saldo>=0?'#10b981':'#ef4444'}"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Saldo</div><div style="font-size:20px;font-weight:700;color:${saldo>=0?'var(--accent)':'#b91c1c'}">$${saldo.toLocaleString('es-AR')}</div></div>`;
+    h+=`<div class="card" style="text-align:center;padding:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Egresos</div><div style="font-size:20px;font-weight:700;color:#b91c1c">$${egresos.toLocaleString('es-AR')}</div></div>`;
+    h+=`<div class="card" style="text-align:center;padding:14px;border-color:${balance>=0?'#10b981':'#ef4444'}"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Saldo</div><div style="font-size:20px;font-weight:700;color:${balance>=0?'var(--accent)':'#b91c1c'}">$${balance.toLocaleString('es-AR')}</div></div>`;
     h+=`</div>`;
 
     // Formulario modal si está abierto
@@ -1945,7 +1945,7 @@ function buildWaiterMenuH(){
         menuH+='<div class="menu-card-footer"><span style="font-size:11px;color:var(--muted)">A definir</span><button class="add-btn" onclick="waiterAddDish(\''+d._key+'\',\'dish\')">+</button></div>';
         // Picker inline
         if(_isOpen&&d.mitadMitadCat){
-          const _opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(dd=>dd.cat===d.mitadMitadCat&&!dd.unavailable).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+          const _opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(dd=>dd.cat===d.mitadMitadCat&&!dd.unavailable&&!dd.oculto).sort((a,b)=>a.name.localeCompare(b.name,'es'));
           const _s=C.mitadStep||1;
           const _m1=C.mitad1?_opts.find(dd=>dd._key===C.mitad1):null;
           const _m2=C.mitad2?_opts.find(dd=>dd._key===C.mitad2):null;
@@ -2576,6 +2576,7 @@ function renderDishesTab(){
           </div>
           <div class="row-btns">
             <button class="btn btn-sm" onclick="toggleAvailability('${d._key}',${unavail})" style="font-size:12px;padding:4px 8px;border-radius:6px;border:0.5px solid ${unavail?'#10b981':'#9ca3af'};color:${unavail?'#065f46':'#374151'};background:${unavail?'#d1fae5':'#f3f4f6'};cursor:pointer">${unavail?'✓ Habilitar':'Deshabilitar'}</button>
+            <button class="btn btn-sm" onclick="toggleDishOculto('${d._key}',${!!d.oculto})" title="${d.oculto?'Mostrar en carta':'Ocultar de carta'}" style="font-size:12px;padding:4px 8px;border-radius:6px;border:0.5px solid ${d.oculto?'#f59e0b':'#9ca3af'};color:${d.oculto?'#92400e':'#374151'};background:${d.oculto?'#fef3c7':'#f3f4f6'};cursor:pointer">${d.oculto?'👁 Mostrar carta':'👁 Ocultar carta'}</button>
             <button class="btn btn-ghost btn-sm" onclick="editDish('${d._key}')">✏️</button>
             <button class="btn btn-danger btn-sm" onclick="deleteDish('${d._key}')">✕</button>
           </div>
@@ -2735,7 +2736,7 @@ function renderCafeteriaTab(){
       catItems.forEach(d=>{
         const unavail=d.unavailable===true;
         const stockChip=(!unavail&&d.stock!=null)?`<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:${Number(d.stock)===0?'#fee2e2':Number(d.stock)<=5?'#fef3c7':'#d1fae5'};color:${Number(d.stock)===0?'#b91c1c':Number(d.stock)<=5?'#92400e':'#065f46'}">📦 ${d.stock}</span>`:'';
-        listH+=`<div class="dish-row" style="${unavail?'background:#f3f4f6;opacity:0.7':''}"><div class="dish-emoji">${d.emoji||'☕'}</div><div class="dish-info"><div style="display:flex;align-items:center;gap:6px"><div class="dish-name">${d.name}</div>${unavail?`<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:#e5e7eb;color:#6b7280">Deshabilitado</span>`:''}${stockChip}${(d.recipe||[]).length>0?`<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:#ede9fe;color:#5b21b6">🧾</span>`:''}</div><div class="dish-desc">${d.desc||''}</div><div class="dish-price-wrap"><span class="dish-price">$${Number(d.price).toLocaleString()}</span></div></div><div class="row-btns"><button class="btn btn-sm" onclick="toggleCafAvailability('${d._key}',${unavail})" style="font-size:12px;padding:4px 8px;border-radius:6px;border:0.5px solid ${unavail?'#10b981':'#9ca3af'};color:${unavail?'#065f46':'#374151'};background:${unavail?'#d1fae5':'#f3f4f6'};cursor:pointer">${unavail?'✓ Habilitar':'Deshabilitar'}</button><button class="btn btn-ghost btn-sm" onclick="editCafItem('${d._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteCafItem('${d._key}')">✕</button></div></div>`;
+        listH+=`<div class="dish-row" style="${unavail?'background:#f3f4f6;opacity:0.7':''}"><div class="dish-emoji">${d.emoji||'☕'}</div><div class="dish-info"><div style="display:flex;align-items:center;gap:6px"><div class="dish-name">${d.name}</div>${unavail?`<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:#e5e7eb;color:#6b7280">Deshabilitado</span>`:''}${d.oculto?`<span style="font-size:10px;font-weight:600;padding:1px 6px;border-radius:4px;background:#fef3c7;color:#92400e">Oculto carta</span>`:''}${stockChip}${(d.recipe||[]).length>0?`<span style="font-size:10px;padding:1px 6px;border-radius:4px;background:#ede9fe;color:#5b21b6">🧾</span>`:''}</div><div class="dish-desc">${d.desc||''}</div><div class="dish-price-wrap"><span class="dish-price">$${Number(d.price).toLocaleString()}</span></div></div><div class="row-btns"><button class="btn btn-sm" onclick="toggleCafAvailability('${d._key}',${unavail})" style="font-size:12px;padding:4px 8px;border-radius:6px;border:0.5px solid ${unavail?'#10b981':'#9ca3af'};color:${unavail?'#065f46':'#374151'};background:${unavail?'#d1fae5':'#f3f4f6'};cursor:pointer">${unavail?'✓ Habilitar':'Deshabilitar'}</button><button class="btn btn-sm" onclick="toggleCafOculto('${d._key}',${!!d.oculto})" style="font-size:12px;padding:4px 8px;border-radius:6px;border:0.5px solid ${d.oculto?'#f59e0b':'#9ca3af'};color:${d.oculto?'#92400e':'#374151'};background:${d.oculto?'#fef3c7':'#f3f4f6'};cursor:pointer">${d.oculto?'👁 Mostrar carta':'👁 Ocultar carta'}</button><button class="btn btn-ghost btn-sm" onclick="editCafItem('${d._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteCafItem('${d._key}')">✕</button></div></div>`;
       });
       listH+=`</div>`;
     }
@@ -2822,6 +2823,8 @@ window.saveEditCafItem=()=>{
 window.cancelEditCafItem=()=>{C.editingCafItem=null;render();};
 window.deleteCafItem=key=>{if(confirm('¿Eliminar este item?'))remove(ref(db,`cafeteriaItems/${key}`));};
 window.toggleCafAvailability=(key,currentlyUnavail)=>{update(ref(db,`cafeteriaItems/${key}`),{unavailable:!currentlyUnavail});};
+window.toggleDishOculto=(key,currentlyOculto)=>{update(ref(db,`dishes/${key}`),{oculto:!currentlyOculto});};
+window.toggleCafOculto=(key,currentlyOculto)=>{update(ref(db,`cafeteriaItems/${key}`),{oculto:!currentlyOculto});};
 window.toggleCafCustomizable=val=>{const f=C.editingCafItem||C.newCafItem;f.customizable=val;if(!f.ingredients)f.ingredients=[];render();};
 window.addCafIngredient=()=>{const inp=document.getElementById('caf-ing-input');const v=inp?inp.value.trim():'';if(!v)return;const f=C.editingCafItem||C.newCafItem;if(!f.ingredients)f.ingredients=[];f.ingredients.push(v);C.newCafIngInput='';render();};
 window.removeCafIngredient=idx=>{const f=C.editingCafItem||C.newCafItem;f.ingredients.splice(idx,1);render();};
@@ -4178,7 +4181,8 @@ function renderOrdersTab(){
           :`<button onclick="event.stopPropagation();addOrderToGeneral('${tg.tableId||''}')" title="Agregar pedido general" style="width:22px;height:22px;border-radius:50%;border:none;background:#3b82f6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>`;
         const creditoCli=pg.personName?findClienteByName(pg.personName):null;
         const creditoChip=creditoCli&&creditoCli.credito>0?`<span style="font-size:10px;background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:10px;font-weight:600">💚 $${creditoCli.credito.toLocaleString()}</span>`:'';
-        h+=`<div style="padding:6px 14px;background:#f0f4ff;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:600;color:#1e40af;display:flex;align-items:center;gap:6px">👤 ${pg.personName||'General'}${creditoChip}<div style="margin-left:auto;display:flex;gap:6px">${discBtn}${addBtn}</div></div>`;
+        const editNameBtn=pg.personName?`<button onclick="event.stopPropagation();editOrderPersonName(${JSON.stringify(allKeys)},'${(pg.personName||'').replace(/'/g,"\\'")}') " title="Editar nombre" style="width:20px;height:20px;border-radius:50%;border:none;background:#e0e7ff;color:#3730a3;font-size:10px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">✏️</button>`:'';
+        h+=`<div style="padding:6px 14px;background:#f0f4ff;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:600;color:#1e40af;display:flex;align-items:center;gap:6px">👤 ${pg.personName||'General'}${creditoChip}${editNameBtn}<div style="margin-left:auto;display:flex;gap:6px">${discBtn}${addBtn}</div></div>`;
       }
 
       // Items de todos los pedidos de esta persona
@@ -5353,6 +5357,75 @@ function renderDeudoresTab(){
   return h;
 }
 
+window.editOrderPersonName=async(keys,nombreActual)=>{
+  const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k}));
+  const leaders=waiters.filter(w=>w.isLeader);
+  let pinInput='';let step='pin';
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  const clientes=Object.values(DB.clientes||{}).map(c=>c.nombre||'').filter(Boolean).sort();
+  const renderO=()=>{
+    if(step==='pin'){
+      const dots='●'.repeat(pinInput.length)+'○'.repeat(4-pinInput.length);
+      overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:280px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
+        <div style="font-size:28px;margin-bottom:8px">🔐</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">Editar nombre</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">PIN de moza líder</div>
+        <div style="font-size:28px;letter-spacing:14px;color:var(--brand);margin-bottom:14px">${dots}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+          ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>k===''?'<div></div>':`<button data-k="${k}" style="padding:14px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);font-size:20px;font-weight:600;cursor:pointer;font-family:inherit">${k}</button>`).join('')}
+        </div>
+        <button id="ep-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>`;
+      overlay.querySelector('#ep-cancel').onclick=()=>overlay.remove();
+      overlay.querySelectorAll('[data-k]').forEach(btn=>{
+        btn.onclick=()=>{
+          const k=btn.dataset.k;
+          if(k==='⌫'){pinInput=pinInput.slice(0,-1);renderO();return;}
+          if(pinInput.length>=4)return;
+          pinInput+=k;
+          if(pinInput.length===4){
+            if(!leaders.find(w=>String(w.pin)===pinInput)){pinInput='';setTimeout(()=>renderO(),600);}
+            else{step='edit';renderO();}
+          } else renderO();
+        };
+      });
+    } else {
+      overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:340px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        <div style="font-size:16px;font-weight:700;margin-bottom:4px">✏️ Editar nombre</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Nombre actual: <strong>${nombreActual}</strong></div>
+        <div class="form-group" style="margin-bottom:12px;position:relative">
+          <label>Nuevo nombre</label>
+          <input id="ep-nombre" value="${nombreActual}" placeholder="Nombre del cliente" style="font-size:16px;width:100%;padding:8px 10px;border:1.5px solid var(--brand);border-radius:8px;font-family:inherit;box-sizing:border-box" autocomplete="off">
+          <div id="ep-dd" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--card);border:0.5px solid var(--border);border-radius:8px;max-height:150px;overflow-y:auto;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button id="ep-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
+          <button id="ep-close" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
+        </div>
+      </div>`;
+      const inp=overlay.querySelector('#ep-nombre');
+      const dd=overlay.querySelector('#ep-dd');
+      const showDD=list=>{if(!list.length){dd.style.display='none';return;}dd.innerHTML=list.map(n=>`<div data-n="${n}" style="padding:8px 12px;cursor:pointer;font-size:14px;border-bottom:0.5px solid var(--border)">${n}</div>`).join('');dd.style.display='block';dd.querySelectorAll('[data-n]').forEach(el=>{el.onclick=()=>{inp.value=el.dataset.n;dd.style.display='none';};});};
+      inp.addEventListener('input',()=>{const q=inp.value.toLowerCase();showDD(q?clientes.filter(n=>n.toLowerCase().includes(q)):clientes);});
+      inp.addEventListener('focus',()=>{if(!inp.value)showDD(clientes);});
+      overlay.querySelector('#ep-close').onclick=()=>overlay.remove();
+      overlay.querySelector('#ep-ok').onclick=async()=>{
+        const nuevo=(inp.value||'').trim();
+        if(!nuevo)return;
+        overlay.remove();
+        for(const k of keys){
+          await update(ref(db,`orders/${k}`),{personName:nuevo,deudorNombre:nuevo});
+        }
+        render();
+      };
+      setTimeout(()=>{inp.focus();inp.select();},50);
+    }
+  };
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  renderO();
+};
 window.toggleDeudorExpanded=(nombre)=>{
   if(!C._deudorExpanded)C._deudorExpanded={};
   C._deudorExpanded[nombre]=C._deudorExpanded[nombre]===false?true:false;
@@ -8163,8 +8236,8 @@ window.enterMenu=()=>{ menuShowWelcome=false; render(); };
 
 function renderMenuOnly(mc){
   const cats=getCats();
-  const allDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
-  const allCafItems=Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable);
+  const allDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable&&!d.oculto);
+  const allCafItems=Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k})).filter(d=>!d.unavailable&&!d.oculto);
 
   // Mostrar spinner mientras Firebase no cargó
   if(firstLoad||allDishes.length===0&&Object.keys(DB.dishes).length===0){
@@ -8256,7 +8329,7 @@ function renderMenuWithCart(mc){
   const ct=cartCount();
 
   // ── Selector de sección ──
-  const hasCafItems=Object.values(DB.cafeteriaItems||{}).some(d=>!d.unavailable);
+  const hasCafItems=Object.values(DB.cafeteriaItems||{}).some(d=>!d.unavailable&&!d.oculto);
   const hasCafCats=Object.keys(DB.cafeteriaCategories||{}).length>0;
   const showCafSwitch=hasCafCats||hasCafItems;
   const tableData=DB.tables[C.customerTableId]||{};
@@ -8287,7 +8360,7 @@ function renderMenuWithCart(mc){
 
   // ── Sección Platos (Restaurant) ──
   const allDishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k}));
-  const dishes=allDishes.filter(d=>!d.unavailable);
+  const dishes=allDishes.filter(d=>!d.unavailable&&!d.oculto);
   const cats=getCats();
   const allCatIds=[...cats.map(c=>c._key)].filter(id=>dishes.some(d=>d.cat===id));
   // Auto-seleccionar primera categoría siempre
@@ -8331,7 +8404,7 @@ function renderMenuWithCart(mc){
       _mmEntries.forEach(([k,v])=>{menuH+=`<div style="font-size:11px;color:var(--muted);margin-top:2px">🍕 ${v._mitadName||''}</div>`;});
       menuH+=`<div class="menu-card-footer"><span style="font-size:11px;color:var(--muted)">A definir</span><button class="add-btn" onclick="custOpenMitad('${d._key}')">+</button></div>`;
       if(_isOpen){
-        const _opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(dd=>dd.cat===d.mitadMitadCat&&!dd.unavailable).sort((a,b)=>a.name.localeCompare(b.name,'es'));
+        const _opts=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k})).filter(dd=>dd.cat===d.mitadMitadCat&&!dd.unavailable&&!dd.oculto).sort((a,b)=>a.name.localeCompare(b.name,'es'));
         const _s=C.custMitadStep||1;
         const _m1=C.custMitad1?_opts.find(dd=>dd._key===C.custMitad1):null;
         const _m2=C.custMitad2?_opts.find(dd=>dd._key===C.custMitad2):null;
@@ -8557,7 +8630,7 @@ window.setMenuSection=section=>{C.customerMenuSection=section;C.cafCat='todos';i
 window.initCustomerCat=()=>{
   const cats=getCats();
   const allDishes=Object.values(DB.dishes);
-  const availDishes=allDishes.filter(d=>!d.unavailable);
+  const availDishes=allDishes.filter(d=>!d.unavailable&&!d.oculto);
   const firstCatWithDishes=cats.find(c=>availDishes.some(d=>d.cat===c._key));
   if(C.customerCat==='todos'&&firstCatWithDishes) C.customerCat=firstCatWithDishes._key;
 };
@@ -8611,7 +8684,7 @@ window.cancelCart=()=>{
 // ── CAFETERÍA MENÚ COMENSAL ───────────────────────
 function renderCafeteriaMenu(mc, menuH, ct, isIndividual){
   const allItems=Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,isCafeteria:true}));
-  const items=allItems.filter(d=>!d.unavailable);
+  const items=allItems.filter(d=>!d.unavailable&&!d.oculto);
   const cats=getCafCats();
   const allCatIds=cats.map(c=>c._key).filter(id=>items.some(d=>d.cat===id));
   // Auto-seleccionar primera categoría siempre
