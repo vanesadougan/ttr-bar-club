@@ -4090,7 +4090,7 @@ function renderOrdersTab(){
   <div class="orders-list">`;
   // ── Nuevo diseño: dos columnas, colapsable por mesa ──
   if(!C._ordersExpanded) C._ordersExpanded={};
-  window._pgKeys=[];
+  window._pgKeys=[];window._editNameKeys=[];
 
   // Agrupar todos los pedidos activos por mesa
   const allTableGroups={};
@@ -4181,7 +4181,9 @@ function renderOrdersTab(){
           :`<button onclick="event.stopPropagation();addOrderToGeneral('${tg.tableId||''}')" title="Agregar pedido general" style="width:22px;height:22px;border-radius:50%;border:none;background:#3b82f6;color:#fff;font-size:14px;font-weight:700;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">+</button>`;
         const creditoCli=pg.personName?findClienteByName(pg.personName):null;
         const creditoChip=creditoCli&&creditoCli.credito>0?`<span style="font-size:10px;background:#d1fae5;color:#065f46;padding:1px 6px;border-radius:10px;font-weight:600">💚 $${creditoCli.credito.toLocaleString()}</span>`:'';
-        const editNameBtn=pg.personName?`<button onclick="event.stopPropagation();editOrderPersonName(${JSON.stringify(allKeys)},'${(pg.personName||'').replace(/'/g,"\\'")}') " title="Editar nombre" style="width:20px;height:20px;border-radius:50%;border:none;background:#e0e7ff;color:#3730a3;font-size:10px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">✏️</button>`:'';
+        if(!window._editNameKeys)window._editNameKeys=[];
+        const _enIdx=window._editNameKeys.push(allKeys)-1;
+        const editNameBtn=pg.personName?`<button onclick="event.stopPropagation();editOrderPersonName(window._editNameKeys[${_enIdx}],'${(pg.personName||'').replace(/'/g,"\\'")}') " title="Editar nombre" style="width:20px;height:20px;border-radius:50%;border:none;background:#e0e7ff;color:#3730a3;font-size:10px;cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center">✏️</button>`:'';
         h+=`<div style="padding:6px 14px;background:#f0f4ff;border-bottom:0.5px solid var(--border);font-size:12px;font-weight:600;color:#1e40af;display:flex;align-items:center;gap:6px">👤 ${pg.personName||'General'}${creditoChip}${editNameBtn}<div style="margin-left:auto;display:flex;gap:6px">${discBtn}${addBtn}</div></div>`;
       }
 
