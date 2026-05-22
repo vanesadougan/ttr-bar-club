@@ -5315,8 +5315,10 @@ function renderDeudoresTab(){
           h+=`<div style="padding:10px 16px;${oi<g.orders.length-1?'border-bottom:0.5px solid #f3f4f6':''}">`;
           h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">`;
           h+=`<div style="font-size:11px;color:var(--muted);font-weight:500">${oFecha} · ${oTableLabel}</div>`;
+          h+=`<div style="display:flex;align-items:center;gap:6px">`;
           h+=`<div style="font-size:13px;font-weight:600;color:var(--text)">$${oTotalItems.toLocaleString()}</div>`;
-          h+=`</div>`;
+          h+=`<button onclick="editDeudorOrder('${o._key}')" style="padding:2px 7px;font-size:11px;border-radius:5px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️</button>`;
+          h+=`</div></div>`;
           oItems.forEach(i=>{
             h+=`<div style="font-size:12px;color:var(--muted);padding-left:4px">${i.qty}× <strong style="color:var(--text)">${i.name}</strong>${i.selectedType?` <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 4px;border-radius:3px">${i.selectedType}</span>`:''} <span style="color:var(--accent)">$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;
           });
@@ -5428,6 +5430,103 @@ window.editOrderPersonName=async(keys,nombreActual)=>{
       setTimeout(()=>{inp.focus();inp.select();},50);
     }
   };
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  renderO();
+};
+window.editDeudorOrder=async(orderKey)=>{
+  const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k}));
+  const leaders=waiters.filter(w=>w.isLeader);
+  let pinInput='';let step='pin';
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
+
+  const renderO=()=>{
+    if(step==='pin'){
+      const dots='●'.repeat(pinInput.length)+'○'.repeat(4-pinInput.length);
+      overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:280px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
+        <div style="font-size:28px;margin-bottom:8px">🔐</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">Editar pedido deudor</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">PIN de moza líder</div>
+        <div style="font-size:28px;letter-spacing:14px;color:var(--brand);margin-bottom:14px">${dots}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+          ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>k===''?'<div></div>':`<button data-k="${k}" style="padding:14px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);font-size:20px;font-weight:600;cursor:pointer;font-family:inherit">${k}</button>`).join('')}
+        </div>
+        <button id="ed-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>`;
+      overlay.querySelector('#ed-cancel').onclick=()=>overlay.remove();
+      overlay.querySelectorAll('[data-k]').forEach(btn=>{
+        btn.onclick=()=>{
+          const k=btn.dataset.k;
+          if(k==='⌫'){pinInput=pinInput.slice(0,-1);renderO();return;}
+          if(pinInput.length>=4)return;
+          pinInput+=k;
+          if(pinInput.length===4){
+            if(!leaders.find(w=>String(w.pin)===pinInput)){pinInput='';setTimeout(()=>renderO(),600);}
+            else{step='edit';renderO();}
+          } else renderO();
+        };
+      });
+    } else {
+      const o=DB.orders[orderKey];
+      if(!o){overlay.remove();return;}
+      let items=[...( o.items||[]).map(i=>({...i}))];
+
+      const renderEdit=()=>{
+        const total=items.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+        overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+          <div style="font-size:16px;font-weight:700;margin-bottom:12px">✏️ Editar pedido deudor</div>
+          <div style="margin-bottom:12px">
+            ${items.map((it,idx)=>`
+              <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg);border-radius:8px;margin-bottom:6px;border:0.5px solid var(--border)">
+                <div style="flex:1;font-size:13px;font-weight:500">${it.name}${it.selectedType?` <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 4px;border-radius:3px">${it.selectedType}</span>`:''}</div>
+                <div style="display:flex;align-items:center;gap:4px">
+                  <button data-action="dec" data-idx="${idx}" style="width:26px;height:26px;border-radius:50%;border:0.5px solid var(--border);background:var(--card);font-size:16px;cursor:pointer;font-family:inherit;line-height:1">−</button>
+                  <span style="font-size:14px;font-weight:700;min-width:20px;text-align:center">${it.qty}</span>
+                  <button data-action="inc" data-idx="${idx}" style="width:26px;height:26px;border-radius:50%;border:0.5px solid var(--border);background:var(--card);font-size:16px;cursor:pointer;font-family:inherit;line-height:1">+</button>
+                </div>
+                <span style="font-size:12px;font-weight:600;color:var(--accent);min-width:60px;text-align:right">$${((it.finalPrice||it.price)*it.qty).toLocaleString()}</span>
+                <button data-action="del" data-idx="${idx}" style="width:24px;height:24px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:12px;cursor:pointer;font-family:inherit;line-height:1">✕</button>
+              </div>`).join('')}
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:8px 4px;margin-bottom:12px;border-top:0.5px solid var(--border)">
+            <span style="font-size:13px;font-weight:600">Nuevo total</span>
+            <span style="font-size:16px;font-weight:700;color:var(--accent)">$${total.toLocaleString()}</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button id="ed-save" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
+            <button id="ed-close" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
+          </div>
+        </div>`;
+
+        overlay.querySelectorAll('[data-action]').forEach(btn=>{
+          btn.onclick=()=>{
+            const idx=Number(btn.dataset.idx);
+            const action=btn.dataset.action;
+            if(action==='inc'){items[idx].qty++;}
+            else if(action==='dec'){if(items[idx].qty>1)items[idx].qty--;else items.splice(idx,1);}
+            else if(action==='del'){items.splice(idx,1);}
+            if(!items.length){overlay.remove();return;}
+            renderEdit();
+          };
+        });
+
+        overlay.querySelector('#ed-close').onclick=()=>overlay.remove();
+        overlay.querySelector('#ed-save').onclick=async()=>{
+          const newTotal=items.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+          // Mantener la proporción del saldo pendiente respecto al total original
+          const oldTotal=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+          const oldSaldo=o.saldoPendiente!=null?o.saldoPendiente:oldTotal;
+          const newSaldo=oldTotal>0?Math.round(newTotal*(oldSaldo/oldTotal)):newTotal;
+          overlay.remove();
+          await update(ref(db,`orders/${orderKey}`),{items,saldoPendiente:Math.max(0,newSaldo)});
+          render();
+        };
+      };
+      renderEdit();
+    }
+  };
+
   document.body.appendChild(overlay);
   overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
   renderO();
