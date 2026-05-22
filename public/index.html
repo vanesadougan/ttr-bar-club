@@ -2251,6 +2251,7 @@ window.waiterMarkCobradoGroup=async(keys)=>{
   const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
   for(const k of keys){await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});}
   if(creditoUsado>0)await update(ref(db,`clientes/${creditoInfo.key}`),{credito:Math.max(0,creditoDisp2-creditoUsado)});
+  await descontarStockOrders(keys);
   const hoy=new Date().toISOString().slice(0,10);
   if(getCajaAbierta()&&totalFinal>0){
     if(pmDetail&&pmDetail.length>1){
@@ -5271,7 +5272,7 @@ function renderDeudoresTab(){
       grupos[nombre].orders.push(o);
     });
 
-    Object.values(grupos).forEach(g=>{
+    Object.values(grupos).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es')).forEach(g=>{
       const keys=g.orders.map(o=>o._key);
       const totalOriginal=g.orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
       const saldoMostrar=g.orders.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
@@ -7089,6 +7090,7 @@ window.submitManualOrder=async(modo='pending')=>{
       if(creditoAplicado>0&&creditoCli){
         await update(ref(db,`clientes/${creditoCli.key}`),{credito:Math.max(0,creditoDisp-creditoAplicado)});
       }
+      await descontarStockOrders([newOrderRef?.key].filter(Boolean));
       C.adminTab='deudores';clearManualOrder();
     };
   }
@@ -7485,6 +7487,7 @@ window.adminGroupCobrado=async keys=>{
   for(const k of keys){await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now(),descuento,pct});}
   if(creditoUsado>0)await update(ref(db,`clientes/${creditoInfo.key}`),{credito:Math.max(0,creditoDisp-creditoUsado)});
   const hoy=new Date().toISOString().slice(0,10);
+  await descontarStockOrders(keys);
   if(totalFinal>0&&getCajaAbierta()){
     if(pmDetail&&pmDetail.length>1){
       for(const p of pmDetail){const montoP=Number(p.monto)||0;if(!montoP)continue;await push(ref(db,'caja'),{tipo:'venta',concepto:`Venta: ${tableLabel3}${personName3?' · '+personName3:''} (${pmL[p.pm]||p.pm})${pct>0?` -${pct}%`:''}`,monto:montoP,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:p.pm,descuento:0,pct:0});}
@@ -7616,11 +7619,11 @@ window.adminGroupDeudor=async(keys,saldoOverride)=>{
     }
 
     cleanup();
+    // Calcular descuento real basado en diferencia con total original
     for(const k of keys){
       const o=DB.orders[k];
       const oTotal=o?(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0):0;
       const oDesc=conDesc?Math.round(oTotal*(pct/100)):0;
-      // Saldo proporcional: si hay pago parcial previo, distribuirlo
       const oSaldoBruto=Math.max(0,oTotal-oDesc);
       const proporcion=totalBase>0?oTotal/totalBase:1;
       const oSaldo=Math.max(0,Math.round(saldoPendiente*proporcion));
@@ -7634,12 +7637,13 @@ window.adminGroupDeudor=async(keys,saldoOverride)=>{
     // Actualizar crédito del cliente
     if(creditoAplicado>0&&creditoCli){
       await update(ref(db,`clientes/${creditoCli.key}`),{credito:Math.max(0,creditoDisp-creditoAplicado)});
-      // Si quedó en 0 deuda, marcar como cobrado directamente
       if(saldoPendiente===0){
         for(const k of keys) await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:'credito_cliente',cobradoAt:Date.now(),saldoPendiente:0});
+        await descontarStockOrders(keys);
         render();return;
       }
     }
+    await descontarStockOrders(keys);
     C.adminTab='deudores';render();
   };
 };
@@ -7656,37 +7660,40 @@ window.adminMarkPreparing=async key=>{ await update(ref(db,`orders/${key}`),{sta
 window.adminConfirmEntrega=async key=>{ await update(ref(db,`orders/${key}`),{readyAt:null}); };
 window.markDelivered=async key=>{
   await update(ref(db,`orders/${key}`),{status:'delivered'});
-  const o=DB.orders[key];
-  if(o&&o.items){
-    for(const item of o.items){
-      const dishEntry=Object.entries(DB.dishes).find(([,d])=>d.name===item.name);
-      const cafEntry=Object.entries(DB.cafeteriaItems||{}).find(([,d])=>d.name===item.name);
-      const d=dishEntry?dishEntry[1]:cafEntry?cafEntry[1]:null;
-      const dKey=dishEntry?dishEntry[0]:cafEntry?cafEntry[0]:null;
-      const dbPath=dishEntry?'dishes':cafEntry?'cafeteriaItems':null;
-      if(!d||!dKey||!dbPath)continue;
-      const recipe=d.recipe||[];
-      if(recipe.length>0){
-        // Descontar por ingredientes de la receta
-        for(const r of recipe){
-          const ing=DB.ingredients[r.ingredientId];
-          if(ing==null)continue;
-          const newStock=Math.max(0,(ing.stock||0)-r.qty*item.qty);
-          await update(ref(db,`ingredients/${r.ingredientId}`),{stock:newStock});
-        }
-      } else if(d.stock!=null){
-        // Sin receta: descontar stock directo del plato
-        const newStock=Math.max(0,(d.stock||0)-item.qty);
-        await update(ref(db,`${dbPath}/${dKey}`),{stock:newStock});
-        if(newStock===0){
-          showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
-        } else if(d.alertAt!=null&&newStock<=d.alertAt){
-          showNotif('alert','⚠️ Stock bajo: '+d.name,'Quedan '+newStock);
+  // Stock ya no se descuenta aquí — se descuenta al cobrar o mandar a deuda
+};
+
+async function descontarStockOrders(keys){
+  for(const key of keys){
+    const o=DB.orders[key];
+    if(!o||o._stockDescontado)continue; // evitar doble descuento
+    if(o&&o.items){
+      for(const item of o.items){
+        const dishEntry=Object.entries(DB.dishes).find(([,d])=>d.name===item.name);
+        const cafEntry=Object.entries(DB.cafeteriaItems||{}).find(([,d])=>d.name===item.name);
+        const d=dishEntry?dishEntry[1]:cafEntry?cafEntry[1]:null;
+        const dKey=dishEntry?dishEntry[0]:cafEntry?cafEntry[0]:null;
+        const dbPath=dishEntry?'dishes':cafEntry?'cafeteriaItems':null;
+        if(!d||!dKey||!dbPath)continue;
+        const recipe=d.recipe||[];
+        if(recipe.length>0){
+          for(const r of recipe){
+            const ing=DB.ingredients[r.ingredientId];
+            if(ing==null)continue;
+            const newStock=Math.max(0,(ing.stock||0)-r.qty*item.qty);
+            await update(ref(db,`ingredients/${r.ingredientId}`),{stock:newStock});
+          }
+        } else if(d.stock!=null){
+          const newStock=Math.max(0,(d.stock||0)-item.qty);
+          await update(ref(db,`${dbPath}/${dKey}`),{stock:newStock});
+          if(newStock===0) showNotif('alert','Sin stock: '+d.name,'Quedan 0 unidades');
+          else if(d.alertAt!=null&&newStock<=d.alertAt) showNotif('alert','⚠️ Stock bajo: '+d.name,'Quedan '+newStock);
         }
       }
     }
+    await update(ref(db,`orders/${key}`),{_stockDescontado:true});
   }
-};
+}
 
 // ── EDICIÓN DE PEDIDOS PENDIENTES (ADMIN) ─────────
 window.adminEditOrder=key=>{
