@@ -2583,6 +2583,7 @@ function renderDishesTab(){
   if(subTab==='categorias') return tabsH+renderCategoriesTab();
 
   // ── DISH FORM ──────────────────────────────────
+  const isEditing=!!(C.editingDish||C._showDishForm);
   const sec=C.dishSections||{};
   const toggleSec=name=>`toggleDishSection('${name}')`;
 
@@ -2683,7 +2684,6 @@ function renderDishesTab(){
     listH+=`</div>`;
   });
   listH+=`</div>`;
-  const isEditing=!!(C.editingDish||C._showDishForm);
   const mobileSheet=isEditing?`<div class="dish-form-overlay" onclick="cancelDishForm()" style="display:block"></div><div class="dish-form-sheet"><div style="text-align:center;padding:10px 0 4px"><div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div></div>${formH}</div>`:'';
   const formPanel=isEditing?`<div class="dishes-form-panel">${formH}</div>`:'';
   return tabsH+mobileSheet+`<div class="dishes-layout${isEditing?'':' no-form'}">${formPanel}<div class="dishes-list-panel">${listH}</div></div>`;
@@ -2820,6 +2820,8 @@ function renderCafeteriaTab(){
 
   formH+='<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-primary" onclick="'+(C.editingCafItem?'saveEditCafItem()':'addCafItem()') +'">'+(C.editingCafItem?'Guardar cambios':'Agregar item')+'</button>'+(C.editingCafItem?'<button class="btn btn-ghost" onclick="cancelEditCafItem()">Cancelar</button>':'')+'</div></div>';
 
+  const isEditingCaf=!!(C.editingCafItem||C._showCafForm);
+
   let listH=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem"><div style="font-size:16px;font-weight:600">☕ Cafetería</div>${!isEditingCaf?`<button onclick="window._startNewCafItem()" style="padding:7px 16px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar ítem</button>`:''}</div><div class="cat-sections">`;
   const allItems=Object.entries(DB.cafeteriaItems).map(([k,v])=>({...v,_key:k}));
   if(cats.length===0){
@@ -2842,7 +2844,6 @@ function renderCafeteriaTab(){
     listH+=`</div>`;
   });
   listH+=`</div>`;
-  const isEditingCaf=!!(C.editingCafItem||C._showCafForm);
   const mobileSheetCaf=isEditingCaf?`<div class="dish-form-overlay" onclick="cancelCafForm()" style="display:block"></div><div class="dish-form-sheet"><div style="text-align:center;padding:10px 0 4px"><div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div></div>${formH}</div>`:'';
   const formPanelCaf=isEditingCaf?`<div class="dishes-form-panel">${formH}</div>`:'';
   return tabsH+mobileSheetCaf+`<div class="dishes-layout${isEditingCaf?'':' no-form'}">${formPanelCaf}<div class="dishes-list-panel">${listH}</div></div>`;
