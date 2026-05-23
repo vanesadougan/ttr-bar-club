@@ -64,6 +64,8 @@
     .dishes-form-panel{position:sticky;top:72px;max-height:calc(100vh - 88px);overflow-y:auto;border-radius:12px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
     .dishes-form-panel::-webkit-scrollbar{width:4px}.dishes-form-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
     .dishes-list-panel{min-height:0}
+    .dish-form-overlay{display:none;position:fixed;inset:0;z-index:8888;background:rgba(0,0,0,.45)}
+    .dish-form-sheet{position:fixed;bottom:0;left:0;right:0;z-index:8889;background:var(--card);border-radius:18px 18px 0 0;max-height:90vh;overflow-y:auto;padding:0 0 env(safe-area-inset-bottom,0)}
     .form-section{border:0.5px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden}
     .form-section-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;background:var(--bg);font-size:13px;font-weight:500;user-select:none}
     .form-section-header:hover{background:#f3f4f6}
@@ -131,7 +133,7 @@
       .cart-col{display:none}
       .mobile-cart-bar{display:flex}
       .menu-col{padding-bottom:80px}
-      .dishes-layout{grid-template-columns:1fr}.dishes-form-panel{position:relative;top:0;max-height:none}.metrics{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}
+      .dishes-layout{grid-template-columns:1fr}.dishes-form-panel{position:relative;top:0;max-height:none;display:none}.dishes-list-panel{grid-column:1}.metrics{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}
     }
     .cart-header{padding:1rem 1.25rem;border-bottom:0.5px solid var(--border);font-weight:500;font-size:15px;display:flex;align-items:center;justify-content:space-between}
     .cart-body{flex:1;overflow-y:auto;padding:1rem 1.25rem}
@@ -818,8 +820,9 @@ function getCajaAbierta(){
 function renderCajaHistorialTab(){
   const pmLabels={efectivo:'💵 Efectivo',debito:'💳 Débito',credito:'💳 Crédito',transferencia:'📱 Transferencia',mercadopago:'📱 Mercado Pago'};
   const historial=DB.cajaHistorial||{};
-  const fechas=Object.keys(historial).sort((a,b)=>b.localeCompare(a));
+  const cierres=Object.entries(historial).sort((a,b)=>b[0].localeCompare(a[0]));
   const fmtFechaH=f=>{if(!f)return'';const[y,m,d]=f.split('-');return`${d}/${m}/${y}`;};
+  const fmtHora=ts=>ts?new Date(ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
 
   let h=`<div style="max-width:720px">`;
   h+=`<div style="display:flex;gap:6px;margin-bottom:1.25rem">`;
@@ -827,7 +830,7 @@ function renderCajaHistorialTab(){
   h+=`<button onclick="setCajaSubTab('historial')" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--brand);color:#fff">📋 Historial 30 días</button>`;
   h+=`</div>`;
 
-  if(fechas.length===0){
+  if(cierres.length===0){
     h+=`<div style="text-align:center;padding:3rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">
       <div style="font-size:40px;margin-bottom:12px">📋</div>
       <div style="font-size:16px;font-weight:500">Sin historial aún</div>
@@ -836,15 +839,14 @@ function renderCajaHistorialTab(){
     return h+`</div>`;
   }
 
-  fechas.forEach(fecha=>{
-    const dia=historial[fecha];
+  cierres.forEach(([key,dia])=>{
     const movs=dia.movimientos?Object.values(dia.movimientos):[];
-    const isExpanded=C._cajaHistExpanded?.[fecha]===true;
+    const isExpanded=C._cajaHistExpanded?.[key]===true;
     const ventas=dia.totalVentas||0;const gastos=dia.totalGastos||0;
+    const horaCierre=fmtHora(dia.cierreTs);
     h+=`<div class="card" style="margin-bottom:1rem;padding:0;overflow:hidden">`;
-    // Header clickeable
-    h+=`<div onclick="toggleCajaHist('${fecha}')" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;${isExpanded?'border-bottom:0.5px solid var(--border)':''}">`;
-    h+=`<div><div style="font-size:15px;font-weight:700">📅 ${fmtFechaH(fecha)}</div>`;
+    h+=`<div onclick="toggleCajaHist('${key}')" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;${isExpanded?'border-bottom:0.5px solid var(--border)':''}">`;
+    h+=`<div><div style="font-size:15px;font-weight:700">📅 ${fmtFechaH(dia.fecha||key.slice(0,10))} ${horaCierre?`<span style="font-size:12px;font-weight:400;color:var(--muted)">· Cierre ${horaCierre}</span>`:''}</div>`;
     h+=`<div style="font-size:12px;color:var(--muted);margin-top:2px">${dia.totalMovimientos||0} movimientos</div></div>`;
     h+=`<div style="text-align:right;display:flex;align-items:center;gap:12px">`;
     h+=`<div style="text-align:right"><div style="font-size:11px;color:#059669">Ventas</div><div style="font-size:14px;font-weight:700;color:#059669">$${ventas.toLocaleString()}</div></div>`;
@@ -1142,9 +1144,11 @@ window.cajaCierre=async()=>{
   cajaDescargarArchivo(movs);
   // 4. Guardar movimientos completos en historial (30 días)
   if(movs.length>0){
-    await set(ref(db,`cajaHistorial/${hoy}`),{
+    const cierreTs=Date.now();
+    const cierreKey=`${hoy}_${cierreTs}`;
+    await set(ref(db,`cajaHistorial/${cierreKey}`),{
       fecha:hoy,
-      cierreTs:Date.now(),
+      cierreTs,
       movimientos:movs.reduce((obj,m,i)=>{obj[i]=m;return obj;},{}),
       totalVentas:movs.filter(m=>m.tipo==='venta').reduce((s,m)=>s+Math.abs(m.monto||0),0),
       totalGastos:movs.filter(m=>m.tipo==='gasto'||m.monto<0).reduce((s,m)=>s+Math.abs(m.monto||0),0),
@@ -1155,8 +1159,9 @@ window.cajaCierre=async()=>{
     const historial=snapH.val()||{};
     const limite=new Date();limite.setDate(limite.getDate()-31);
     const limStr=limite.toISOString().slice(0,10);
-    for(const fecha of Object.keys(historial)){
-      if(fecha<limStr)await remove(ref(db,`cajaHistorial/${fecha}`));
+    for(const key of Object.keys(historial)){
+      const fechaKey=key.slice(0,10); // primeros 10 chars = YYYY-MM-DD
+      if(fechaKey<limStr)await remove(ref(db,`cajaHistorial/${key}`));
     }
   }
   // 5. Acumular en resumen mensual para estadísticas
@@ -2677,7 +2682,9 @@ function renderDishesTab(){
     listH+=`</div>`;
   });
   listH+=`</div>`;
-  return tabsH+`<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
+  const isEditing=!!(C.editingDish||C.newDish.name||C.newDish.cat);
+  const mobileSheet=isEditing?`<div class="dish-form-overlay" onclick="cancelDishForm()" style="display:block"></div><div class="dish-form-sheet"><div style="text-align:center;padding:10px 0 4px"><div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div></div>${formH}</div>`:'';
+  return tabsH+mobileSheet+`<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
 }
 
 // ── CATEGORIES TAB ────────────────────────────────
@@ -2833,7 +2840,9 @@ function renderCafeteriaTab(){
     listH+=`</div>`;
   });
   listH+=`</div>`;
-  return tabsH+`<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
+  const isEditingCaf=!!(C.editingCafItem||C.newCafItem.name||C.newCafItem.cat);
+  const mobileSheetCaf=isEditingCaf?`<div class="dish-form-overlay" onclick="cancelCafForm()" style="display:block"></div><div class="dish-form-sheet"><div style="text-align:center;padding:10px 0 4px"><div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div></div>${formH}</div>`:'';
+  return tabsH+mobileSheetCaf+`<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
 }
 function renderCafCategoriesTab(){
   const cats=getCafCats();
@@ -6444,7 +6453,8 @@ window.addDish=()=>{
   C.newDish={name:'',desc:'',price:'',cat:cats.length>0?cats[0]._key:'',emoji:'🍽️',customizable:false,ingredients:[],types:[],hasTypes:false,promoDiscount:0,is2x1:false};
   C.newIngInput='';render();
 };
-window.editDish=key=>{C.editingDish={...DB.dishes[key],_key:key,ingredients:[...(DB.dishes[key].ingredients||[])]};render();};
+window.cancelDishForm=()=>{C.editingDish=null;C.newDish={name:'',desc:'',price:'',cat:'',emoji:'',stock:'',alertAt:'',ingredients:[],types:[],hasTypes:false,customizable:false};render();};
+window.cancelCafForm=()=>{C.editingCafItem=null;C.newCafItem={name:'',desc:'',price:'',cat:'',emoji:'',stock:'',alertAt:'',ingredients:[]};render();};
 window.saveEditDish=()=>{
   const stockInp=document.getElementById('dish-stock-inp');
   if(stockInp&&stockInp.value!=='')C.editingDish.stock=stockInp.value;
