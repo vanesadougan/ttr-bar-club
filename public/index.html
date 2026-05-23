@@ -948,6 +948,14 @@ function renderCajaTab(){
       h+=`<div style="margin-bottom:10px"><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Medio de pago</label><div style="display:flex;gap:8px">`;
       [{v:'efectivo',l:'💵 Efectivo'},{v:'mercadopago',l:'📱 Mercado Pago'},{v:'transferencia',l:'🏦 Transferencia'}].forEach(p=>{const sel=(C.cajaGastoPm||'efectivo')===p.v;h+=`<button onclick="setCajaGastoPm('${p.v}')" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid ${sel?'var(--brand)':'var(--border)'};background:${sel?'var(--brand)':'var(--card)'};color:${sel?'#fff':'var(--text)'};font-size:12px;font-weight:${sel?'600':'400'};cursor:pointer;font-family:inherit">${p.l}</button>`;});
       h+=`</div></div>`;
+      if((C.cajaGastoTipo||'proveedor')==='proveedor'){
+        const provs=Object.entries(DB.proveedores||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
+        if(provs.length>0){
+          h+=`<div class="form-group" style="margin-bottom:10px"><label>Proveedor <span style="font-size:11px;color:var(--muted)">(opcional — guarda en compras)</span></label><select id="caja-proveedor"><option value="">Sin proveedor específico</option>`;
+          provs.forEach(p=>{h+=`<option value="${p._key}">${p.nombre||''}</option>`;});
+          h+=`</select></div>`;
+        }
+      }
       h+=`<div class="two-col"><div class="form-group" style="margin-bottom:10px"><label>Monto ($)</label><input type="number" min="0" placeholder="0" id="caja-monto"></div>`;
       h+=`<div class="form-group" style="margin-bottom:10px"><label>Descripción <span style="font-size:11px;color:var(--muted)">(opcional)</span></label><input placeholder="Ej: Verdulería, Sueldo..." id="caja-desc"></div></div>`;
       h+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="cajaGuardarGasto()">Guardar gasto</button><button class="btn btn-ghost" onclick="cajaCancelarModal()">Cancelar</button></div>`;
@@ -1033,14 +1041,34 @@ window.setCajaGastoPm=t=>{C.cajaGastoPm=t;render();};
 window.cajaGuardarGasto=async()=>{
   const montoInp=document.getElementById('caja-monto');
   const descInp=document.getElementById('caja-desc');
+  const provInp=document.getElementById('caja-proveedor');
   const monto=Number(montoInp?montoInp.value:0);
   const desc=(descInp?descInp.value:'').trim();
+  const provKey=provInp?provInp.value:'';
   if(!monto||monto<=0){alert('Ingresá un monto mayor a 0');return;}
   const tipo=C.cajaGastoTipo||'proveedor';
   const pm=C.cajaGastoPm||'efectivo';
-  const concepto=tipo==='personal'?'Pago personal':'Gasto proveedor';
   const hoy=new Date().toISOString().slice(0,10);
-  await push(ref(db,'caja'),{tipo,concepto,monto:-monto,fecha:hoy,ts:Date.now(),desc,paymentMethod:pm});
+  let concepto=tipo==='personal'?'Pago personal':'Gasto proveedor';
+  // Si hay proveedor, buscar nombre
+  if(provKey&&DB.proveedores?.[provKey]){
+    const provNombre=DB.proveedores[provKey].nombre||'Proveedor';
+    concepto=`Gasto proveedor: ${provNombre}`;
+    // Guardar en compras como historial (estado pagado directo)
+    const compraKey=await push(ref(db,'compras'),{
+      proveedorKey:provKey,
+      proveedorNombre:provNombre,
+      fecha:hoy,
+      descripcion:desc||'Gasto cargado desde caja',
+      totalBoleta:monto,
+      saldoPendiente:0,
+      estado:'pagado',
+      creadoAt:Date.now()
+    });
+    // Guardar pago en historial de esa compra
+    await push(ref(db,`compras/${compraKey.key}/_historialPagos`),{monto,pm,fecha:hoy,ts:Date.now()});
+  }
+  await push(ref(db,'caja'),{tipo:'gasto',concepto,monto:-monto,fecha:hoy,ts:Date.now(),desc,paymentMethod:pm,proveedorKey:provKey||null});
   C.cajaModal=null;C.cajaMonto='';C.cajaDesc='';C.cajaGastoPm='efectivo';render();
 };
 window.cajaCancelarModal=()=>{C.cajaModal=null;render();};
