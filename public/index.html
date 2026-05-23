@@ -823,8 +823,8 @@ function renderCajaHistorialTab(){
 
   let h=`<div style="max-width:720px">`;
   h+=`<div style="display:flex;gap:6px;margin-bottom:1.25rem">`;
-  h+=`<button onclick="C._cajaSubTab='hoy';render()" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--card);color:var(--muted)">💰 Hoy</button>`;
-  h+=`<button onclick="C._cajaSubTab='historial';render()" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--brand);color:#fff">📋 Historial 30 días</button>`;
+  h+=`<button onclick="setCajaSubTab('hoy')" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--card);color:var(--muted)">💰 Hoy</button>`;
+  h+=`<button onclick="setCajaSubTab('historial')" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--brand);color:#fff">📋 Historial 30 días</button>`;
   h+=`</div>`;
 
   if(fechas.length===0){
@@ -870,6 +870,7 @@ function renderCajaHistorialTab(){
   return h+`</div>`;
 }
 
+window.setCajaSubTab=(tab)=>{C._cajaSubTab=tab;render();};
 window.toggleCajaHist=(fecha)=>{
   if(!C._cajaHistExpanded)C._cajaHistExpanded={};
   C._cajaHistExpanded[fecha]=!C._cajaHistExpanded[fecha];
@@ -895,8 +896,8 @@ function renderCajaTab(){
 
   // Sub-tabs
   h+=`<div style="display:flex;gap:6px;margin-bottom:1.25rem">`;
-  h+=`<button onclick="C._cajaSubTab='hoy';render()" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--brand);color:#fff">💰 Hoy</button>`;
-  h+=`<button onclick="C._cajaSubTab='historial';render()" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--card);color:var(--muted)">📋 Historial 30 días</button>`;
+  h+=`<button onclick="setCajaSubTab('hoy')" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--brand);color:#fff">💰 Hoy</button>`;
+  h+=`<button onclick="setCajaSubTab('historial')" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--card);color:var(--muted)">📋 Historial 30 días</button>`;
   h+=`</div>`;
   h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:10px">`;
   h+=`<div><div style="font-size:18px;font-weight:600">💰 Caja del día</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${hoy}</div></div>`;
