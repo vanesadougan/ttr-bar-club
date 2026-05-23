@@ -2953,6 +2953,7 @@ function renderKioskoTab(){
   h+=`</div>`;
   if(kioskSubTab==='cats') return h+renderKioskCatsTab();
 
+  const isEditingKiosko=!!(C.editingKioskItem||C._showKioskoForm);
   const f=C.editingKioskItem||C.newKioskItem;
   const items=Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   const kioskCats=getKioskCats();
@@ -2980,7 +2981,7 @@ function renderKioskoTab(){
   formH+=`${C.editingKioskItem?'Guardar cambios':'Agregar item'}</button>`;
   formH+=`${C.editingKioskItem?`<button class="btn btn-ghost" onclick="cancelKioskItem()">Cancelar</button>`:''}</div></div>`;
 
-  let listH=`<div class="cat-sections">`;
+  let listH=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem"><div style="font-size:16px;font-weight:600">🏪 Kiosko</div>${!isEditingKiosko?`<button onclick="window._startNewKioskoItem()" style="padding:7px 16px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar ítem</button>`:''}</div><div class="cat-sections">`;
   const allKioskItems=Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k}));
   if(kioskCats.length===0){
     // Sin categorías: lista plana
@@ -3041,7 +3042,9 @@ function renderKioskoTab(){
     }
   }
   listH+=`</div>`;
-  return h+`<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
+  const mobileSheetK=isEditingKiosko?`<div class="dish-form-overlay" onclick="cancelKioskoForm()" style="display:block"></div><div class="dish-form-sheet"><div style="text-align:center;padding:10px 0 4px"><div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div></div>${formH}</div>`:'';
+  const formPanelK=isEditingKiosko?`<div class="dishes-form-panel">${formH}</div>`:'';
+  return h+mobileSheetK+`<div class="dishes-layout${isEditingKiosko?'':' no-form'}">${formPanelK}<div class="dishes-list-panel">${listH}</div></div>`;
 }
 
 function renderKioskCatsTab(){
@@ -3178,7 +3181,7 @@ window.addKioskItem=()=>{
   push(ref(db,'kioskItems'),{name:f.name.trim(),desc:f.desc||'',price:Number(f.price),stock:f.stock!==''&&f.stock!=null?Number(f.stock):null,alertAt:f.alertAt!==''&&f.alertAt!=null?Number(f.alertAt):null,barcode:f.barcode&&f.barcode.trim()?f.barcode.trim():null,cat:f.cat||null});
   C.newKioskItem={name:'',desc:'',price:'',stock:''};C._prevKioskStock=null;render();
 };
-window.editKioskItem=key=>{C.editingKioskItem={...DB.kioskItems[key],_key:key};C._prevKioskStock=DB.kioskItems[key].stock;render();};
+window._prevKioskStockHelper=key=>{C._prevKioskStock=DB.kioskItems[key]?.stock;};
 window.saveKioskItem=()=>{
   const stockInp=document.getElementById('kiosk-stock-inp');
   if(stockInp&&stockInp.value!=='')C.editingKioskItem.stock=stockInp.value;
@@ -3188,7 +3191,7 @@ window.saveKioskItem=()=>{
   set(ref(db,`kioskItems/${_key}`),{name:data.name,desc:data.desc||'',price:Number(data.price),stock:data.stock!==''&&data.stock!=null?Number(data.stock):null,alertAt:data.alertAt!==''&&data.alertAt!=null?Number(data.alertAt):null,barcode:data.barcode&&data.barcode.trim()?data.barcode.trim():null,cat:data.cat||null});
   C.editingKioskItem=null;C._prevKioskStock=null;render();
 };
-window.cancelKioskItem=()=>{C.editingKioskItem=null;render();};
+window.cancelKioskItem=()=>{C.editingKioskItem=null;C._showKioskoForm=false;render();};
 window.deleteKioskItem=key=>{if(confirm('¿Eliminar este item?'))remove(ref(db,`kioskItems/${key}`));};
 
 function renderStockTab(){
@@ -6459,10 +6462,13 @@ window.addDish=()=>{
 };
 window.cancelDishForm=()=>{C.editingDish=null;C._showDishForm=false;render();};
 window.cancelCafForm=()=>{C.editingCafItem=null;C._showCafForm=false;render();};
+window.cancelKioskoForm=()=>{C.editingKioskItem=null;C._showKioskoForm=false;render();};
 window.editDish=key=>{C.editingDish={...DB.dishes[key],_key:key,ingredients:[...(DB.dishes[key].ingredients||[])]};C._showDishForm=true;render();};
 window.editCafItem=key=>{C.editingCafItem={...DB.cafeteriaItems[key],_key:key,ingredients:[...(DB.cafeteriaItems[key].ingredients||[])]};C._showCafForm=true;render();};
+window.editKioskItem=key=>{C.editingKioskItem={...DB.kioskItems[key],_key:key};C._showKioskoForm=true;render();};
 window._startNewDish=()=>{C._showDishForm=true;C.editingDish=null;render();setTimeout(()=>document.querySelector('.dishes-form-panel input,.dish-form-sheet input')?.focus(),50);};
 window._startNewCafItem=()=>{C._showCafForm=true;C.editingCafItem=null;render();setTimeout(()=>document.querySelector('.dishes-form-panel input,.dish-form-sheet input')?.focus(),50);};
+window._startNewKioskoItem=()=>{C._showKioskoForm=true;C.editingKioskItem=null;render();setTimeout(()=>document.querySelector('.dishes-form-panel input,.dish-form-sheet input')?.focus(),50);};
 window.saveEditDish=()=>{
   const stockInp=document.getElementById('dish-stock-inp');
   if(stockInp&&stockInp.value!=='')C.editingDish.stock=stockInp.value;
