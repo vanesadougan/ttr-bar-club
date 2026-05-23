@@ -5474,19 +5474,26 @@ window.editDeudorOrder=async(orderKey)=>{
 
       const renderEdit=()=>{
         const total=items.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-        overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:400px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+        const allDishes=[...Object.values(DB.dishes||{}),...Object.values(DB.cafeteriaItems||{})].map(d=>d.name).filter(Boolean).sort();
+        overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto">
           <div style="font-size:16px;font-weight:700;margin-bottom:12px">✏️ Editar pedido deudor</div>
           <div style="margin-bottom:12px">
             ${items.map((it,idx)=>`
-              <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg);border-radius:8px;margin-bottom:6px;border:0.5px solid var(--border)">
-                <div style="flex:1;font-size:13px;font-weight:500">${it.name}${it.selectedType?` <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 4px;border-radius:3px">${it.selectedType}</span>`:''}</div>
-                <div style="display:flex;align-items:center;gap:4px">
+              <div style="padding:8px;background:var(--bg);border-radius:8px;margin-bottom:6px;border:0.5px solid var(--border)">
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+                  <input data-name="${idx}" value="${it.name}" list="ed-dishes-${idx}" style="flex:1;font-size:13px;font-weight:500;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;background:var(--card)">
+                  <datalist id="ed-dishes-${idx}">${allDishes.map(n=>`<option value="${n}">`).join('')}</datalist>
+                  <button data-action="del" data-idx="${idx}" style="width:26px;height:26px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:14px;cursor:pointer;font-family:inherit;line-height:1;flex-shrink:0">✕</button>
+                </div>
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="font-size:12px;color:var(--muted)">Cant:</span>
                   <button data-action="dec" data-idx="${idx}" style="width:26px;height:26px;border-radius:50%;border:0.5px solid var(--border);background:var(--card);font-size:16px;cursor:pointer;font-family:inherit;line-height:1">−</button>
                   <span style="font-size:14px;font-weight:700;min-width:20px;text-align:center">${it.qty}</span>
                   <button data-action="inc" data-idx="${idx}" style="width:26px;height:26px;border-radius:50%;border:0.5px solid var(--border);background:var(--card);font-size:16px;cursor:pointer;font-family:inherit;line-height:1">+</button>
+                  <span style="font-size:12px;color:var(--muted)">Precio unit:</span>
+                  <input data-price="${idx}" type="number" value="${it.finalPrice||it.price}" style="width:80px;font-size:13px;padding:4px 6px;border:1px solid var(--border);border-radius:6px;font-family:inherit;text-align:right">
+                  <span style="font-size:12px;font-weight:600;color:var(--accent)">=$${((it.finalPrice||it.price)*it.qty).toLocaleString()}</span>
                 </div>
-                <span style="font-size:12px;font-weight:600;color:var(--accent);min-width:60px;text-align:right">$${((it.finalPrice||it.price)*it.qty).toLocaleString()}</span>
-                <button data-action="del" data-idx="${idx}" style="width:24px;height:24px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:12px;cursor:pointer;font-family:inherit;line-height:1">✕</button>
               </div>`).join('')}
           </div>
           <div style="display:flex;justify-content:space-between;padding:8px 4px;margin-bottom:12px;border-top:0.5px solid var(--border)">
@@ -5499,12 +5506,28 @@ window.editDeudorOrder=async(orderKey)=>{
           </div>
         </div>`;
 
+        // Cambio de nombre
+        overlay.querySelectorAll('[data-name]').forEach(inp=>{
+          inp.addEventListener('change',()=>{const idx=Number(inp.dataset.name);items[idx].name=inp.value.trim();});
+        });
+        // Cambio de precio
+        overlay.querySelectorAll('[data-price]').forEach(inp=>{
+          inp.addEventListener('input',()=>{
+            const idx=Number(inp.dataset.price);
+            const p=Math.max(0,Number(inp.value)||0);
+            items[idx].price=p;items[idx].finalPrice=p;
+            renderEdit();
+          });
+        });
         overlay.querySelectorAll('[data-action]').forEach(btn=>{
           btn.onclick=()=>{
             const idx=Number(btn.dataset.idx);
             const action=btn.dataset.action;
             if(action==='inc'){items[idx].qty++;}
-            else if(action==='dec'){if(items[idx].qty>1)items[idx].qty--;else items.splice(idx,1);}
+            else if(action==='dec'){
+              items[idx].qty--;
+              if(items[idx].qty<=0)items.splice(idx,1);
+            }
             else if(action==='del'){items.splice(idx,1);}
             if(!items.length){overlay.remove();return;}
             renderEdit();
@@ -5513,8 +5536,12 @@ window.editDeudorOrder=async(orderKey)=>{
 
         overlay.querySelector('#ed-close').onclick=()=>overlay.remove();
         overlay.querySelector('#ed-save').onclick=async()=>{
+          // Leer nombres actuales de los inputs antes de guardar
+          overlay.querySelectorAll('[data-name]').forEach(inp=>{
+            const idx=Number(inp.dataset.name);
+            if(items[idx])items[idx].name=inp.value.trim()||items[idx].name;
+          });
           const newTotal=items.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-          // Mantener la proporción del saldo pendiente respecto al total original
           const oldTotal=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
           const oldSaldo=o.saldoPendiente!=null?o.saldoPendiente:oldTotal;
           const newSaldo=oldTotal>0?Math.round(newTotal*(oldSaldo/oldTotal)):newTotal;
