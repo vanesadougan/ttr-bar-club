@@ -1691,7 +1691,7 @@ function renderWaiterMesasScreen(mc){
         const pgIdx=window._wqKeys.push([tableId,pKey==='General'?'':pKey,pKey==='General'?'general':'individual'])-1;
         const pmLabels={efectivo:'💵 Ef.',credito:'💳 Créd.',debito:'💳 Déb.',transferencia:'📱 Trans.',mercadopago:'📱 MP',mixto:'🔀 Mixto'};
 
-        const yaPagadoW=pgOrders.reduce((s,o)=>s+(o._pagosParciales||0),0);
+        const yaPagadoW=pgOrders.reduce((s,o)=>Math.max(s,o._yaPago||o._pagosParciales||0),0);
         const pgTotalFinalW=grupoDesc>0?pgTotalConDesc:pgTotal;
         const saldoRestanteW=Math.max(0,pgTotalFinalW-yaPagadoW);
         const pagoParcialChipW=yaPagadoW>0?`<span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:6px;font-weight:600">💳$${yaPagadoW.toLocaleString()}</span>`:'';
@@ -2210,7 +2210,7 @@ window.waiterMarkCobradoGroup=async(keys)=>{
     const nuevoYaPagado=yaPagado+montoCobrado;
     const cubierto=nuevoYaPagado>=totalConDesc;
     const nuevoPago={monto:montoCobrado,pm,fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
-    let isFirst1=true;for(const k of keys){const o=DB.orders[k];if(!o)continue;const histData=isFirst1?[...( Array.isArray(o._historialPagos)?o._historialPagos:Object.values(o._historialPagos||{})),nuevoPago]:undefined;isFirst1=false;const upd={_pagosParciales:nuevoYaPagado,_ultimoPm:pm,...(histData!==undefined?{_historialPagos:histData}:{}),...(cubierto?{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()}:{})};await update(ref(db,`orders/${k}`),upd);}
+    let isFirst1=true;for(const k of keys){const o=DB.orders[k];if(!o)continue;const histData=isFirst1?[...( Array.isArray(o._historialPagos)?o._historialPagos:Object.values(o._historialPagos||{})),nuevoPago]:undefined;isFirst1=false;const upd={_pagosParciales:nuevoYaPagado,_yaPago:nuevoYaPagado,_ultimoPm:pm,...(histData!==undefined?{_historialPagos:histData}:{}),...(cubierto?{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()}:{})};await update(ref(db,`orders/${k}`),upd);}
     render();return;
   }
 
@@ -4257,7 +4257,7 @@ function renderOrdersTab(){
       });
 
       // Footer de cobro por persona/grupo
-      const yaPagado=pgOrders.reduce((s,o)=>s+(o._pagosParciales||0),0);
+      const yaPagado=pgOrders.reduce((s,o)=>Math.max(s,o._yaPago||o._pagosParciales||0),0);
       const pgTotalFinal=grupoDescuento>0?pgTotalConDesc:pgTotal;
       const saldoRestante=Math.max(0,pgTotalFinal-yaPagado);
       const canCobrar=!hasPending&&!hasPreparing&&!hasReadyAt&&!isBilled;
@@ -5279,7 +5279,8 @@ function renderDeudoresTab(){
       const keys=g.orders.map(o=>o._key);
       const totalOriginal=g.orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
       const saldoMostrar=g.orders.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
-      const pagadoParcial=Math.max(0,totalOriginal-saldoMostrar);
+      // _yaPago es el campo canónico; fallback a diferencia si no existe
+      const pagadoParcial=g.orders.reduce((s,o)=>Math.max(s,o._yaPago||0),0)||Math.max(0,totalOriginal-saldoMostrar);
       const _dIdx=window._deudorKeys.push(keys)-1;
       if(!window._deudorSaldos)window._deudorSaldos=[];
       window._deudorSaldos[_dIdx]=saldoMostrar;
@@ -5552,9 +5553,8 @@ window.editDeudorOrder=async(orderKey)=>{
 
         overlay.querySelector('#ed-close').onclick=()=>overlay.remove();
         overlay.querySelector('#ed-save').onclick=async()=>{
-          const oldTotal=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-          const oldSaldo=o.saldoPendiente!=null?o.saldoPendiente:oldTotal;
-          const yaPago=Math.max(0,oldTotal-oldSaldo); // lo que ya pagó no cambia
+          // _yaPago es lo que ya pagó — no cambia al editar ítems
+          const yaPago=o._yaPago||0;
           const newTotal=items.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
           const newSaldo=Math.max(0,newTotal-yaPago);
           overlay.remove();
@@ -6014,7 +6014,8 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
           const saldoK=o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
           const abono=Math.min(saldoK,restante);
           const nuevoSaldoK=Math.max(0,saldoK-abono);
-          const updateData={saldoPendiente:nuevoSaldoK};
+          const yaPagoAnterior=o._yaPago||0;
+          const updateData={saldoPendiente:nuevoSaldoK,_yaPago:yaPagoAnterior+abono};
           if(primerOrder){
             const histExist=o._historialPagos?Object.values(o._historialPagos):[];
             updateData._historialPagos=[...histExist,nuevoPagoDeuda];
@@ -7588,7 +7589,7 @@ window.adminGroupCobrado=async keys=>{
     const nuevoYaPagado=yaPagado+montoCobrado;
     const cubierto=nuevoYaPagado>=totalConDesc;
     const nuevoPago2={monto:montoCobrado,pm,fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
-    let isFirst2=true;for(const k of keys){const o=DB.orders[k];if(!o)continue;const histData2=isFirst2?[...(Array.isArray(o._historialPagos)?o._historialPagos:Object.values(o._historialPagos||{})),nuevoPago2]:undefined;isFirst2=false;const upd2={_pagosParciales:nuevoYaPagado,_ultimoPm:pm,...(histData2!==undefined?{_historialPagos:histData2}:{}),...(cubierto?{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()}:{})};await update(ref(db,`orders/${k}`),upd2);}
+    let isFirst2=true;for(const k of keys){const o=DB.orders[k];if(!o)continue;const histData2=isFirst2?[...(Array.isArray(o._historialPagos)?o._historialPagos:Object.values(o._historialPagos||{})),nuevoPago2]:undefined;isFirst2=false;const upd2={_pagosParciales:nuevoYaPagado,_yaPago:nuevoYaPagado,_ultimoPm:pm,...(histData2!==undefined?{_historialPagos:histData2}:{}),...(cubierto?{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()}:{})};await update(ref(db,`orders/${k}`),upd2);}
     render();return;
   }
 
