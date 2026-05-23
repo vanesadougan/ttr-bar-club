@@ -61,9 +61,12 @@
     .ing-add-row input{flex:1;padding:6px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:var(--card);color:var(--text);outline:none}
     .ing-tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 7px;border-radius:6px;background:#ede9fe;color:#5b21b6;margin-top:3px}
     .dishes-layout{display:grid;grid-template-columns:420px 1fr;gap:1.25rem;align-items:start}
+    .dishes-layout.no-form{grid-template-columns:1fr}
     .dishes-form-panel{position:sticky;top:72px;max-height:calc(100vh - 88px);overflow-y:auto;border-radius:12px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
     .dishes-form-panel::-webkit-scrollbar{width:4px}.dishes-form-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
     .dishes-list-panel{min-height:0}
+    .dish-form-overlay{display:none;position:fixed;inset:0;z-index:8888;background:rgba(0,0,0,.45)}
+    .dish-form-sheet{position:fixed;bottom:0;left:0;right:0;z-index:8889;background:var(--card);border-radius:18px 18px 0 0;max-height:90vh;overflow-y:auto;padding:0 0 env(safe-area-inset-bottom,0)}
     .form-section{border:0.5px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden}
     .form-section-header{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;cursor:pointer;background:var(--bg);font-size:13px;font-weight:500;user-select:none}
     .form-section-header:hover{background:#f3f4f6}
@@ -131,7 +134,7 @@
       .cart-col{display:none}
       .mobile-cart-bar{display:flex}
       .menu-col{padding-bottom:80px}
-      .dishes-layout{grid-template-columns:1fr}.dishes-form-panel{position:relative;top:0;max-height:none}.metrics{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}
+      .dishes-layout{grid-template-columns:1fr}.dishes-form-panel{position:relative;top:0;max-height:none;display:none}.dishes-list-panel{grid-column:1}.metrics{grid-template-columns:repeat(2,1fr)}.two-col{grid-template-columns:1fr}
     }
     .cart-header{padding:1rem 1.25rem;border-bottom:0.5px solid var(--border);font-weight:500;font-size:15px;display:flex;align-items:center;justify-content:space-between}
     .cart-body{flex:1;overflow-y:auto;padding:1rem 1.25rem}
@@ -418,6 +421,8 @@ onValue(ref(db,'clientes'), snap=>{ DB.clientes = snap.val()||{}; if(!firstLoad)
 onValue(ref(db,'proveedores'), snap=>{ DB.proveedores = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'compras'), snap=>{ DB.compras = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'estadisticasMensuales'), snap=>{ DB.estadisticasMensuales = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'cajaHistorial'), snap=>{ DB.cajaHistorial = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'config'), snap=>{ DB.config = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'kioskCategories'), snap=>{ DB.kioskCategories = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
 onValue(ref(db,'ingredients'), snap=>{
   DB.ingredients = snap.val()||{};
@@ -584,6 +589,16 @@ function resolveTableRoute(){
 let currentUser = null;
 onAuthStateChanged(auth, user => {
   currentUser = user;
+  if(user){
+    const encargadoEmails=(DB.config?.encargadoEmails||[]);
+    if(encargadoEmails.includes(user.email?.toLowerCase())){
+      C.role='encargado';
+    } else {
+      C.role='admin';
+    }
+  } else {
+    C.role=null;
+  }
   render();
 });
 
@@ -661,8 +676,14 @@ window.doLogin=async()=>{
   btn.textContent='Entrando...'; btn.disabled=true;
   try{
     await signInWithEmailAndPassword(auth, email, pass);
+    // Detectar si es encargado
+    const encargadoEmails=(DB.config?.encargadoEmails||[]);
+    if(encargadoEmails.includes(email.toLowerCase())){
+      C.role='encargado';
+    } else {
+      C.role='admin';
+    }
     document.getElementById('modetabs').style.display='flex';
-    // onAuthStateChanged will trigger render()
   } catch(e){
     btn.textContent='Entrar'; btn.disabled=false;
     err.style.display='block';
@@ -677,9 +698,12 @@ function renderAdmin(){
   showLogoutBtn(true);
   const mc=document.getElementById('main-content');
   const pc=pendingCount();
+  const isEncargado=C.role==='encargado';
 
   // ── Nivel 1: pestañas principales ──
-  const mainTabs=['tables','mozas','menu','orders','history','deudores','caja','stock','clientes','proveedores','compras','estadisticas'];
+  const allMainTabs=['tables','mozas','menu','orders','history','deudores','caja','stock','clientes','proveedores','compras','estadisticas'];
+  const encargadoTabs=['menu','orders','deudores','caja'];
+  const mainTabs=isEncargado?encargadoTabs:allMainTabs;
   const mainLabels={
     tables:'🪑 Mesas',
     mozas:'👩 Mozas',
@@ -697,8 +721,11 @@ function renderAdmin(){
   };
   // Determinar tab activo de nivel 1
   const dishTabs=['dishes','cafeteria','kiosko'];
-  const activeMain=dishTabs.includes(C.adminTab)?'menu':C.adminTab==='mozas'?'mozas':C.adminTab==='caja'?'caja':C.adminTab==='deudores'?'deudores':
+  const activeMainRaw=dishTabs.includes(C.adminTab)?'menu':C.adminTab==='mozas'?'mozas':C.adminTab==='caja'?'caja':C.adminTab==='deudores'?'deudores':
     C.adminTab==='stock_tab'?'stock':C.adminTab;
+  // Si encargado está en tab no permitida, redirigir a orders
+  const activeMain=(isEncargado&&!encargadoTabs.includes(activeMainRaw))?'orders':activeMainRaw;
+  if(activeMain!==activeMainRaw)C.adminTab='orders';
 
   let h=`<div class="content">`;
   // Barra nivel 1
@@ -757,6 +784,7 @@ window.adminTab=t=>{C.adminTab=t;render();};
 
 // ── ADMIN: GESTIÓN DE MOZAS ───────────────────────
 function renderWaitersAdminTab(){
+  const isEncargado=C.role==='encargado';
   const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   const fw=C.editingWaiter||C.newWaiter||{name:'',pin:''};
   let formH='<div class="card"><div class="card-title">'+(C.editingWaiter?'✏️ Editar moza/mozo':'+ Agregar moza/mozo')+'</div>';
@@ -771,6 +799,26 @@ function renderWaitersAdminTab(){
     listH+=`<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px;border:0.5px solid ${w.isLeader?'#fcd34d':'var(--border)'}"><div style="width:36px;height:36px;border-radius:50%;background:${w.isLeader?'#d97706':'var(--brand)'};color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${(w.name||'?')[0].toUpperCase()}</div><div style="flex:1"><div style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:500">${w.name}${leaderBadge}</div><div style="font-size:11px;color:var(--muted)">PIN: ${w.pin?'••••':'sin PIN'}</div></div><div class="row-btns"><button class="btn btn-ghost btn-sm" onclick="editWaiter('${w._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteWaiter('${w._key}')">✕</button></div></div>`;
   });
   listH+='</div></div>';
+
+  // Sección encargados (solo admin full)
+  if(!isEncargado){
+    const encargadoEmails=DB.config?.encargadoEmails||[];
+    listH+=`<div class="card" style="margin-top:1rem">
+      <div class="card-title">🔑 Encargados</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Los encargados acceden con usuario y contraseña (Firebase Auth) y solo ven: Menú, Pedidos, Deudores, Caja.</div>
+      ${encargadoEmails.length===0?'<div style="font-size:13px;color:var(--muted);padding:8px 0">Sin encargados configurados</div>':''}
+      ${encargadoEmails.map((email,i)=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border);margin-bottom:6px">
+        <span style="font-size:13px">🔑 ${email}</span>
+        <button onclick="removeEncargado(${i})" style="padding:3px 8px;border-radius:5px;border:none;background:#fee2e2;color:#b91c1c;font-size:11px;cursor:pointer;font-family:inherit">✕ Quitar</button>
+      </div>`).join('')}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input id="encargado-email" type="email" placeholder="email@encargado.com" style="flex:1;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit">
+        <button onclick="addEncargado()" style="padding:8px 14px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Agregar</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">⚠️ El encargado debe tener cuenta creada en Firebase Authentication con ese email.</div>
+    </div>`;
+  }
+
   return`<div class="admin-grid">${formH}${listH}</div>`;
 }
 window.toggleWaiterLeader=()=>{const o=C.editingWaiter||(C.newWaiter=C.newWaiter||{name:'',pin:''});o.isLeader=!o.isLeader;render();};
@@ -800,6 +848,21 @@ window.saveEditWaiter=()=>{
 };
 window.cancelEditWaiter=()=>{C.editingWaiter=null;render();};
 window.deleteWaiter=key=>{if(confirm('¿Eliminar esta moza/mozo?'))remove(ref(db,`waiters/${key}`));};
+window.addEncargado=async()=>{
+  const inp=document.getElementById('encargado-email');
+  const email=(inp?.value||'').trim().toLowerCase();
+  if(!email||!email.includes('@')){alert('Ingresá un email válido');return;}
+  const emails=[...(DB.config?.encargadoEmails||[])];
+  if(emails.includes(email)){alert('Ese email ya está como encargado');return;}
+  emails.push(email);
+  await set(ref(db,'config/encargadoEmails'),emails);
+  if(inp)inp.value='';
+};
+window.removeEncargado=async(idx)=>{
+  const emails=[...(DB.config?.encargadoEmails||[])];
+  emails.splice(idx,1);
+  await set(ref(db,'config/encargadoEmails'),emails);
+};
 
 // ── CAJA DIARIA ───────────────────────────────────
 function getCajaHoy(){
@@ -815,7 +878,72 @@ function getCajaAbierta(){
   if(DB.caja&&DB.caja.__estado)return DB.caja.__estado.abierta===true;
   return false;
 }
+function renderCajaHistorialTab(){
+  const pmLabels={efectivo:'💵 Efectivo',debito:'💳 Débito',credito:'💳 Crédito',transferencia:'📱 Transferencia',mercadopago:'📱 Mercado Pago'};
+  const historial=DB.cajaHistorial||{};
+  const cierres=Object.entries(historial).sort((a,b)=>b[0].localeCompare(a[0]));
+  const fmtFechaH=f=>{if(!f)return'';const[y,m,d]=f.split('-');return`${d}/${m}/${y}`;};
+  const fmtHora=ts=>ts?new Date(ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
+
+  let h=`<div style="max-width:720px">`;
+  h+=`<div style="display:flex;gap:6px;margin-bottom:1.25rem">`;
+  h+=`<button onclick="setCajaSubTab('hoy')" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--card);color:var(--muted)">💰 Hoy</button>`;
+  h+=`<button onclick="setCajaSubTab('historial')" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--brand);color:#fff">📋 Historial 30 días</button>`;
+  h+=`</div>`;
+
+  if(cierres.length===0){
+    h+=`<div style="text-align:center;padding:3rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">
+      <div style="font-size:40px;margin-bottom:12px">📋</div>
+      <div style="font-size:16px;font-weight:500">Sin historial aún</div>
+      <div style="font-size:13px;margin-top:4px">El historial se genera al cerrar la caja</div>
+    </div>`;
+    return h+`</div>`;
+  }
+
+  cierres.forEach(([key,dia])=>{
+    const movs=dia.movimientos?Object.values(dia.movimientos):[];
+    const isExpanded=C._cajaHistExpanded?.[key]===true;
+    const ventas=dia.totalVentas||0;const gastos=dia.totalGastos||0;
+    const horaCierre=fmtHora(dia.cierreTs);
+    h+=`<div class="card" style="margin-bottom:1rem;padding:0;overflow:hidden">`;
+    h+=`<div onclick="toggleCajaHist('${key}')" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;${isExpanded?'border-bottom:0.5px solid var(--border)':''}">`;
+    h+=`<div><div style="font-size:15px;font-weight:700">📅 ${fmtFechaH(dia.fecha||key.slice(0,10))} ${horaCierre?`<span style="font-size:12px;font-weight:400;color:var(--muted)">· Cierre ${horaCierre}</span>`:''}</div>`;
+    h+=`<div style="font-size:12px;color:var(--muted);margin-top:2px">${dia.totalMovimientos||0} movimientos</div></div>`;
+    h+=`<div style="text-align:right;display:flex;align-items:center;gap:12px">`;
+    h+=`<div style="text-align:right"><div style="font-size:11px;color:#059669">Ventas</div><div style="font-size:14px;font-weight:700;color:#059669">$${ventas.toLocaleString()}</div></div>`;
+    h+=`<div style="text-align:right"><div style="font-size:11px;color:#dc2626">Gastos</div><div style="font-size:14px;font-weight:700;color:#dc2626">$${gastos.toLocaleString()}</div></div>`;
+    h+=`<span style="font-size:14px;color:var(--muted)">${isExpanded?'▲':'▼'}</span>`;
+    h+=`</div></div>`;
+
+    if(isExpanded){
+      h+=`<div style="max-height:400px;overflow-y:auto">`;
+      movs.sort((a,b)=>(a.ts||0)-(b.ts||0)).forEach(m=>{
+        const hora=m.ts?new Date(m.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
+        const esGasto=m.tipo==='gasto'||m.monto<0;
+        h+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:0.5px solid var(--border)">`;
+        h+=`<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.concepto||m.tipo||'—'}</div>`;
+        h+=`<div style="font-size:11px;color:var(--muted)">${hora}${m.paymentMethod?' · '+(pmLabels[m.paymentMethod]||m.paymentMethod):''}</div></div>`;
+        h+=`<span style="font-size:13px;font-weight:700;color:${esGasto?'#dc2626':'#059669'};flex-shrink:0;margin-left:8px">${esGasto?'-':''}$${Math.abs(m.monto||0).toLocaleString()}</span>`;
+        h+=`</div>`;
+      });
+      h+=`</div>`;
+    }
+    h+=`</div>`;
+  });
+  return h+`</div>`;
+}
+
+window.setCajaSubTab=(tab)=>{C._cajaSubTab=tab;render();};
+window.toggleCajaHist=(fecha)=>{
+  if(!C._cajaHistExpanded)C._cajaHistExpanded={};
+  C._cajaHistExpanded[fecha]=!C._cajaHistExpanded[fecha];
+  render();
+};
+
 function renderCajaTab(){
+  const cajaSubTab=C._cajaSubTab||'hoy';
+  if(cajaSubTab==='historial') return renderCajaHistorialTab();
+
   const movs=getCajaHoy();
   const abierta=getCajaAbierta();
   const hoy=new Date().toLocaleDateString('es-AR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
@@ -829,7 +957,11 @@ function renderCajaTab(){
 
   let h='<div style="max-width:720px">';
 
-  // Header caja
+  // Sub-tabs
+  h+=`<div style="display:flex;gap:6px;margin-bottom:1.25rem">`;
+  h+=`<button onclick="setCajaSubTab('hoy')" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--brand);color:#fff">💰 Hoy</button>`;
+  h+=`<button onclick="setCajaSubTab('historial')" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--card);color:var(--muted)">📋 Historial 30 días</button>`;
+  h+=`</div>`;
   h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:10px">`;
   h+=`<div><div style="font-size:18px;font-weight:600">💰 Caja del día</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${hoy}</div></div>`;
   h+=`<div style="display:flex;gap:8px;flex-wrap:wrap">`;
@@ -876,6 +1008,14 @@ function renderCajaTab(){
       h+=`<div style="margin-bottom:10px"><label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:6px">Medio de pago</label><div style="display:flex;gap:8px">`;
       [{v:'efectivo',l:'💵 Efectivo'},{v:'mercadopago',l:'📱 Mercado Pago'},{v:'transferencia',l:'🏦 Transferencia'}].forEach(p=>{const sel=(C.cajaGastoPm||'efectivo')===p.v;h+=`<button onclick="setCajaGastoPm('${p.v}')" style="flex:1;padding:8px;border-radius:8px;border:0.5px solid ${sel?'var(--brand)':'var(--border)'};background:${sel?'var(--brand)':'var(--card)'};color:${sel?'#fff':'var(--text)'};font-size:12px;font-weight:${sel?'600':'400'};cursor:pointer;font-family:inherit">${p.l}</button>`;});
       h+=`</div></div>`;
+      if((C.cajaGastoTipo||'proveedor')==='proveedor'){
+        const provs=Object.entries(DB.proveedores||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es'));
+        if(provs.length>0){
+          h+=`<div class="form-group" style="margin-bottom:10px"><label>Proveedor <span style="font-size:11px;color:var(--muted)">(opcional — guarda en compras)</span></label><select id="caja-proveedor"><option value="">Sin proveedor específico</option>`;
+          provs.forEach(p=>{h+=`<option value="${p._key}">${p.nombre||''}</option>`;});
+          h+=`</select></div>`;
+        }
+      }
       h+=`<div class="two-col"><div class="form-group" style="margin-bottom:10px"><label>Monto ($)</label><input type="number" min="0" placeholder="0" id="caja-monto"></div>`;
       h+=`<div class="form-group" style="margin-bottom:10px"><label>Descripción <span style="font-size:11px;color:var(--muted)">(opcional)</span></label><input placeholder="Ej: Verdulería, Sueldo..." id="caja-desc"></div></div>`;
       h+=`<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="cajaGuardarGasto()">Guardar gasto</button><button class="btn btn-ghost" onclick="cajaCancelarModal()">Cancelar</button></div>`;
@@ -961,14 +1101,33 @@ window.setCajaGastoPm=t=>{C.cajaGastoPm=t;render();};
 window.cajaGuardarGasto=async()=>{
   const montoInp=document.getElementById('caja-monto');
   const descInp=document.getElementById('caja-desc');
+  const provInp=document.getElementById('caja-proveedor');
   const monto=Number(montoInp?montoInp.value:0);
   const desc=(descInp?descInp.value:'').trim();
+  const provKey=provInp?provInp.value:'';
   if(!monto||monto<=0){alert('Ingresá un monto mayor a 0');return;}
   const tipo=C.cajaGastoTipo||'proveedor';
   const pm=C.cajaGastoPm||'efectivo';
-  const concepto=tipo==='personal'?'Pago personal':'Gasto proveedor';
   const hoy=new Date().toISOString().slice(0,10);
-  await push(ref(db,'caja'),{tipo,concepto,monto:-monto,fecha:hoy,ts:Date.now(),desc,paymentMethod:pm});
+  let concepto=tipo==='personal'?'Pago personal':'Gasto proveedor';
+
+  if(tipo==='proveedor'){
+    const provNombre=provKey&&DB.proveedores?.[provKey]?DB.proveedores[provKey].nombre:'Sin proveedor específico';
+    if(provKey&&DB.proveedores?.[provKey])concepto=`Gasto proveedor: ${provNombre}`;
+    // Siempre guardar en compras historial
+    const compraRef=await push(ref(db,'compras'),{
+      proveedorKey:provKey||null,
+      proveedorNombre:provNombre,
+      fecha:hoy,
+      descripcion:desc||'Gasto cargado desde caja',
+      totalBoleta:monto,
+      saldoPendiente:0,
+      estado:'pagado',
+      creadoAt:Date.now()
+    });
+    await push(ref(db,`compras/${compraRef.key}/_historialPagos`),{monto,pm,fecha:hoy,ts:Date.now()});
+  }
+  await push(ref(db,'caja'),{tipo:'gasto',concepto,monto:-monto,fecha:hoy,ts:Date.now(),desc,paymentMethod:pm,proveedorKey:provKey||null});
   C.cajaModal=null;C.cajaMonto='';C.cajaDesc='';C.cajaGastoPm='efectivo';render();
 };
 window.cajaCancelarModal=()=>{C.cajaModal=null;render();};
@@ -1071,7 +1230,29 @@ window.cajaCierre=async()=>{
   if(!ok)return;
   // 3. Descargar CSV
   cajaDescargarArchivo(movs);
-  // 4. Acumular en resumen mensual para estadísticas
+  // 4. Guardar movimientos completos en historial (30 días)
+  if(movs.length>0){
+    const cierreTs=Date.now();
+    const cierreKey=`${hoy}_${cierreTs}`;
+    await set(ref(db,`cajaHistorial/${cierreKey}`),{
+      fecha:hoy,
+      cierreTs,
+      movimientos:movs.reduce((obj,m,i)=>{obj[i]=m;return obj;},{}),
+      totalVentas:movs.filter(m=>m.tipo==='venta').reduce((s,m)=>s+Math.abs(m.monto||0),0),
+      totalGastos:movs.filter(m=>m.tipo==='gasto'||m.monto<0).reduce((s,m)=>s+Math.abs(m.monto||0),0),
+      totalMovimientos:movs.length
+    });
+    // Limpiar registros de más de 30 días
+    const snapH=await get(ref(db,'cajaHistorial'));
+    const historial=snapH.val()||{};
+    const limite=new Date();limite.setDate(limite.getDate()-31);
+    const limStr=limite.toISOString().slice(0,10);
+    for(const key of Object.keys(historial)){
+      const fechaKey=key.slice(0,10); // primeros 10 chars = YYYY-MM-DD
+      if(fechaKey<limStr)await remove(ref(db,`cajaHistorial/${key}`));
+    }
+  }
+  // 5. Acumular en resumen mensual para estadísticas
   const mes=hoy.slice(0,7); // YYYY-MM
   const ventasDia=movs.filter(m=>m.tipo==='venta').reduce((s,m)=>s+Math.abs(m.monto||0),0);
   const gastosDia=movs.filter(m=>m.tipo==='gasto'||m.monto<0).reduce((s,m)=>s+Math.abs(m.monto||0),0);
@@ -1692,7 +1873,7 @@ function renderWaiterMesasScreen(mc){
         const pgIdx=window._wqKeys.push([tableId,pKey==='General'?'':pKey,pKey==='General'?'general':'individual'])-1;
         const pmLabels={efectivo:'💵 Ef.',credito:'💳 Créd.',debito:'💳 Déb.',transferencia:'📱 Trans.',mercadopago:'📱 MP',mixto:'🔀 Mixto'};
 
-        const yaPagadoW=pgOrders.reduce((s,o)=>s+(o._pagosParciales||0),0);
+        const yaPagadoW=pgOrders.reduce((s,o)=>Math.max(s,o._yaPago||o._pagosParciales||0),0);
         const pgTotalFinalW=grupoDesc>0?pgTotalConDesc:pgTotal;
         const saldoRestanteW=Math.max(0,pgTotalFinalW-yaPagadoW);
         const pagoParcialChipW=yaPagadoW>0?`<span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:6px;font-weight:600">💳$${yaPagadoW.toLocaleString()}</span>`:'';
@@ -2211,7 +2392,7 @@ window.waiterMarkCobradoGroup=async(keys)=>{
     const nuevoYaPagado=yaPagado+montoCobrado;
     const cubierto=nuevoYaPagado>=totalConDesc;
     const nuevoPago={monto:montoCobrado,pm,fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
-    let isFirst1=true;for(const k of keys){const o=DB.orders[k];if(!o)continue;const histData=isFirst1?[...( Array.isArray(o._historialPagos)?o._historialPagos:Object.values(o._historialPagos||{})),nuevoPago]:undefined;isFirst1=false;const upd={_pagosParciales:nuevoYaPagado,_ultimoPm:pm,...(histData!==undefined?{_historialPagos:histData}:{}),...(cubierto?{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()}:{})};await update(ref(db,`orders/${k}`),upd);}
+    let isFirst1=true;for(const k of keys){const o=DB.orders[k];if(!o)continue;const histData=isFirst1?[...( Array.isArray(o._historialPagos)?o._historialPagos:Object.values(o._historialPagos||{})),nuevoPago]:undefined;isFirst1=false;const upd={_pagosParciales:nuevoYaPagado,_yaPago:nuevoYaPagado,_ultimoPm:pm,...(histData!==undefined?{_historialPagos:histData}:{}),...(cubierto?{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()}:{})};await update(ref(db,`orders/${k}`),upd);}
     render();return;
   }
 
@@ -2489,6 +2670,7 @@ function renderDishesTab(){
   if(subTab==='categorias') return tabsH+renderCategoriesTab();
 
   // ── DISH FORM ──────────────────────────────────
+  const isEditing=!!(C.editingDish||C._showDishForm);
   const sec=C.dishSections||{};
   const toggleSec=name=>`toggleDishSection('${name}')`;
 
@@ -2542,11 +2724,11 @@ function renderDishesTab(){
   // Botones fijos al fondo
   formH+='<div style="padding:12px 16px;border-top:0.5px solid var(--border);background:var(--bg);display:flex;gap:8px">';
   formH+='<button class="btn btn-primary" style="flex:1" onclick="'+(C.editingDish?'saveEditDish()':'addDish()')+'">'+(C.editingDish?'💾 Guardar cambios':'➕ Agregar plato')+'</button>';
-  if(C.editingDish) formH+='<button class="btn btn-ghost" onclick="cancelEditDish()">Cancelar</button>';
+  if(C.editingDish) formH+='<button class="btn btn-ghost" onclick="cancelDishForm()">Cancelar</button>';
   formH+='</div></div>';
 
   const dishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k}));
-  let listH=`<div class="cat-sections">`;
+  let listH=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem"><div style="font-size:16px;font-weight:600">🍽 Platos</div>${!isEditing?`<button onclick="window._startNewDish()" style="padding:7px 16px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar plato</button>`:''}</div><div class="cat-sections">`;
   cats.forEach(cat=>{
     const catDishes=dishes.filter(d=>d.cat===cat._key).sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
     if(!catOpen[cat._key] && catOpen[cat._key]===undefined) catOpen[cat._key]=true;
@@ -2589,7 +2771,9 @@ function renderDishesTab(){
     listH+=`</div>`;
   });
   listH+=`</div>`;
-  return tabsH+`<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
+  const mobileSheet=isEditing?`<div class="dish-form-overlay" onclick="cancelDishForm()" style="display:block"></div><div class="dish-form-sheet"><div style="text-align:center;padding:10px 0 4px"><div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div></div>${formH}</div>`:'';
+  const formPanel=isEditing?`<div class="dishes-form-panel">${formH}</div>`:'';
+  return tabsH+mobileSheet+`<div class="dishes-layout${isEditing?'':' no-form'}">${formPanel}<div class="dishes-list-panel">${listH}</div></div>`;
 }
 
 // ── CATEGORIES TAB ────────────────────────────────
@@ -2723,7 +2907,9 @@ function renderCafeteriaTab(){
 
   formH+='<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-primary" onclick="'+(C.editingCafItem?'saveEditCafItem()':'addCafItem()') +'">'+(C.editingCafItem?'Guardar cambios':'Agregar item')+'</button>'+(C.editingCafItem?'<button class="btn btn-ghost" onclick="cancelEditCafItem()">Cancelar</button>':'')+'</div></div>';
 
-  let listH=`<div class="cat-sections">`;
+  const isEditingCaf=!!(C.editingCafItem||C._showCafForm);
+
+  let listH=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem"><div style="font-size:16px;font-weight:600">☕ Cafetería</div>${!isEditingCaf?`<button onclick="window._startNewCafItem()" style="padding:7px 16px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar ítem</button>`:''}</div><div class="cat-sections">`;
   const allItems=Object.entries(DB.cafeteriaItems).map(([k,v])=>({...v,_key:k}));
   if(cats.length===0){
     listH+=`<div class="cat-section" style="padding:2rem;text-align:center;color:var(--muted)"><div style="font-size:32px;margin-bottom:8px">☕</div><div>Primero creá una categoría en la pestaña Categorías</div></div>`;
@@ -2745,7 +2931,9 @@ function renderCafeteriaTab(){
     listH+=`</div>`;
   });
   listH+=`</div>`;
-  return tabsH+`<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
+  const mobileSheetCaf=isEditingCaf?`<div class="dish-form-overlay" onclick="cancelCafForm()" style="display:block"></div><div class="dish-form-sheet"><div style="text-align:center;padding:10px 0 4px"><div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div></div>${formH}</div>`:'';
+  const formPanelCaf=isEditingCaf?`<div class="dishes-form-panel">${formH}</div>`:'';
+  return tabsH+mobileSheetCaf+`<div class="dishes-layout${isEditingCaf?'':' no-form'}">${formPanelCaf}<div class="dishes-list-panel">${listH}</div></div>`;
 }
 function renderCafCategoriesTab(){
   const cats=getCafCats();
@@ -2852,6 +3040,7 @@ function renderKioskoTab(){
   h+=`</div>`;
   if(kioskSubTab==='cats') return h+renderKioskCatsTab();
 
+  const isEditingKiosko=!!(C.editingKioskItem||C._showKioskoForm);
   const f=C.editingKioskItem||C.newKioskItem;
   const items=Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   const kioskCats=getKioskCats();
@@ -2879,7 +3068,7 @@ function renderKioskoTab(){
   formH+=`${C.editingKioskItem?'Guardar cambios':'Agregar item'}</button>`;
   formH+=`${C.editingKioskItem?`<button class="btn btn-ghost" onclick="cancelKioskItem()">Cancelar</button>`:''}</div></div>`;
 
-  let listH=`<div class="cat-sections">`;
+  let listH=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem"><div style="font-size:16px;font-weight:600">🏪 Kiosko</div>${!isEditingKiosko?`<button onclick="window._startNewKioskoItem()" style="padding:7px 16px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar ítem</button>`:''}</div><div class="cat-sections">`;
   const allKioskItems=Object.entries(DB.kioskItems||{}).map(([k,v])=>({...v,_key:k}));
   if(kioskCats.length===0){
     // Sin categorías: lista plana
@@ -2940,7 +3129,9 @@ function renderKioskoTab(){
     }
   }
   listH+=`</div>`;
-  return h+`<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
+  const mobileSheetK=isEditingKiosko?`<div class="dish-form-overlay" onclick="cancelKioskoForm()" style="display:block"></div><div class="dish-form-sheet"><div style="text-align:center;padding:10px 0 4px"><div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div></div>${formH}</div>`:'';
+  const formPanelK=isEditingKiosko?`<div class="dishes-form-panel">${formH}</div>`:'';
+  return h+mobileSheetK+`<div class="dishes-layout${isEditingKiosko?'':' no-form'}">${formPanelK}<div class="dishes-list-panel">${listH}</div></div>`;
 }
 
 function renderKioskCatsTab(){
@@ -3077,7 +3268,7 @@ window.addKioskItem=()=>{
   push(ref(db,'kioskItems'),{name:f.name.trim(),desc:f.desc||'',price:Number(f.price),stock:f.stock!==''&&f.stock!=null?Number(f.stock):null,alertAt:f.alertAt!==''&&f.alertAt!=null?Number(f.alertAt):null,barcode:f.barcode&&f.barcode.trim()?f.barcode.trim():null,cat:f.cat||null});
   C.newKioskItem={name:'',desc:'',price:'',stock:''};C._prevKioskStock=null;render();
 };
-window.editKioskItem=key=>{C.editingKioskItem={...DB.kioskItems[key],_key:key};C._prevKioskStock=DB.kioskItems[key].stock;render();};
+window._prevKioskStockHelper=key=>{C._prevKioskStock=DB.kioskItems[key]?.stock;};
 window.saveKioskItem=()=>{
   const stockInp=document.getElementById('kiosk-stock-inp');
   if(stockInp&&stockInp.value!=='')C.editingKioskItem.stock=stockInp.value;
@@ -3087,7 +3278,7 @@ window.saveKioskItem=()=>{
   set(ref(db,`kioskItems/${_key}`),{name:data.name,desc:data.desc||'',price:Number(data.price),stock:data.stock!==''&&data.stock!=null?Number(data.stock):null,alertAt:data.alertAt!==''&&data.alertAt!=null?Number(data.alertAt):null,barcode:data.barcode&&data.barcode.trim()?data.barcode.trim():null,cat:data.cat||null});
   C.editingKioskItem=null;C._prevKioskStock=null;render();
 };
-window.cancelKioskItem=()=>{C.editingKioskItem=null;render();};
+window.cancelKioskItem=()=>{C.editingKioskItem=null;C._showKioskoForm=false;render();};
 window.deleteKioskItem=key=>{if(confirm('¿Eliminar este item?'))remove(ref(db,`kioskItems/${key}`));};
 
 function renderStockTab(){
@@ -4258,7 +4449,7 @@ function renderOrdersTab(){
       });
 
       // Footer de cobro por persona/grupo
-      const yaPagado=pgOrders.reduce((s,o)=>s+(o._pagosParciales||0),0);
+      const yaPagado=pgOrders.reduce((s,o)=>Math.max(s,o._yaPago||o._pagosParciales||0),0);
       const pgTotalFinal=grupoDescuento>0?pgTotalConDesc:pgTotal;
       const saldoRestante=Math.max(0,pgTotalFinal-yaPagado);
       const canCobrar=!hasPending&&!hasPreparing&&!hasReadyAt&&!isBilled;
@@ -5280,7 +5471,8 @@ function renderDeudoresTab(){
       const keys=g.orders.map(o=>o._key);
       const totalOriginal=g.orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
       const saldoMostrar=g.orders.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
-      const pagadoParcial=Math.max(0,totalOriginal-saldoMostrar);
+      // _yaPago es el campo canónico; fallback a diferencia si no existe
+      const pagadoParcial=g.orders.reduce((s,o)=>Math.max(s,o._yaPago||0),0)||Math.max(0,totalOriginal-saldoMostrar);
       const _dIdx=window._deudorKeys.push(keys)-1;
       if(!window._deudorSaldos)window._deudorSaldos=[];
       window._deudorSaldos[_dIdx]=saldoMostrar;
@@ -5429,6 +5621,141 @@ window.editOrderPersonName=async(keys,nombreActual)=>{
       setTimeout(()=>{inp.focus();inp.select();},50);
     }
   };
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
+  renderO();
+};
+window.editDeudorOrder=async(orderKey)=>{
+  const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k}));
+  const leaders=waiters.filter(w=>w.isLeader);
+  let pinInput='';let step='pin';
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
+
+  const renderO=()=>{
+    if(step==='pin'){
+      const dots='●'.repeat(pinInput.length)+'○'.repeat(4-pinInput.length);
+      overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:280px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);text-align:center">
+        <div style="font-size:28px;margin-bottom:8px">🔐</div>
+        <div style="font-size:15px;font-weight:600;margin-bottom:4px">Editar pedido deudor</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:14px">PIN de moza líder</div>
+        <div style="font-size:28px;letter-spacing:14px;color:var(--brand);margin-bottom:14px">${dots}</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+          ${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(k=>k===''?'<div></div>':`<button data-k="${k}" style="padding:14px;border-radius:10px;border:0.5px solid var(--border);background:var(--bg);font-size:20px;font-weight:600;cursor:pointer;font-family:inherit">${k}</button>`).join('')}
+        </div>
+        <button id="ed-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
+      </div>`;
+      overlay.querySelector('#ed-cancel').onclick=()=>overlay.remove();
+      overlay.querySelectorAll('[data-k]').forEach(btn=>{
+        btn.onclick=()=>{
+          const k=btn.dataset.k;
+          if(k==='⌫'){pinInput=pinInput.slice(0,-1);renderO();return;}
+          if(pinInput.length>=4)return;
+          pinInput+=k;
+          if(pinInput.length===4){
+            if(!leaders.find(w=>String(w.pin)===pinInput)){pinInput='';setTimeout(()=>renderO(),600);}
+            else{step='edit';renderO();}
+          } else renderO();
+        };
+      });
+    } else {
+      const o=DB.orders[orderKey];
+      if(!o){overlay.remove();return;}
+      let items=[...( o.items||[]).map(i=>({...i}))];
+
+      const renderEdit=()=>{
+        const total=items.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+        overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:420px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);max-height:90vh;overflow-y:auto">
+          <div style="font-size:16px;font-weight:700;margin-bottom:12px">✏️ Editar pedido deudor</div>
+          <div style="margin-bottom:12px">
+            ${items.map((it,idx)=>`
+              <div style="display:flex;align-items:center;gap:8px;padding:8px;background:var(--bg);border-radius:8px;margin-bottom:6px;border:0.5px solid var(--border)">
+                <div style="flex:1;font-size:13px;font-weight:500">${it.name}${it.selectedType?` <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 4px;border-radius:3px">${it.selectedType}</span>`:''}</div>
+                <div style="display:flex;align-items:center;gap:4px">
+                  <button data-action="dec" data-idx="${idx}" style="width:26px;height:26px;border-radius:50%;border:0.5px solid var(--border);background:var(--card);font-size:16px;cursor:pointer;font-family:inherit;line-height:1">−</button>
+                  <span style="font-size:14px;font-weight:700;min-width:20px;text-align:center">${it.qty}</span>
+                  <button data-action="inc" data-idx="${idx}" style="width:26px;height:26px;border-radius:50%;border:0.5px solid var(--border);background:var(--card);font-size:16px;cursor:pointer;font-family:inherit;line-height:1">+</button>
+                </div>
+                <span style="font-size:12px;font-weight:600;color:var(--accent);min-width:60px;text-align:right">$${((it.finalPrice||it.price)*it.qty).toLocaleString()}</span>
+                <button data-action="del" data-idx="${idx}" style="width:24px;height:24px;border-radius:50%;border:none;background:#fee2e2;color:#b91c1c;font-size:12px;cursor:pointer;font-family:inherit;line-height:1">✕</button>
+              </div>`).join('')}
+          </div>
+          <!-- Buscador para agregar/reemplazar ítem -->
+          <div style="margin-bottom:12px;position:relative">
+            <label style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.04em">Agregar ítem</label>
+            <input id="deo-search" placeholder="Buscar plato..." autocomplete="off" style="width:100%;margin-top:4px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box">
+            <div id="deo-results" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:0.5px solid var(--border);border-radius:8px;max-height:200px;overflow-y:auto;z-index:10;box-shadow:0 4px 16px rgba(0,0,0,.15)"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:8px 4px;margin-bottom:12px;border-top:0.5px solid var(--border)">
+            <span style="font-size:13px;font-weight:600">Total</span>
+            <span style="font-size:16px;font-weight:700;color:var(--accent)">$${total.toLocaleString()}</span>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button id="ed-save" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">Guardar</button>
+            <button id="ed-close" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:14px;cursor:pointer;font-family:inherit">Cancelar</button>
+          </div>
+        </div>`;
+
+        // Buscador
+        const searchInp=overlay.querySelector('#deo-search');
+        const results=overlay.querySelector('#deo-results');
+        searchInp.addEventListener('input',()=>{
+          const q=searchInp.value.toLowerCase().trim();
+          if(!q){results.style.display='none';return;}
+          const allItems=[
+            ...Object.entries(DB.dishes||{}).map(([k,v])=>({...v,_key:k,_src:'dishes'})),
+            ...Object.entries(DB.cafeteriaItems||{}).map(([k,v])=>({...v,_key:k,_src:'cafeteria',emoji:v.emoji||'☕'}))
+          ].filter(d=>!d.unavailable&&(d.name||'').toLowerCase().includes(q));
+          if(!allItems.length){results.innerHTML='<div style="padding:8px 12px;font-size:13px;color:var(--muted)">Sin resultados</div>';results.style.display='block';return;}
+          results.innerHTML=allItems.slice(0,8).map(d=>`<div data-key="${d._key}" data-src="${d._src}" style="display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;border-bottom:0.5px solid var(--border)">
+            <span style="font-size:16px">${d.emoji||'🍽️'}</span>
+            <div style="flex:1"><div style="font-size:13px;font-weight:500">${d.name}</div><div style="font-size:11px;color:var(--muted)">${d._src==='cafeteria'?'☕ Cafetería':'🍽 Restaurant'}</div></div>
+            <span style="font-size:13px;font-weight:600;color:var(--accent)">$${Number(d.price).toLocaleString()}</span>
+          </div>`).join('');
+          results.style.display='block';
+          results.querySelectorAll('[data-key]').forEach(el=>{
+            el.onclick=()=>{
+              const src=el.dataset.src;
+              const d=src==='cafeteria'?DB.cafeteriaItems[el.dataset.key]:DB.dishes[el.dataset.key];
+              if(!d)return;
+              const existing=items.find(i=>i.name===d.name);
+              if(existing){existing.qty++;}
+              else{items.push({name:d.name,qty:1,price:Number(d.price),finalPrice:Number(d.price),excluded:[],selectedType:null,isCafeteria:src==='cafeteria',emoji:d.emoji||null});}
+              searchInp.value='';
+              results.style.display='none';
+              renderEdit();
+            };
+          });
+        });
+        searchInp.addEventListener('focus',()=>{if(searchInp.value)searchInp.dispatchEvent(new Event('input'));});
+
+        overlay.querySelectorAll('[data-action]').forEach(btn=>{
+          btn.onclick=()=>{
+            const idx=Number(btn.dataset.idx);
+            const action=btn.dataset.action;
+            if(action==='inc'){items[idx].qty++;}
+            else if(action==='dec'){items[idx].qty--;if(items[idx].qty<=0)items.splice(idx,1);}
+            else if(action==='del'){items.splice(idx,1);}
+            if(!items.length){overlay.remove();return;}
+            renderEdit();
+          };
+        });
+
+        overlay.querySelector('#ed-close').onclick=()=>overlay.remove();
+        overlay.querySelector('#ed-save').onclick=async()=>{
+          // _yaPago es lo que ya pagó — no cambia al editar ítems
+          const yaPago=o._yaPago||0;
+          const newTotal=items.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+          const newSaldo=Math.max(0,newTotal-yaPago);
+          overlay.remove();
+          await update(ref(db,`orders/${orderKey}`),{items,saldoPendiente:newSaldo});
+          render();
+        };
+      };
+      renderEdit();
+    }
+  };
+
   document.body.appendChild(overlay);
   overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
   renderO();
@@ -5877,7 +6204,8 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
           const saldoK=o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
           const abono=Math.min(saldoK,restante);
           const nuevoSaldoK=Math.max(0,saldoK-abono);
-          const updateData={saldoPendiente:nuevoSaldoK};
+          const yaPagoAnterior=o._yaPago||0;
+          const updateData={saldoPendiente:nuevoSaldoK,_yaPago:yaPagoAnterior+abono};
           if(primerOrder){
             const histExist=o._historialPagos?Object.values(o._historialPagos):[];
             updateData._historialPagos=[...histExist,nuevoPagoDeuda];
@@ -6219,7 +6547,15 @@ window.addDish=()=>{
   C.newDish={name:'',desc:'',price:'',cat:cats.length>0?cats[0]._key:'',emoji:'🍽️',customizable:false,ingredients:[],types:[],hasTypes:false,promoDiscount:0,is2x1:false};
   C.newIngInput='';render();
 };
-window.editDish=key=>{C.editingDish={...DB.dishes[key],_key:key,ingredients:[...(DB.dishes[key].ingredients||[])]};render();};
+window.cancelDishForm=()=>{C.editingDish=null;C._showDishForm=false;render();};
+window.cancelCafForm=()=>{C.editingCafItem=null;C._showCafForm=false;render();};
+window.cancelKioskoForm=()=>{C.editingKioskItem=null;C._showKioskoForm=false;render();};
+window.editDish=key=>{C.editingDish={...DB.dishes[key],_key:key,ingredients:[...(DB.dishes[key].ingredients||[])]};C._showDishForm=true;render();};
+window.editCafItem=key=>{C.editingCafItem={...DB.cafeteriaItems[key],_key:key,ingredients:[...(DB.cafeteriaItems[key].ingredients||[])]};C._showCafForm=true;render();};
+window.editKioskItem=key=>{C.editingKioskItem={...DB.kioskItems[key],_key:key};C._showKioskoForm=true;render();};
+window._startNewDish=()=>{C._showDishForm=true;C.editingDish=null;render();setTimeout(()=>document.querySelector('.dishes-form-panel input,.dish-form-sheet input')?.focus(),50);};
+window._startNewCafItem=()=>{C._showCafForm=true;C.editingCafItem=null;render();setTimeout(()=>document.querySelector('.dishes-form-panel input,.dish-form-sheet input')?.focus(),50);};
+window._startNewKioskoItem=()=>{C._showKioskoForm=true;C.editingKioskItem=null;render();setTimeout(()=>document.querySelector('.dishes-form-panel input,.dish-form-sheet input')?.focus(),50);};
 window.saveEditDish=()=>{
   const stockInp=document.getElementById('dish-stock-inp');
   if(stockInp&&stockInp.value!=='')C.editingDish.stock=stockInp.value;
@@ -7451,7 +7787,7 @@ window.adminGroupCobrado=async keys=>{
     const nuevoYaPagado=yaPagado+montoCobrado;
     const cubierto=nuevoYaPagado>=totalConDesc;
     const nuevoPago2={monto:montoCobrado,pm,fecha:new Date().toISOString().slice(0,10),ts:Date.now()};
-    let isFirst2=true;for(const k of keys){const o=DB.orders[k];if(!o)continue;const histData2=isFirst2?[...(Array.isArray(o._historialPagos)?o._historialPagos:Object.values(o._historialPagos||{})),nuevoPago2]:undefined;isFirst2=false;const upd2={_pagosParciales:nuevoYaPagado,_ultimoPm:pm,...(histData2!==undefined?{_historialPagos:histData2}:{}),...(cubierto?{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()}:{})};await update(ref(db,`orders/${k}`),upd2);}
+    let isFirst2=true;for(const k of keys){const o=DB.orders[k];if(!o)continue;const histData2=isFirst2?[...(Array.isArray(o._historialPagos)?o._historialPagos:Object.values(o._historialPagos||{})),nuevoPago2]:undefined;isFirst2=false;const upd2={_pagosParciales:nuevoYaPagado,_yaPago:nuevoYaPagado,_ultimoPm:pm,...(histData2!==undefined?{_historialPagos:histData2}:{}),...(cubierto?{status:'cobrado',paymentMethod:pm,cobradoAt:Date.now()}:{})};await update(ref(db,`orders/${k}`),upd2);}
     render();return;
   }
 
