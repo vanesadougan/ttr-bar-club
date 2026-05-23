@@ -417,6 +417,7 @@ onValue(ref(db,'clientes'), snap=>{ DB.clientes = snap.val()||{}; if(!firstLoad)
 onValue(ref(db,'proveedores'), snap=>{ DB.proveedores = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'compras'), snap=>{ DB.compras = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'estadisticasMensuales'), snap=>{ DB.estadisticasMensuales = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'cajaHistorial'), snap=>{ DB.cajaHistorial = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'kioskCategories'), snap=>{ DB.kioskCategories = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
 onValue(ref(db,'ingredients'), snap=>{
   DB.ingredients = snap.val()||{};
@@ -814,7 +815,71 @@ function getCajaAbierta(){
   if(DB.caja&&DB.caja.__estado)return DB.caja.__estado.abierta===true;
   return false;
 }
+function renderCajaHistorialTab(){
+  const pmLabels={efectivo:'💵 Efectivo',debito:'💳 Débito',credito:'💳 Crédito',transferencia:'📱 Transferencia',mercadopago:'📱 Mercado Pago'};
+  const historial=DB.cajaHistorial||{};
+  const fechas=Object.keys(historial).sort((a,b)=>b.localeCompare(a));
+  const fmtFechaH=f=>{if(!f)return'';const[y,m,d]=f.split('-');return`${d}/${m}/${y}`;};
+
+  let h=`<div style="max-width:720px">`;
+  h+=`<div style="display:flex;gap:6px;margin-bottom:1.25rem">`;
+  h+=`<button onclick="C._cajaSubTab='hoy';render()" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--card);color:var(--muted)">💰 Hoy</button>`;
+  h+=`<button onclick="C._cajaSubTab='historial';render()" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--brand);color:#fff">📋 Historial 30 días</button>`;
+  h+=`</div>`;
+
+  if(fechas.length===0){
+    h+=`<div style="text-align:center;padding:3rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">
+      <div style="font-size:40px;margin-bottom:12px">📋</div>
+      <div style="font-size:16px;font-weight:500">Sin historial aún</div>
+      <div style="font-size:13px;margin-top:4px">El historial se genera al cerrar la caja</div>
+    </div>`;
+    return h+`</div>`;
+  }
+
+  fechas.forEach(fecha=>{
+    const dia=historial[fecha];
+    const movs=dia.movimientos?Object.values(dia.movimientos):[];
+    const isExpanded=C._cajaHistExpanded?.[fecha]===true;
+    const ventas=dia.totalVentas||0;const gastos=dia.totalGastos||0;
+    h+=`<div class="card" style="margin-bottom:1rem;padding:0;overflow:hidden">`;
+    // Header clickeable
+    h+=`<div onclick="toggleCajaHist('${fecha}')" style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer;${isExpanded?'border-bottom:0.5px solid var(--border)':''}">`;
+    h+=`<div><div style="font-size:15px;font-weight:700">📅 ${fmtFechaH(fecha)}</div>`;
+    h+=`<div style="font-size:12px;color:var(--muted);margin-top:2px">${dia.totalMovimientos||0} movimientos</div></div>`;
+    h+=`<div style="text-align:right;display:flex;align-items:center;gap:12px">`;
+    h+=`<div style="text-align:right"><div style="font-size:11px;color:#059669">Ventas</div><div style="font-size:14px;font-weight:700;color:#059669">$${ventas.toLocaleString()}</div></div>`;
+    h+=`<div style="text-align:right"><div style="font-size:11px;color:#dc2626">Gastos</div><div style="font-size:14px;font-weight:700;color:#dc2626">$${gastos.toLocaleString()}</div></div>`;
+    h+=`<span style="font-size:14px;color:var(--muted)">${isExpanded?'▲':'▼'}</span>`;
+    h+=`</div></div>`;
+
+    if(isExpanded){
+      h+=`<div style="max-height:400px;overflow-y:auto">`;
+      movs.sort((a,b)=>(a.ts||0)-(b.ts||0)).forEach(m=>{
+        const hora=m.ts?new Date(m.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',hour12:false}):'';
+        const esGasto=m.tipo==='gasto'||m.monto<0;
+        h+=`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px;border-bottom:0.5px solid var(--border)">`;
+        h+=`<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${m.concepto||m.tipo||'—'}</div>`;
+        h+=`<div style="font-size:11px;color:var(--muted)">${hora}${m.paymentMethod?' · '+(pmLabels[m.paymentMethod]||m.paymentMethod):''}</div></div>`;
+        h+=`<span style="font-size:13px;font-weight:700;color:${esGasto?'#dc2626':'#059669'};flex-shrink:0;margin-left:8px">${esGasto?'-':''}$${Math.abs(m.monto||0).toLocaleString()}</span>`;
+        h+=`</div>`;
+      });
+      h+=`</div>`;
+    }
+    h+=`</div>`;
+  });
+  return h+`</div>`;
+}
+
+window.toggleCajaHist=(fecha)=>{
+  if(!C._cajaHistExpanded)C._cajaHistExpanded={};
+  C._cajaHistExpanded[fecha]=!C._cajaHistExpanded[fecha];
+  render();
+};
+
 function renderCajaTab(){
+  const cajaSubTab=C._cajaSubTab||'hoy';
+  if(cajaSubTab==='historial') return renderCajaHistorialTab();
+
   const movs=getCajaHoy();
   const abierta=getCajaAbierta();
   const hoy=new Date().toLocaleDateString('es-AR',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
@@ -828,7 +893,11 @@ function renderCajaTab(){
 
   let h='<div style="max-width:720px">';
 
-  // Header caja
+  // Sub-tabs
+  h+=`<div style="display:flex;gap:6px;margin-bottom:1.25rem">`;
+  h+=`<button onclick="C._cajaSubTab='hoy';render()" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--brand);color:#fff">💰 Hoy</button>`;
+  h+=`<button onclick="C._cajaSubTab='historial';render()" style="padding:6px 14px;border-radius:16px;font-size:13px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:var(--card);color:var(--muted)">📋 Historial 30 días</button>`;
+  h+=`</div>`;
   h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:10px">`;
   h+=`<div><div style="font-size:18px;font-weight:600">💰 Caja del día</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${hoy}</div></div>`;
   h+=`<div style="display:flex;gap:8px;flex-wrap:wrap">`;
@@ -1070,7 +1139,26 @@ window.cajaCierre=async()=>{
   if(!ok)return;
   // 3. Descargar CSV
   cajaDescargarArchivo(movs);
-  // 4. Acumular en resumen mensual para estadísticas
+  // 4. Guardar movimientos completos en historial (30 días)
+  if(movs.length>0){
+    await set(ref(db,`cajaHistorial/${hoy}`),{
+      fecha:hoy,
+      cierreTs:Date.now(),
+      movimientos:movs.reduce((obj,m,i)=>{obj[i]=m;return obj;},{}),
+      totalVentas:movs.filter(m=>m.tipo==='venta').reduce((s,m)=>s+Math.abs(m.monto||0),0),
+      totalGastos:movs.filter(m=>m.tipo==='gasto'||m.monto<0).reduce((s,m)=>s+Math.abs(m.monto||0),0),
+      totalMovimientos:movs.length
+    });
+    // Limpiar registros de más de 30 días
+    const snapH=await get(ref(db,'cajaHistorial'));
+    const historial=snapH.val()||{};
+    const limite=new Date();limite.setDate(limite.getDate()-31);
+    const limStr=limite.toISOString().slice(0,10);
+    for(const fecha of Object.keys(historial)){
+      if(fecha<limStr)await remove(ref(db,`cajaHistorial/${fecha}`));
+    }
+  }
+  // 5. Acumular en resumen mensual para estadísticas
   const mes=hoy.slice(0,7); // YYYY-MM
   const ventasDia=movs.filter(m=>m.tipo==='venta').reduce((s,m)=>s+Math.abs(m.monto||0),0);
   const gastosDia=movs.filter(m=>m.tipo==='gasto'||m.monto<0).reduce((s,m)=>s+Math.abs(m.monto||0),0);
@@ -5316,10 +5404,8 @@ function renderDeudoresTab(){
           h+=`<div style="padding:10px 16px;${oi<g.orders.length-1?'border-bottom:0.5px solid #f3f4f6':''}">`;
           h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">`;
           h+=`<div style="font-size:11px;color:var(--muted);font-weight:500">${oFecha} · ${oTableLabel}</div>`;
-          h+=`<div style="display:flex;align-items:center;gap:6px">`;
           h+=`<div style="font-size:13px;font-weight:600;color:var(--text)">$${oTotalItems.toLocaleString()}</div>`;
-          h+=`<button onclick="editDeudorOrder('${o._key}')" style="padding:2px 7px;font-size:11px;border-radius:5px;border:0.5px solid #d97706;color:#d97706;background:#fffbeb;cursor:pointer;font-family:inherit">✏️</button>`;
-          h+=`</div></div>`;
+          h+=`</div>`;
           oItems.forEach(i=>{
             h+=`<div style="font-size:12px;color:var(--muted);padding-left:4px">${i.qty}× <strong style="color:var(--text)">${i.name}</strong>${i.selectedType?` <span style="font-size:10px;background:#dbeafe;color:#1e40af;padding:1px 4px;border-radius:3px">${i.selectedType}</span>`:''} <span style="color:var(--accent)">$${((i.finalPrice||i.price)*i.qty).toLocaleString()}</span></div>`;
           });
