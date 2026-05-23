@@ -783,6 +783,7 @@ window.adminTab=t=>{C.adminTab=t;render();};
 
 // ── ADMIN: GESTIÓN DE MOZAS ───────────────────────
 function renderWaitersAdminTab(){
+  const isEncargado=C.role==='encargado';
   const waiters=Object.entries(DB.waiters||{}).map(([k,v])=>({...v,_key:k})).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   const fw=C.editingWaiter||C.newWaiter||{name:'',pin:''};
   let formH='<div class="card"><div class="card-title">'+(C.editingWaiter?'✏️ Editar moza/mozo':'+ Agregar moza/mozo')+'</div>';
