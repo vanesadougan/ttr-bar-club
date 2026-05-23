@@ -5552,10 +5552,13 @@ window.editDeudorOrder=async(orderKey)=>{
 
         overlay.querySelector('#ed-close').onclick=()=>overlay.remove();
         overlay.querySelector('#ed-save').onclick=async()=>{
-          // Mantener el saldoPendiente original — no recalcular
-          const oldSaldo=o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+          const oldTotal=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+          const oldSaldo=o.saldoPendiente!=null?o.saldoPendiente:oldTotal;
+          const yaPago=Math.max(0,oldTotal-oldSaldo); // lo que ya pagó no cambia
+          const newTotal=items.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
+          const newSaldo=Math.max(0,newTotal-yaPago);
           overlay.remove();
-          await update(ref(db,`orders/${orderKey}`),{items,saldoPendiente:oldSaldo});
+          await update(ref(db,`orders/${orderKey}`),{items,saldoPendiente:newSaldo});
           render();
         };
       };
