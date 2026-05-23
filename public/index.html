@@ -421,6 +421,7 @@ onValue(ref(db,'proveedores'), snap=>{ DB.proveedores = snap.val()||{}; if(!firs
 onValue(ref(db,'compras'), snap=>{ DB.compras = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'estadisticasMensuales'), snap=>{ DB.estadisticasMensuales = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'cajaHistorial'), snap=>{ DB.cajaHistorial = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'config'), snap=>{ DB.config = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'kioskCategories'), snap=>{ DB.kioskCategories = snap.val()||{}; _markLoaded(); if(!firstLoad) render(); });
 onValue(ref(db,'ingredients'), snap=>{
   DB.ingredients = snap.val()||{};
@@ -587,6 +588,16 @@ function resolveTableRoute(){
 let currentUser = null;
 onAuthStateChanged(auth, user => {
   currentUser = user;
+  if(user){
+    const encargadoEmails=(DB.config?.encargadoEmails||[]);
+    if(encargadoEmails.includes(user.email?.toLowerCase())){
+      C.role='encargado';
+    } else {
+      C.role='admin';
+    }
+  } else {
+    C.role=null;
+  }
   render();
 });
 
@@ -664,8 +675,14 @@ window.doLogin=async()=>{
   btn.textContent='Entrando...'; btn.disabled=true;
   try{
     await signInWithEmailAndPassword(auth, email, pass);
+    // Detectar si es encargado
+    const encargadoEmails=(DB.config?.encargadoEmails||[]);
+    if(encargadoEmails.includes(email.toLowerCase())){
+      C.role='encargado';
+    } else {
+      C.role='admin';
+    }
     document.getElementById('modetabs').style.display='flex';
-    // onAuthStateChanged will trigger render()
   } catch(e){
     btn.textContent='Entrar'; btn.disabled=false;
     err.style.display='block';
@@ -680,9 +697,12 @@ function renderAdmin(){
   showLogoutBtn(true);
   const mc=document.getElementById('main-content');
   const pc=pendingCount();
+  const isEncargado=C.role==='encargado';
 
   // ── Nivel 1: pestañas principales ──
-  const mainTabs=['tables','mozas','menu','orders','history','deudores','caja','stock','clientes','proveedores','compras','estadisticas'];
+  const allMainTabs=['tables','mozas','menu','orders','history','deudores','caja','stock','clientes','proveedores','compras','estadisticas'];
+  const encargadoTabs=['menu','orders','deudores','caja'];
+  const mainTabs=isEncargado?encargadoTabs:allMainTabs;
   const mainLabels={
     tables:'🪑 Mesas',
     mozas:'👩 Mozas',
@@ -700,8 +720,11 @@ function renderAdmin(){
   };
   // Determinar tab activo de nivel 1
   const dishTabs=['dishes','cafeteria','kiosko'];
-  const activeMain=dishTabs.includes(C.adminTab)?'menu':C.adminTab==='mozas'?'mozas':C.adminTab==='caja'?'caja':C.adminTab==='deudores'?'deudores':
+  const activeMainRaw=dishTabs.includes(C.adminTab)?'menu':C.adminTab==='mozas'?'mozas':C.adminTab==='caja'?'caja':C.adminTab==='deudores'?'deudores':
     C.adminTab==='stock_tab'?'stock':C.adminTab;
+  // Si encargado está en tab no permitida, redirigir a orders
+  const activeMain=(isEncargado&&!encargadoTabs.includes(activeMainRaw))?'orders':activeMainRaw;
+  if(activeMain!==activeMainRaw)C.adminTab='orders';
 
   let h=`<div class="content">`;
   // Barra nivel 1
@@ -774,6 +797,26 @@ function renderWaitersAdminTab(){
     listH+=`<div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:8px;border:0.5px solid ${w.isLeader?'#fcd34d':'var(--border)'}"><div style="width:36px;height:36px;border-radius:50%;background:${w.isLeader?'#d97706':'var(--brand)'};color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:600;flex-shrink:0">${(w.name||'?')[0].toUpperCase()}</div><div style="flex:1"><div style="display:flex;align-items:center;gap:6px;font-size:14px;font-weight:500">${w.name}${leaderBadge}</div><div style="font-size:11px;color:var(--muted)">PIN: ${w.pin?'••••':'sin PIN'}</div></div><div class="row-btns"><button class="btn btn-ghost btn-sm" onclick="editWaiter('${w._key}')">✏️</button><button class="btn btn-danger btn-sm" onclick="deleteWaiter('${w._key}')">✕</button></div></div>`;
   });
   listH+='</div></div>';
+
+  // Sección encargados (solo admin full)
+  if(!isEncargado){
+    const encargadoEmails=DB.config?.encargadoEmails||[];
+    listH+=`<div class="card" style="margin-top:1rem">
+      <div class="card-title">🔑 Encargados</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:10px">Los encargados acceden con usuario y contraseña (Firebase Auth) y solo ven: Menú, Pedidos, Deudores, Caja.</div>
+      ${encargadoEmails.length===0?'<div style="font-size:13px;color:var(--muted);padding:8px 0">Sin encargados configurados</div>':''}
+      ${encargadoEmails.map((email,i)=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--bg);border-radius:8px;border:0.5px solid var(--border);margin-bottom:6px">
+        <span style="font-size:13px">🔑 ${email}</span>
+        <button onclick="removeEncargado(${i})" style="padding:3px 8px;border-radius:5px;border:none;background:#fee2e2;color:#b91c1c;font-size:11px;cursor:pointer;font-family:inherit">✕ Quitar</button>
+      </div>`).join('')}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <input id="encargado-email" type="email" placeholder="email@encargado.com" style="flex:1;padding:8px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit">
+        <button onclick="addEncargado()" style="padding:8px 14px;border-radius:8px;border:none;background:var(--brand);color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">Agregar</button>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px">⚠️ El encargado debe tener cuenta creada en Firebase Authentication con ese email.</div>
+    </div>`;
+  }
+
   return`<div class="admin-grid">${formH}${listH}</div>`;
 }
 window.toggleWaiterLeader=()=>{const o=C.editingWaiter||(C.newWaiter=C.newWaiter||{name:'',pin:''});o.isLeader=!o.isLeader;render();};
@@ -803,6 +846,21 @@ window.saveEditWaiter=()=>{
 };
 window.cancelEditWaiter=()=>{C.editingWaiter=null;render();};
 window.deleteWaiter=key=>{if(confirm('¿Eliminar esta moza/mozo?'))remove(ref(db,`waiters/${key}`));};
+window.addEncargado=async()=>{
+  const inp=document.getElementById('encargado-email');
+  const email=(inp?.value||'').trim().toLowerCase();
+  if(!email||!email.includes('@')){alert('Ingresá un email válido');return;}
+  const emails=[...(DB.config?.encargadoEmails||[])];
+  if(emails.includes(email)){alert('Ese email ya está como encargado');return;}
+  emails.push(email);
+  await set(ref(db,'config/encargadoEmails'),emails);
+  if(inp)inp.value='';
+};
+window.removeEncargado=async(idx)=>{
+  const emails=[...(DB.config?.encargadoEmails||[])];
+  emails.splice(idx,1);
+  await set(ref(db,'config/encargadoEmails'),emails);
+};
 
 // ── CAJA DIARIA ───────────────────────────────────
 function getCajaHoy(){
@@ -1050,13 +1108,13 @@ window.cajaGuardarGasto=async()=>{
   const pm=C.cajaGastoPm||'efectivo';
   const hoy=new Date().toISOString().slice(0,10);
   let concepto=tipo==='personal'?'Pago personal':'Gasto proveedor';
-  // Si hay proveedor, buscar nombre
-  if(provKey&&DB.proveedores?.[provKey]){
-    const provNombre=DB.proveedores[provKey].nombre||'Proveedor';
-    concepto=`Gasto proveedor: ${provNombre}`;
-    // Guardar en compras como historial (estado pagado directo)
-    const compraKey=await push(ref(db,'compras'),{
-      proveedorKey:provKey,
+
+  if(tipo==='proveedor'){
+    const provNombre=provKey&&DB.proveedores?.[provKey]?DB.proveedores[provKey].nombre:'Sin proveedor específico';
+    if(provKey&&DB.proveedores?.[provKey])concepto=`Gasto proveedor: ${provNombre}`;
+    // Siempre guardar en compras historial
+    const compraRef=await push(ref(db,'compras'),{
+      proveedorKey:provKey||null,
       proveedorNombre:provNombre,
       fecha:hoy,
       descripcion:desc||'Gasto cargado desde caja',
@@ -1065,8 +1123,7 @@ window.cajaGuardarGasto=async()=>{
       estado:'pagado',
       creadoAt:Date.now()
     });
-    // Guardar pago en historial de esa compra
-    await push(ref(db,`compras/${compraKey.key}/_historialPagos`),{monto,pm,fecha:hoy,ts:Date.now()});
+    await push(ref(db,`compras/${compraRef.key}/_historialPagos`),{monto,pm,fecha:hoy,ts:Date.now()});
   }
   await push(ref(db,'caja'),{tipo:'gasto',concepto,monto:-monto,fecha:hoy,ts:Date.now(),desc,paymentMethod:pm,proveedorKey:provKey||null});
   C.cajaModal=null;C.cajaMonto='';C.cajaDesc='';C.cajaGastoPm='efectivo';render();
