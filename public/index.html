@@ -2683,7 +2683,7 @@ function renderDishesTab(){
     listH+=`</div>`;
   });
   listH+=`</div>`;
-  const isEditing=!!(C.editingDish||C.newDish.name||C.newDish.cat);
+  const isEditing=!!(C.editingDish||C._showDishForm);
   const mobileSheet=isEditing?`<div class="dish-form-overlay" onclick="cancelDishForm()" style="display:block"></div><div class="dish-form-sheet"><div style="text-align:center;padding:10px 0 4px"><div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div></div>${formH}</div>`:'';
   const formPanel=isEditing?`<div class="dishes-form-panel">${formH}</div>`:'';
   return tabsH+mobileSheet+`<div class="dishes-layout${isEditing?'':' no-form'}">${formPanel}<div class="dishes-list-panel">${listH}</div></div>`;
@@ -2842,7 +2842,7 @@ function renderCafeteriaTab(){
     listH+=`</div>`;
   });
   listH+=`</div>`;
-  const isEditingCaf=!!(C.editingCafItem||C.newCafItem.name||C.newCafItem.cat);
+  const isEditingCaf=!!(C.editingCafItem||C._showCafForm);
   const mobileSheetCaf=isEditingCaf?`<div class="dish-form-overlay" onclick="cancelCafForm()" style="display:block"></div><div class="dish-form-sheet"><div style="text-align:center;padding:10px 0 4px"><div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div></div>${formH}</div>`:'';
   const formPanelCaf=isEditingCaf?`<div class="dishes-form-panel">${formH}</div>`:'';
   return tabsH+mobileSheetCaf+`<div class="dishes-layout${isEditingCaf?'':' no-form'}">${formPanelCaf}<div class="dishes-list-panel">${listH}</div></div>`;
@@ -6456,10 +6456,12 @@ window.addDish=()=>{
   C.newDish={name:'',desc:'',price:'',cat:cats.length>0?cats[0]._key:'',emoji:'🍽️',customizable:false,ingredients:[],types:[],hasTypes:false,promoDiscount:0,is2x1:false};
   C.newIngInput='';render();
 };
-window.cancelDishForm=()=>{C.editingDish=null;C.newDish={name:'',desc:'',price:'',cat:'',emoji:'',stock:'',alertAt:'',ingredients:[],types:[],hasTypes:false,customizable:false};render();};
-window.cancelCafForm=()=>{C.editingCafItem=null;C.newCafItem={name:'',desc:'',price:'',cat:'',emoji:'',stock:'',alertAt:'',ingredients:[]};render();};
-window._startNewDish=()=>{C.newDish={name:'',desc:'',price:'',cat:'',emoji:'',stock:'',alertAt:'',ingredients:[],types:[],hasTypes:false,customizable:false};C.editingDish=null;render();setTimeout(()=>document.querySelector('.dishes-form-panel input,.dish-form-sheet input')?.focus(),50);};
-window._startNewCafItem=()=>{C.newCafItem={name:'',desc:'',price:'',cat:'',emoji:'',stock:'',alertAt:'',ingredients:[]};C.editingCafItem=null;render();setTimeout(()=>document.querySelector('.dishes-form-panel input,.dish-form-sheet input')?.focus(),50);};
+window.cancelDishForm=()=>{C.editingDish=null;C._showDishForm=false;render();};
+window.cancelCafForm=()=>{C.editingCafItem=null;C._showCafForm=false;render();};
+window.editDish=key=>{C.editingDish={...DB.dishes[key],_key:key,ingredients:[...(DB.dishes[key].ingredients||[])]};C._showDishForm=true;render();};
+window.editCafItem=key=>{C.editingCafItem={...DB.cafeteriaItems[key],_key:key,ingredients:[...(DB.cafeteriaItems[key].ingredients||[])]};C._showCafForm=true;render();};
+window._startNewDish=()=>{C._showDishForm=true;C.editingDish=null;render();setTimeout(()=>document.querySelector('.dishes-form-panel input,.dish-form-sheet input')?.focus(),50);};
+window._startNewCafItem=()=>{C._showCafForm=true;C.editingCafItem=null;render();setTimeout(()=>document.querySelector('.dishes-form-panel input,.dish-form-sheet input')?.focus(),50);};
 window.saveEditDish=()=>{
   const stockInp=document.getElementById('dish-stock-inp');
   if(stockInp&&stockInp.value!=='')C.editingDish.stock=stockInp.value;
