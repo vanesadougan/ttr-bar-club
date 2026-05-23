@@ -61,6 +61,7 @@
     .ing-add-row input{flex:1;padding:6px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:var(--card);color:var(--text);outline:none}
     .ing-tag{display:inline-flex;align-items:center;gap:4px;font-size:11px;padding:2px 7px;border-radius:6px;background:#ede9fe;color:#5b21b6;margin-top:3px}
     .dishes-layout{display:grid;grid-template-columns:420px 1fr;gap:1.25rem;align-items:start}
+    .dishes-layout.no-form{grid-template-columns:1fr}
     .dishes-form-panel{position:sticky;top:72px;max-height:calc(100vh - 88px);overflow-y:auto;border-radius:12px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
     .dishes-form-panel::-webkit-scrollbar{width:4px}.dishes-form-panel::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
     .dishes-list-panel{min-height:0}
@@ -2639,7 +2640,7 @@ function renderDishesTab(){
   formH+='</div></div>';
 
   const dishes=Object.entries(DB.dishes).map(([k,v])=>({...v,_key:k}));
-  let listH=`<div class="cat-sections">`;
+  let listH=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem"><div style="font-size:16px;font-weight:600">🍽 Platos</div>${!isEditing?`<button onclick="window._startNewDish()" style="padding:7px 16px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar plato</button>`:''}</div><div class="cat-sections">`;
   cats.forEach(cat=>{
     const catDishes=dishes.filter(d=>d.cat===cat._key).sort((a,b)=>(a.sortOrder||0)-(b.sortOrder||0));
     if(!catOpen[cat._key] && catOpen[cat._key]===undefined) catOpen[cat._key]=true;
@@ -2684,7 +2685,8 @@ function renderDishesTab(){
   listH+=`</div>`;
   const isEditing=!!(C.editingDish||C.newDish.name||C.newDish.cat);
   const mobileSheet=isEditing?`<div class="dish-form-overlay" onclick="cancelDishForm()" style="display:block"></div><div class="dish-form-sheet"><div style="text-align:center;padding:10px 0 4px"><div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div></div>${formH}</div>`:'';
-  return tabsH+mobileSheet+`<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
+  const formPanel=isEditing?`<div class="dishes-form-panel">${formH}</div>`:'';
+  return tabsH+mobileSheet+`<div class="dishes-layout${isEditing?'':' no-form'}">${formPanel}<div class="dishes-list-panel">${listH}</div></div>`;
 }
 
 // ── CATEGORIES TAB ────────────────────────────────
@@ -2818,7 +2820,7 @@ function renderCafeteriaTab(){
 
   formH+='<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-primary" onclick="'+(C.editingCafItem?'saveEditCafItem()':'addCafItem()') +'">'+(C.editingCafItem?'Guardar cambios':'Agregar item')+'</button>'+(C.editingCafItem?'<button class="btn btn-ghost" onclick="cancelEditCafItem()">Cancelar</button>':'')+'</div></div>';
 
-  let listH=`<div class="cat-sections">`;
+  let listH=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem"><div style="font-size:16px;font-weight:600">☕ Cafetería</div>${!isEditingCaf?`<button onclick="window._startNewCafItem()" style="padding:7px 16px;border-radius:8px;border:0.5px solid var(--brand);background:transparent;color:var(--brand);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Agregar ítem</button>`:''}</div><div class="cat-sections">`;
   const allItems=Object.entries(DB.cafeteriaItems).map(([k,v])=>({...v,_key:k}));
   if(cats.length===0){
     listH+=`<div class="cat-section" style="padding:2rem;text-align:center;color:var(--muted)"><div style="font-size:32px;margin-bottom:8px">☕</div><div>Primero creá una categoría en la pestaña Categorías</div></div>`;
@@ -2842,7 +2844,8 @@ function renderCafeteriaTab(){
   listH+=`</div>`;
   const isEditingCaf=!!(C.editingCafItem||C.newCafItem.name||C.newCafItem.cat);
   const mobileSheetCaf=isEditingCaf?`<div class="dish-form-overlay" onclick="cancelCafForm()" style="display:block"></div><div class="dish-form-sheet"><div style="text-align:center;padding:10px 0 4px"><div style="width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto"></div></div>${formH}</div>`:'';
-  return tabsH+mobileSheetCaf+`<div class="dishes-layout"><div class="dishes-form-panel">${formH}</div><div class="dishes-list-panel">${listH}</div></div>`;
+  const formPanelCaf=isEditingCaf?`<div class="dishes-form-panel">${formH}</div>`:'';
+  return tabsH+mobileSheetCaf+`<div class="dishes-layout${isEditingCaf?'':' no-form'}">${formPanelCaf}<div class="dishes-list-panel">${listH}</div></div>`;
 }
 function renderCafCategoriesTab(){
   const cats=getCafCats();
@@ -6455,6 +6458,8 @@ window.addDish=()=>{
 };
 window.cancelDishForm=()=>{C.editingDish=null;C.newDish={name:'',desc:'',price:'',cat:'',emoji:'',stock:'',alertAt:'',ingredients:[],types:[],hasTypes:false,customizable:false};render();};
 window.cancelCafForm=()=>{C.editingCafItem=null;C.newCafItem={name:'',desc:'',price:'',cat:'',emoji:'',stock:'',alertAt:'',ingredients:[]};render();};
+window._startNewDish=()=>{C.newDish={name:'',desc:'',price:'',cat:'',emoji:'',stock:'',alertAt:'',ingredients:[],types:[],hasTypes:false,customizable:false};C.editingDish=null;render();setTimeout(()=>document.querySelector('.dishes-form-panel input,.dish-form-sheet input')?.focus(),50);};
+window._startNewCafItem=()=>{C.newCafItem={name:'',desc:'',price:'',cat:'',emoji:'',stock:'',alertAt:'',ingredients:[]};C.editingCafItem=null;render();setTimeout(()=>document.querySelector('.dishes-form-panel input,.dish-form-sheet input')?.focus(),50);};
 window.saveEditDish=()=>{
   const stockInp=document.getElementById('dish-stock-inp');
   if(stockInp&&stockInp.value!=='')C.editingDish.stock=stockInp.value;
