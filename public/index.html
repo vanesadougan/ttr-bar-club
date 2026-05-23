@@ -5552,12 +5552,10 @@ window.editDeudorOrder=async(orderKey)=>{
 
         overlay.querySelector('#ed-close').onclick=()=>overlay.remove();
         overlay.querySelector('#ed-save').onclick=async()=>{
-          const newTotal=items.reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-          const oldTotal=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-          const oldSaldo=o.saldoPendiente!=null?o.saldoPendiente:oldTotal;
-          const newSaldo=oldTotal>0?Math.round(newTotal*(oldSaldo/oldTotal)):newTotal;
+          // Mantener el saldoPendiente original — no recalcular
+          const oldSaldo=o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
           overlay.remove();
-          await update(ref(db,`orders/${orderKey}`),{items,saldoPendiente:Math.max(0,newSaldo)});
+          await update(ref(db,`orders/${orderKey}`),{items,saldoPendiente:oldSaldo});
           render();
         };
       };
