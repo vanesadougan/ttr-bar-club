@@ -1047,10 +1047,10 @@ function renderCajaTab(){
     }
   } else {
     // Métricas resumen
-    h+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1.25rem">`;
-    h+=`<div class="card" style="text-align:center;padding:10px 6px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Ingresos</div><div style="font-size:clamp(14px,4vw,20px);font-weight:700;color:#065f46">$${ingresos.toLocaleString('es-AR')}</div></div>`;
-    h+=`<div class="card" style="text-align:center;padding:10px 6px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Egresos</div><div style="font-size:clamp(14px,4vw,20px);font-weight:700;color:#b91c1c">$${egresos.toLocaleString('es-AR')}</div></div>`;
-    h+=`<div class="card" style="text-align:center;padding:10px 6px;border-color:${balance>=0?'#10b981':'#ef4444'}"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Saldo</div><div style="font-size:clamp(14px,4vw,20px);font-weight:700;color:${balance>=0?'var(--accent)':'#b91c1c'}">$${balance.toLocaleString('es-AR')}</div></div>`;
+    h+=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:1.25rem">`;
+    h+=`<div class="card" style="text-align:center;padding:10px 4px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Ingresos</div><div style="font-size:16px;font-weight:700;color:#065f46;word-break:break-all">$${ingresos.toLocaleString('es-AR')}</div></div>`;
+    h+=`<div class="card" style="text-align:center;padding:10px 4px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Egresos</div><div style="font-size:16px;font-weight:700;color:#b91c1c;word-break:break-all">$${egresos.toLocaleString('es-AR')}</div></div>`;
+    h+=`<div class="card" style="text-align:center;padding:10px 4px;border-color:${balance>=0?'#10b981':'#ef4444'}"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Saldo</div><div style="font-size:16px;font-weight:700;color:${balance>=0?'var(--accent)':'#b91c1c'};word-break:break-all">$${balance.toLocaleString('es-AR')}</div></div>`;
     h+=`</div>`;
 
     // Formulario modal si está abierto
