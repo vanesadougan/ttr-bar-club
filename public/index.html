@@ -100,7 +100,16 @@
       .order-tname{font-size:14px}
       .main-content{padding:0 8px 60px}
       .card{padding:12px}
+      .admin-tabs-bar{display:none!important}
+      .admin-mobile-bar{display:flex!important}
     }
+    .admin-mobile-bar{display:none;position:fixed;top:0;left:0;right:0;z-index:900;height:52px;background:var(--card);border-bottom:0.5px solid var(--border);align-items:center;justify-content:space-between;padding:0 14px;gap:10px}
+    .admin-mobile-title{font-size:16px;font-weight:700;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .admin-drawer-overlay{display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45)}
+    .admin-drawer{position:fixed;top:0;left:-100%;bottom:0;width:78%;max-width:300px;z-index:1001;background:var(--card);transition:left .25s ease;overflow-y:auto;display:flex;flex-direction:column}
+    .admin-drawer.open{left:0}
+    .admin-drawer-overlay.open{display:block}
+    @media(min-width:481px){.admin-mobile-bar{display:none!important}.admin-tabs-bar{display:flex!important}}
     .status{font-size:12px;font-weight:500;padding:3px 9px;border-radius:6px}
     .status-pending{background:#fef3c7;color:#92400e}.status-preparing{background:#fff7ed;color:#c2410c}.status-delivered{background:#d1fae5;color:#065f46}.status-billed{background:#ede9fe;color:#5b21b6}.status-cobrado{background:#d1fae5;color:#065f46}.status-deuda{background:#fee2e2;color:#b91c1c}
     .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1rem}
@@ -727,8 +736,32 @@ function renderAdmin(){
   if(activeMain!==activeMainRaw)C.adminTab='orders';
 
   let h=`<div class="content">`;
-  // Barra nivel 1
-  h+=`<div style="display:flex;gap:4px;margin-bottom:0;border-bottom:0.5px solid var(--border);padding-bottom:0;flex-wrap:wrap">`;
+
+  // ── Mobile topbar + drawer ──
+  const drawerItems=mainTabs.map(t=>{
+    const a=activeMain===t;
+    return `<button onclick="adminMainTab('${t}');closeAdminDrawer()" style="display:flex;align-items:center;gap:12px;padding:14px 20px;border:none;background:${a?'#fff5f7':'transparent'};color:${a?'var(--accent)':'var(--text)'};font-size:15px;font-weight:${a?'600':'400'};cursor:pointer;font-family:inherit;text-align:left;border-left:3px solid ${a?'var(--accent)':'transparent'}">${mainLabels[t]}</button>`;
+  }).join('');
+
+  h+=`<div class="admin-drawer-overlay" id="admin-drawer-overlay" onclick="closeAdminDrawer()"></div>
+  <div class="admin-drawer" id="admin-drawer">
+    <div style="padding:18px 20px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:17px;font-weight:700;color:var(--text)">TTR Bar Club</span>
+      <button onclick="closeAdminDrawer()" style="border:none;background:none;font-size:22px;cursor:pointer;color:var(--muted);padding:0">✕</button>
+    </div>
+    <div style="display:flex;flex-direction:column;padding:8px 0;flex:1">${drawerItems}</div>
+    <div style="padding:16px 20px;border-top:0.5px solid var(--border)">
+      <button onclick="doLogout()" style="width:100%;padding:10px;border-radius:8px;border:0.5px solid var(--border);background:transparent;color:var(--muted);font-size:14px;cursor:pointer;font-family:inherit">🚪 Cerrar sesión</button>
+    </div>
+  </div>
+  <div class="admin-mobile-bar">
+    <button onclick="openAdminDrawer()" style="border:none;background:none;font-size:24px;cursor:pointer;color:var(--text);padding:0;line-height:1;width:36px;height:36px;display:flex;align-items:center;justify-content:center">☰</button>
+    <span class="admin-mobile-title">${(mainLabels[activeMain]||activeMain).replace(/<[^>]+>/g,'')}</span>
+    ${pc>0&&activeMain==='orders'?`<span style="background:var(--accent);color:#fff;border-radius:12px;padding:2px 8px;font-size:12px;font-weight:700">${pc}</span>`:'<span style="width:36px"></span>'}
+  </div>`;
+
+  // Barra nivel 1 (desktop)
+  h+=`<div class="admin-tabs-bar" style="display:flex;gap:4px;margin-bottom:0;border-bottom:0.5px solid var(--border);padding-bottom:0;flex-wrap:wrap">`;
   mainTabs.forEach(t=>{
     const a=activeMain===t;
     h+=`<button onclick="adminMainTab('${t}')" style="padding:8px 16px;border-radius:0;border:none;border-bottom:2px solid ${a?'var(--accent)':'transparent'};cursor:pointer;font-family:inherit;font-size:14px;font-weight:${a?'600':'400'};background:transparent;color:${a?'var(--text)':'var(--muted)'};margin-bottom:-1px">${mainLabels[t]}</button>`;
@@ -748,6 +781,7 @@ function renderAdmin(){
   }
 
   // ── Contenido ──
+  h+=`<div id="admin-content" style="padding-top:0">`;
   if(activeMain==='tables') h+=renderTablesTab();
   else if(activeMain==='menu') h+=(C.adminTab==='cafeteria'?renderCafeteriaTab():C.adminTab==='kiosko'?renderKioskoTab():renderDishesTab());
   else if(activeMain==='stock') h+=renderStockTab();
@@ -762,14 +796,34 @@ function renderAdmin(){
   else if(activeMain==='compras') h+=renderComprasTab();
   else if(activeMain==='estadisticas') h+=renderEstadisticasTab();
 
-  h+=`</div>`;
+  h+=`</div></div>`;
   mc.innerHTML=h;
+  // Aplicar padding-top en mobile para la barra fija
+  if(window.innerWidth<=480){
+    const ac=document.getElementById('admin-content');
+    if(ac)ac.style.paddingTop='60px';
+  }
   const inp=document.getElementById('ing-input');
   if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();addIngredient();}});
   if(C.manualOrder)updateManualSearch();
   if(C.kioskoOrder)updateKioskoSearch();
   if(C.adminEditOrderKey)updateEditOrderSearch();
 }
+window.openAdminDrawer=()=>{
+  document.getElementById('admin-drawer')?.classList.add('open');
+  document.getElementById('admin-drawer-overlay')?.classList.add('open');
+  document.body.style.overflow='hidden';
+};
+window.closeAdminDrawer=()=>{
+  document.getElementById('admin-drawer')?.classList.remove('open');
+  document.getElementById('admin-drawer-overlay')?.classList.remove('open');
+  document.body.style.overflow='';
+};
+window.doLogout=async()=>{
+  await signOut(auth);
+  C.role=null;
+  render();
+};
 window.adminMainTab=t=>{
   if(t==='menu'){C.adminTab=['cafeteria','kiosko'].includes(C.adminTab)?C.adminTab:'dishes';}
   else if(t==='stock'){C.adminTab='stock_tab';}
@@ -4689,20 +4743,6 @@ function renderEstadisticasTab(){
 
   return`<div style="max-width:760px">
     <div style="font-size:18px;font-weight:600;margin-bottom:1rem">📊 Estadísticas</div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem">
-      <div class="card" style="text-align:center;padding:14px">
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Total Ventas</div>
-        <div style="font-size:20px;font-weight:700;color:#3b82f6">$${totalVentas.toLocaleString('es-AR')}</div>
-      </div>
-      <div class="card" style="text-align:center;padding:14px">
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Total Gastos</div>
-        <div style="font-size:20px;font-weight:700;color:#ef4444">$${totalGastos.toLocaleString('es-AR')}</div>
-      </div>
-      <div class="card" style="text-align:center;padding:14px">
-        <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Balance</div>
-        <div style="font-size:20px;font-weight:700;color:${balance>=0?'#059669':'#dc2626'}">$${balance.toLocaleString('es-AR')}</div>
-      </div>
-    </div>
     <div class="card" style="padding:16px">
       <div style="height:340px"><canvas id="${chartId}"></canvas></div>
     </div>
@@ -4990,13 +5030,28 @@ function renderComprasTab(){
       });
     }
   } else if(subTab==='historial'){
-    if(historial.length===0){
+    // Filtro por proveedor
+    const filtroProvH=C._comprasHistFiltro||'todos';
+    const proveedoresHistorial=[...new Set(historial.map(c=>c.proveedorNombre||'Sin proveedor'))].sort((a,b)=>a.localeCompare(b,'es'));
+    const histFiltrado=filtroProvH==='todos'?historial:historial.filter(c=>(c.proveedorNombre||'Sin proveedor')===filtroProvH);
+
+    if(proveedoresHistorial.length>1){
+      h+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <label style="font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap">Proveedor:</label>
+        <select onchange="setComprasHistFiltro(this.value)" style="flex:1;padding:7px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:var(--card);color:var(--text)">
+          <option value="todos" ${filtroProvH==='todos'?'selected':''}>Todos</option>
+          ${proveedoresHistorial.map(n=>`<option value="${n.replace(/"/g,'&quot;')}" ${filtroProvH===n?'selected':''}>${n}</option>`).join('')}
+        </select>
+      </div>`;
+    }
+
+    if(histFiltrado.length===0){
       h+=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px">
         <div style="font-size:40px;margin-bottom:12px">📜</div>
-        <div style="font-size:16px;font-weight:500">Sin compras en los últimos 60 días</div>
+        <div style="font-size:16px;font-weight:500">${filtroProvH==='todos'?'Sin compras en los últimos 60 días':'Sin compras de '+filtroProvH}</div>
       </div>`;
     } else {
-      historial.forEach(c=>{
+      histFiltrado.forEach(c=>{
         h+=`<div class="card" style="margin-bottom:.875rem;border-left:3px solid #10b981;opacity:.9">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
             <div style="flex:1">
@@ -5412,6 +5467,7 @@ window.cancelEditProveedor=()=>{C._editingProveedor=null;render();};
 window.startAddCompra=()=>{C._addingCompra=true;C._newCompra={fecha:new Date().toISOString().slice(0,10)};C._comprasSubTab='deudas';render();};
 window.cancelAddCompra=()=>{C._addingCompra=false;C._newCompra={};render();};
 window.setComprasSubTab=(tab)=>{C._comprasSubTab=tab;render();};
+window.setComprasHistFiltro=(v)=>{C._comprasHistFiltro=v;render();};
 window.saveNewProveedor=async()=>{
   const nombre=(document.getElementById('prov-nombre')?.value||C._newProveedor?.nombre||'').trim();
   if(!nombre){alert('El nombre es obligatorio');return;}
@@ -6132,6 +6188,10 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
       <button id="cobro-ok" style="width:100%;padding:11px;border-radius:8px;border:none;background:${payments.length>0&&resta===0?'#059669':'#d1d5db'};color:#fff;font-size:15px;font-weight:600;cursor:${payments.length>0&&resta===0?'pointer':'not-allowed'};font-family:inherit;margin-bottom:8px;opacity:${payments.length>0&&resta===0?1:0.6}" ${payments.length===0||resta>0?'disabled':''}>
         ${payments.length===0?'Elegí al menos un medio':resta>0?`Falta $${resta.toLocaleString()}`:'Registrar cobro'}
       </button>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin-bottom:8px;cursor:pointer">
+        <input type="checkbox" id="cobro-no-caja" style="width:16px;height:16px;cursor:pointer">
+        No hacer movimiento en caja
+      </label>
       <button id="cobro-cancel" style="width:100%;padding:8px;border-radius:8px;border:0.5px solid var(--border);background:transparent;font-size:13px;color:var(--muted);cursor:pointer;font-family:inherit">Cancelar</button>
     </div>`;
 
@@ -6225,8 +6285,10 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
         showNotif('order',`💚 Crédito generado`,`$${exceso.toLocaleString()} a favor de ${nombreDeudor}`);
       }
       // Registrar en caja — el monto completo cobrado (incluye exceso si lo hay)
+      const noCaja=overlay.querySelector('#cobro-no-caja')?.checked||false;
       const hoy=new Date().toISOString().slice(0,10);
       const descLabel=descPct>0?` (-${descPct}%)`:'';
+      if(!noCaja){
       if(payments.length===1){
         const pm=payments[0].pm;
         const concepto=`${esSaldado?'Deudor':'Pago parcial'}: ${nombreDeudor} · ${tableLabel} (${pmL[pm]||pm})${descLabel}${!esSaldado?` — quedan $${nuevoSaldo.toLocaleString()}`:''}${exceso>0?` · +$${exceso.toLocaleString()} crédito`:''}`;
@@ -6238,6 +6300,7 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
           await push(ref(db,'caja'),{tipo:'venta',concepto,monto:montoP,fecha:hoy,ts:Date.now(),desc:'',paymentMethod:p.pm,parcial:!esSaldado,descuento:descPct>0?Math.round(saldoMostrado*descPct/100):0,pct:descPct});
         }
       }
+      } // fin if(!noCaja)
       render();
     });
     overlay.querySelector('#cobro-cancel')?.addEventListener('click',()=>overlay.remove());
