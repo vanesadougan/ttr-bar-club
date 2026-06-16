@@ -757,8 +757,8 @@ function renderAdmin(){
   </div>
   <div class="admin-mobile-bar">
     <button onclick="openAdminDrawer()" style="border:none;background:none;font-size:24px;cursor:pointer;color:var(--text);padding:0;line-height:1;width:36px;height:36px;display:flex;align-items:center;justify-content:center">☰</button>
-    <span class="admin-mobile-title">${mainLabels[activeMain]||activeMain}</span>
-    ${pc>0?`<span style="background:var(--accent);color:#fff;border-radius:12px;padding:2px 8px;font-size:12px;font-weight:700">${pc}</span>`:'<span style="width:36px"></span>'}
+    <span class="admin-mobile-title">${(mainLabels[activeMain]||activeMain).replace(/<[^>]+>/g,'')}</span>
+    ${pc>0&&activeMain==='orders'?`<span style="background:var(--accent);color:#fff;border-radius:12px;padding:2px 8px;font-size:12px;font-weight:700">${pc}</span>`:'<span style="width:36px"></span>'}
   </div>`;
 
   // Barra nivel 1 (desktop)
@@ -5037,10 +5037,12 @@ function renderComprasTab(){
     const histFiltrado=filtroProvH==='todos'?historial:historial.filter(c=>(c.proveedorNombre||'Sin proveedor')===filtroProvH);
 
     if(proveedoresHistorial.length>1){
-      h+=`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;align-items:center">
-        <span style="font-size:12px;color:var(--muted);font-weight:600">Filtrar:</span>
-        <button onclick="C._comprasHistFiltro='todos';render()" style="padding:5px 12px;border-radius:16px;font-size:12px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:${filtroProvH==='todos'?'var(--brand)':'var(--card)'};color:${filtroProvH==='todos'?'#fff':'var(--muted)'}">Todos</button>
-        ${proveedoresHistorial.map(n=>`<button onclick="C._comprasHistFiltro='${n.replace(/'/g,"\\'")}';render()" style="padding:5px 12px;border-radius:16px;font-size:12px;border:0.5px solid var(--border);cursor:pointer;font-family:inherit;background:${filtroProvH===n?'var(--brand)':'var(--card)'};color:${filtroProvH===n?'#fff':'var(--muted)'}">${n}</button>`).join('')}
+      h+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <label style="font-size:12px;color:var(--muted);font-weight:600;white-space:nowrap">Proveedor:</label>
+        <select onchange="setComprasHistFiltro(this.value)" style="flex:1;padding:7px 10px;border:0.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:var(--card);color:var(--text)">
+          <option value="todos" ${filtroProvH==='todos'?'selected':''}>Todos</option>
+          ${proveedoresHistorial.map(n=>`<option value="${n.replace(/"/g,'&quot;')}" ${filtroProvH===n?'selected':''}>${n}</option>`).join('')}
+        </select>
       </div>`;
     }
 
@@ -5466,6 +5468,7 @@ window.cancelEditProveedor=()=>{C._editingProveedor=null;render();};
 window.startAddCompra=()=>{C._addingCompra=true;C._newCompra={fecha:new Date().toISOString().slice(0,10)};C._comprasSubTab='deudas';render();};
 window.cancelAddCompra=()=>{C._addingCompra=false;C._newCompra={};render();};
 window.setComprasSubTab=(tab)=>{C._comprasSubTab=tab;render();};
+window.setComprasHistFiltro=(v)=>{C._comprasHistFiltro=v;render();};
 window.saveNewProveedor=async()=>{
   const nombre=(document.getElementById('prov-nombre')?.value||C._newProveedor?.nombre||'').trim();
   if(!nombre){alert('El nombre es obligatorio');return;}
