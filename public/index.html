@@ -102,6 +102,9 @@
       .card{padding:12px}
       .admin-tabs-bar{display:none!important}
       .admin-mobile-bar{display:flex!important}
+      .caja-header-desktop{display:none!important}
+      .caja-row-desktop{display:none!important}
+      .caja-row-mobile{display:block!important}
     }
     .admin-mobile-bar{display:none;position:fixed;top:0;left:0;right:0;z-index:900;height:52px;background:var(--card);border-bottom:0.5px solid var(--border);align-items:center;justify-content:space-between;padding:0 14px;gap:10px}
     .admin-mobile-title{font-size:16px;font-weight:700;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1045,10 +1048,10 @@ function renderCajaTab(){
     }
   } else {
     // Métricas resumen
-    h+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem">`;
-    h+=`<div class="card" style="text-align:center;padding:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Ingresos</div><div style="font-size:20px;font-weight:700;color:#065f46">$${ingresos.toLocaleString('es-AR')}</div></div>`;
-    h+=`<div class="card" style="text-align:center;padding:14px"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Egresos</div><div style="font-size:20px;font-weight:700;color:#b91c1c">$${egresos.toLocaleString('es-AR')}</div></div>`;
-    h+=`<div class="card" style="text-align:center;padding:14px;border-color:${balance>=0?'#10b981':'#ef4444'}"><div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Saldo</div><div style="font-size:20px;font-weight:700;color:${balance>=0?'var(--accent)':'#b91c1c'}">$${balance.toLocaleString('es-AR')}</div></div>`;
+    h+=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:8px;margin-bottom:1.25rem">`;
+    h+=`<div class="card" style="text-align:center;padding:10px 4px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Ingresos</div><div style="font-size:16px;font-weight:700;color:#065f46;word-break:break-all">$${ingresos.toLocaleString('es-AR')}</div></div>`;
+    h+=`<div class="card" style="text-align:center;padding:10px 4px"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Egresos</div><div style="font-size:16px;font-weight:700;color:#b91c1c;word-break:break-all">$${egresos.toLocaleString('es-AR')}</div></div>`;
+    h+=`<div class="card" style="text-align:center;padding:10px 4px;border-color:${balance>=0?'#10b981':'#ef4444'}"><div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px">Saldo</div><div style="font-size:16px;font-weight:700;color:${balance>=0?'var(--accent)':'#b91c1c'};word-break:break-all">$${balance.toLocaleString('es-AR')}</div></div>`;
     h+=`</div>`;
 
     // Formulario modal si está abierto
@@ -1090,8 +1093,8 @@ function renderCajaTab(){
 
     // Tabla de movimientos
     h+=`<div class="card" style="padding:0;overflow:hidden">`;
-    // Header
-    h+=`<div style="display:grid;grid-template-columns:80px 1fr 110px 110px;background:#f8f7f4;padding:10px 16px;border-bottom:1.5px solid var(--border)">`;
+    // Header — oculto en mobile, visible en desktop
+    h+=`<div style="display:grid;grid-template-columns:70px 1fr 100px 100px;background:#f8f7f4;padding:10px 16px;border-bottom:1.5px solid var(--border)" class="caja-header-desktop">`;
     h+=`<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Hora</span>`;
     h+=`<span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Concepto</span>`;
     h+=`<span style="font-size:11px;font-weight:700;color:#b91c1c;text-transform:uppercase;letter-spacing:.06em;text-align:right">Debe (−)</span>`;
@@ -1104,28 +1107,38 @@ function renderCajaTab(){
       const hora=new Date(m.ts).toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
       const esIngreso=m.monto>=0;
       const rowBg=i%2===0?'background:#fff':'background:#fafaf9';
-      h+=`<div style="display:grid;grid-template-columns:80px 1fr 110px 110px;padding:10px 16px;border-bottom:0.5px solid var(--border);align-items:center;${rowBg}">`;
       const pmAbrev={efectivo:'E',debito:'TD',credito:'TC',transferencia:'TR',mercadopago:'MP'};
       const pmBadge=m.paymentMethod?`<span style="font-size:10px;font-weight:700;padding:1px 5px;border-radius:4px;background:#dbeafe;color:#1e40af;margin-left:4px">${pmAbrev[m.paymentMethod]||m.paymentMethod}</span>`:'';
+      // Desktop row
+      h+=`<div class="caja-row-desktop" style="display:grid;grid-template-columns:70px 1fr 100px 100px;padding:10px 16px;border-bottom:0.5px solid var(--border);align-items:center;${rowBg}">`;
       h+=`<span style="font-size:12px;color:var(--muted)">${hora}</span>`;
       h+=`<span style="font-size:13px;font-weight:500">${m.concepto}${pmBadge}${m.desc?`<span style="font-size:11px;color:var(--muted);font-weight:400"> · ${m.desc}</span>`:''}</span>`;
-      // Debe
-      h+=`<div style="text-align:right">`;
-      if(!esIngreso) h+=`<span style="font-size:13px;font-weight:600;color:#b91c1c;background:#fef2f2;padding:2px 8px;border-radius:6px">$${Math.abs(m.monto).toLocaleString('es-AR')}</span>`;
+      h+=`<div style="text-align:right">${!esIngreso?`<span style="font-size:13px;font-weight:600;color:#b91c1c;background:#fef2f2;padding:2px 8px;border-radius:6px">$${Math.abs(m.monto).toLocaleString('es-AR')}</span>`:''}</div>`;
+      h+=`<div style="text-align:right">${esIngreso?`<span style="font-size:13px;font-weight:600;color:#065f46;background:#f0fdf4;padding:2px 8px;border-radius:6px">$${m.monto.toLocaleString('es-AR')}</span>`:''}</div>`;
       h+=`</div>`;
-      // Haber
-      h+=`<div style="text-align:right">`;
-      if(esIngreso) h+=`<span style="font-size:13px;font-weight:600;color:#065f46;background:#f0fdf4;padding:2px 8px;border-radius:6px">$${m.monto.toLocaleString('es-AR')}</span>`;
+      // Mobile row
+      h+=`<div class="caja-row-mobile" style="display:none;padding:10px 14px;border-bottom:0.5px solid var(--border);${rowBg}">`;
+      h+=`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">`;
+      h+=`<div style="flex:1;min-width:0">`;
+      h+=`<div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.concepto}${pmBadge}</div>`;
+      h+=`<div style="font-size:11px;color:var(--muted);margin-top:2px">${hora}${m.desc?` · ${m.desc}`:''}</div>`;
       h+=`</div>`;
-      h+=`</div>`;
+      h+=`<span style="font-size:14px;font-weight:700;color:${esIngreso?'#065f46':'#b91c1c'};flex-shrink:0;padding:3px 10px;border-radius:6px;background:${esIngreso?'#f0fdf4':'#fef2f2'}">${esIngreso?'+':'-'}$${Math.abs(m.monto).toLocaleString('es-AR')}</span>`;
+      h+=`</div></div>`;
     });
-    // Fila totales
-    h+=`<div style="display:grid;grid-template-columns:80px 1fr 110px 110px;padding:12px 16px;background:#1a1a2e;align-items:center;border-top:2px solid var(--border)">`;
+    // Fila totales - desktop
+    h+=`<div class="caja-row-desktop" style="display:grid;grid-template-columns:70px 1fr 100px 100px;padding:12px 16px;background:#1a1a2e;align-items:center;border-top:2px solid var(--border)">`;
     h+=`<span></span>`;
     h+=`<span style="font-size:13px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.05em">Saldo del día</span>`;
-    h+=`<div style="text-align:right">${egresos<0?`<span style="font-size:14px;font-weight:700;color:#fca5a5">$${Math.abs(egresos).toLocaleString('es-AR')}</span>`:''}</div>`;
-    h+=`<div style="text-align:right"><span style="font-size:15px;font-weight:700;color:${saldo>=0?'#86efac':'#fca5a5'}">$${saldo.toLocaleString('es-AR')}</span></div>`;
+    h+=`<div style="text-align:right">${egresos>0?`<span style="font-size:14px;font-weight:700;color:#fca5a5">-$${egresos.toLocaleString('es-AR')}</span>`:''}</div>`;
+    h+=`<div style="text-align:right"><span style="font-size:15px;font-weight:700;color:${balance>=0?'#86efac':'#fca5a5'}">$${balance.toLocaleString('es-AR')}</span></div>`;
     h+=`</div>`;
+    // Fila totales - mobile
+    h+=`<div class="caja-row-mobile" style="display:none;padding:12px 14px;background:#1a1a2e;border-top:2px solid var(--border)">`;
+    h+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">`;
+    h+=`<span style="font-size:13px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.05em">Saldo del día</span>`;
+    h+=`<span style="font-size:16px;font-weight:700;color:${balance>=0?'#86efac':'#fca5a5'}">$${balance.toLocaleString('es-AR')}</span>`;
+    h+=`</div></div>`;
     h+=`</div>`;
   }
   h+=`</div>`;
