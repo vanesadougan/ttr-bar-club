@@ -1125,13 +1125,19 @@ function renderCajaTab(){
       h+=`<span style="font-size:14px;font-weight:700;color:${esIngreso?'#065f46':'#b91c1c'};flex-shrink:0;padding:3px 10px;border-radius:6px;background:${esIngreso?'#f0fdf4':'#fef2f2'}">${esIngreso?'+':'-'}$${Math.abs(m.monto).toLocaleString('es-AR')}</span>`;
       h+=`</div></div>`;
     });
-    // Fila totales
-    h+=`<div style="display:grid;grid-template-columns:80px 1fr 110px 110px;padding:12px 16px;background:#1a1a2e;align-items:center;border-top:2px solid var(--border)">`;
+    // Fila totales - desktop
+    h+=`<div class="caja-row-desktop" style="display:grid;grid-template-columns:70px 1fr 100px 100px;padding:12px 16px;background:#1a1a2e;align-items:center;border-top:2px solid var(--border)">`;
     h+=`<span></span>`;
     h+=`<span style="font-size:13px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.05em">Saldo del día</span>`;
-    h+=`<div style="text-align:right">${egresos<0?`<span style="font-size:14px;font-weight:700;color:#fca5a5">$${Math.abs(egresos).toLocaleString('es-AR')}</span>`:''}</div>`;
-    h+=`<div style="text-align:right"><span style="font-size:15px;font-weight:700;color:${saldo>=0?'#86efac':'#fca5a5'}">$${saldo.toLocaleString('es-AR')}</span></div>`;
+    h+=`<div style="text-align:right">${egresos>0?`<span style="font-size:14px;font-weight:700;color:#fca5a5">-$${egresos.toLocaleString('es-AR')}</span>`:''}</div>`;
+    h+=`<div style="text-align:right"><span style="font-size:15px;font-weight:700;color:${balance>=0?'#86efac':'#fca5a5'}">$${balance.toLocaleString('es-AR')}</span></div>`;
     h+=`</div>`;
+    // Fila totales - mobile
+    h+=`<div class="caja-row-mobile" style="display:none;padding:12px 14px;background:#1a1a2e;border-top:2px solid var(--border)">`;
+    h+=`<div style="display:flex;align-items:center;justify-content:space-between;gap:8px">`;
+    h+=`<span style="font-size:13px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.05em">Saldo del día</span>`;
+    h+=`<span style="font-size:16px;font-weight:700;color:${balance>=0?'#86efac':'#fca5a5'}">$${balance.toLocaleString('es-AR')}</span>`;
+    h+=`</div></div>`;
     h+=`</div>`;
   }
   h+=`</div>`;
