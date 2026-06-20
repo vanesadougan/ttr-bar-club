@@ -7533,8 +7533,8 @@ window.submitManualOrder=async(modo='pending')=>{
         const aplicar=confirm(`💚 ${nombre} tiene $${creditoDisp.toLocaleString()} de crédito a favor.\n¿Aplicarlo a esta deuda?\n\nDeuda: $${saldoPendiente.toLocaleString()}\nCon crédito: $${Math.max(0,saldoPendiente-creditoDisp).toLocaleString()}`);
         if(aplicar){creditoAplicado=Math.min(creditoDisp,saldoPendiente);saldoPendiente=Math.max(0,saldoPendiente-creditoAplicado);}
       }
-      document.body.removeChild(overlay);
-      await push(ref(db,'orders'),{
+      overlay.remove();
+      const newDeudorRef=await push(ref(db,'orders'),{
         ...orderBase,status:'deudor',
         deudorNombre:nombre,deudorApellido:'',
         personName:nombre,orderMode:'individual',
@@ -7543,8 +7543,10 @@ window.submitManualOrder=async(modo='pending')=>{
       if(creditoAplicado>0&&creditoCli){
         await update(ref(db,`clientes/${creditoCli.key}`),{credito:Math.max(0,creditoDisp-creditoAplicado)});
       }
-      await descontarStockOrders([newOrderRef?.key].filter(Boolean));
-      C.adminTab='orders';clearManualOrder();
+      await descontarStockOrders([newDeudorRef?.key].filter(Boolean));
+      C.adminTab='orders';
+      C.manualOrder=null;C.manualOrderSearch='';C.manualOrderPicker=null;
+      render();
     };
   }
 };
