@@ -5632,7 +5632,7 @@ function renderDeudoresTab(){
             h+=`<span style="font-size:12px;font-weight:600;color:#1e40af">$${Number(p.monto||0).toLocaleString()}</span>`;
             h+=`</div>`;
           });
-          h+=`<div style="display:flex;justify-content:space-between;margin-top:4px"><span style="font-size:11px;color:#6b7280">Saldo pendiente</span><span style="font-size:13px;font-weight:700;color:#dc2626">$${saldoMostrar.toLocaleString()}</span></div>`;
+          h+=`<div style="display:flex;justify-content:space-between;margin-top:4px"><span style="font-size:11px;color:#6b7280">Pagos totales registrados</span><span style="font-size:13px;font-weight:700;color:#059669">$${pagadoParcial.toLocaleString()}</span></div>`;
           h+=`</div>`;
         }
 
@@ -7544,7 +7544,7 @@ window.submitManualOrder=async(modo='pending')=>{
         await update(ref(db,`clientes/${creditoCli.key}`),{credito:Math.max(0,creditoDisp-creditoAplicado)});
       }
       await descontarStockOrders([newOrderRef?.key].filter(Boolean));
-      C.adminTab='deudores';clearManualOrder();
+      C.adminTab='orders';clearManualOrder();
     };
   }
 };
