@@ -5546,7 +5546,6 @@ function renderDeudoresTab(){
     Object.values(grupos).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es')).forEach(g=>{
       const keys=g.orders.map(o=>o._key);
       const totalOriginal=g.orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
-      const saldoMostrar=g.orders.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
       // Sumar _historialPagos de todos los orders — es la fuente más confiable
       const pagadoParcial=(()=>{
         let suma=0;
@@ -5564,6 +5563,11 @@ function renderDeudoresTab(){
         });
         return suma;
       })();
+      // saldoMostrar = total original - lo que ya pagó (según historial)
+      // Si hay saldoPendiente en Firebase y no hay historial, usar saldoPendiente
+      const saldoMostrar=pagadoParcial>0
+        ?Math.max(0,totalOriginal-pagadoParcial)
+        :g.orders.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
       const _dIdx=window._deudorKeys.push(keys)-1;
       if(!window._deudorSaldos)window._deudorSaldos=[];
       window._deudorSaldos[_dIdx]=saldoMostrar;
