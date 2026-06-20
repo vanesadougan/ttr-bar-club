@@ -7431,19 +7431,10 @@ window.submitManualOrder=async(modo='pending')=>{
     overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
     overlay.innerHTML=`<div style="background:#fff;border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
       <div style="font-size:16px;font-weight:600;margin-bottom:4px">💳 Registrar deudor</div>
-      <div style="font-size:13px;color:#6b7280;margin-bottom:14px">Total ítems: <strong style="color:#dc2626">$${total.toLocaleString()}</strong></div>
+      <div style="font-size:13px;color:#6b7280;margin-bottom:14px">Total: <strong style="color:#dc2626">$${total.toLocaleString()}</strong></div>
       <div id="mn-credito-info" style="display:none;padding:8px 12px;background:#f0fdf4;border-radius:8px;margin-bottom:10px;font-size:12px;color:#065f46;font-weight:600;border:0.5px solid #bbf7d0">💚 Tiene crédito a favor</div>
       <div class="form-group" style="margin-bottom:12px;position:relative">
         <label>Nombre del deudor <span style="color:var(--danger)">*</span></label>
-        <input id="mn-deudor-nombre" placeholder="Nombre" value="${nombreExistente}"
-          style="width:100%;padding:10px 12px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:16px;font-family:inherit;box-sizing:border-box">
-        <div id="mn-deudor-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:#fff;border:0.5px solid #e5e7eb;border-radius:8px;z-index:10;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
-      </div>
-      <div class="form-group" style="margin-bottom:12px">
-        <label>Monto a deber <span style="font-size:11px;color:#9ca3af;font-weight:400">(podés editarlo)</span></label>
-        <input id="mn-deudor-monto" type="number" value="${total}" min="0"
-          style="width:100%;padding:10px 12px;border:1.5px solid var(--brand);border-radius:8px;font-size:18px;font-weight:700;font-family:inherit;box-sizing:border-box;color:#dc2626;text-align:right">
-      </div>
       <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#f8f7f4;border-radius:10px;cursor:pointer;margin-bottom:4px">
         <input type="checkbox" id="mn-deudor-disc" style="width:16px;height:16px;accent-color:#dc2626">
         <span style="font-size:13px;font-weight:600;flex:1">Descuento</span>
@@ -7492,7 +7483,6 @@ window.submitManualOrder=async(modo='pending')=>{
     const mnDiscCheck=overlay.querySelector('#mn-deudor-disc');
     const mnDiscDetail=overlay.querySelector('#mn-deudor-disc-detail');
     const mnPctInp=overlay.querySelector('#mn-deudor-pct');
-    const mnMontoInp=overlay.querySelector('#mn-deudor-monto');
     const updateDiscDetail=()=>{
       const active=mnDiscCheck.checked;
       const montoBase=Math.max(0,Number(mnMontoInp?.value)||total);
@@ -7504,7 +7494,6 @@ window.submitManualOrder=async(modo='pending')=>{
         overlay.querySelector('#mn-deudor-total').textContent=`$${(montoBase-Math.round(montoBase*(p/100))).toLocaleString()}`;
       }
     };
-    mnMontoInp?.addEventListener('input',updateDiscDetail);
     mnDiscCheck.addEventListener('change',updateDiscDetail);
     mnPctInp.addEventListener('input',updateDiscDetail);
     setTimeout(()=>{if(!nombreExistente)mnInp.focus();},50);
@@ -7512,7 +7501,7 @@ window.submitManualOrder=async(modo='pending')=>{
       const nombre=(mnInp.value||'').trim();
       if(!nombre){mnInp.focus();return;}
       // Tomar el monto editable en vez del total de ítems
-      const montoBase=Math.max(0,Number(overlay.querySelector('#mn-deudor-monto')?.value)||total);
+      const montoBase=total;
       const conDesc=mnDiscCheck.checked;
       const pct=conDesc?Math.min(100,Math.max(1,Number(mnPctInp.value)||10)):0;
       const descuento=conDesc?Math.round(montoBase*(pct/100)):0;
