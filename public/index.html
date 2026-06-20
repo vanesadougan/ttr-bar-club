@@ -5547,9 +5547,27 @@ function renderDeudoresTab(){
     Object.values(grupos).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es')).forEach(g=>{
       const keys=g.orders.map(o=>o._key);
       const totalOriginal=g.orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
-      const saldoMostrar=g.orders.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
-      // _yaPago es el campo canónico; fallback a diferencia si no existe
-      const pagadoParcial=g.orders.reduce((s,o)=>Math.max(s,o._yaPago||0),0)||Math.max(0,totalOriginal-saldoMostrar);
+      // Sumar _historialPagos de todos los orders — es la fuente más confiable
+      const pagadoParcial=(()=>{
+        let suma=0;
+        const seen=new Set();
+        g.orders.forEach(o=>{
+          const hp=o._historialPagos;
+          if(!hp)return;
+          const pagos=Array.isArray(hp)?hp:Object.values(hp);
+          pagos.forEach(p=>{
+            const k=String(p.ts||p.fecha||Math.random());
+            if(seen.has(k))return;
+            seen.add(k);
+            suma+=Number(p.monto||0);
+          });
+        });
+        return suma;
+      })();
+      // saldoMostrar: usar saldoPendiente de Firebase (ya tiene descuentos aplicados)
+      // Solo como fallback usar totalOriginal - pagado
+      const saldoFirebase=g.orders.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
+      const saldoMostrar=saldoFirebase;
       const _dIdx=window._deudorKeys.push(keys)-1;
       if(!window._deudorSaldos)window._deudorSaldos=[];
       window._deudorSaldos[_dIdx]=saldoMostrar;
@@ -5614,7 +5632,7 @@ function renderDeudoresTab(){
             h+=`<span style="font-size:12px;font-weight:600;color:#1e40af">$${Number(p.monto||0).toLocaleString()}</span>`;
             h+=`</div>`;
           });
-          h+=`<div style="display:flex;justify-content:space-between;margin-top:4px"><span style="font-size:11px;color:#6b7280">Saldo pendiente</span><span style="font-size:13px;font-weight:700;color:#dc2626">$${saldoMostrar.toLocaleString()}</span></div>`;
+          h+=`<div style="display:flex;justify-content:space-between;margin-top:4px"><span style="font-size:11px;color:#6b7280">Pagos totales registrados</span><span style="font-size:13px;font-weight:700;color:#059669">$${pagadoParcial.toLocaleString()}</span></div>`;
           h+=`</div>`;
         }
 
@@ -7428,7 +7446,7 @@ window.submitManualOrder=async(modo='pending')=>{
         <span style="font-size:13px;font-weight:600">%</span>
       </label>
       <div id="mn-deudor-disc-detail" style="display:none;justify-content:space-between;align-items:center;padding:8px 14px;background:#f0fdf4;border-radius:0 0 10px 10px;margin-bottom:12px;border-top:0.5px solid #bbf7d0">
-        <div><div style="font-size:11px;color:#9ca3af">Total original</div><div style="font-size:13px;color:#6b7280;text-decoration:line-through">$${total.toLocaleString()}</div></div>
+        <div><div style="font-size:11px;color:#9ca3af">Total original</div><div style="font-size:13px;color:#6b7280;text-decoration:line-through" id="mn-deudor-orig">$${total.toLocaleString()}</div></div>
         <div id="mn-deudor-pct-label" style="font-size:12px;color:#dc2626;font-weight:600">-10%</div>
         <div><div style="font-size:11px;color:#9ca3af;text-align:right">Deuda a registrar</div><div id="mn-deudor-total" style="font-size:18px;font-weight:700;color:#059669">$${(total-Math.round(total*0.1)).toLocaleString()}</div></div>
       </div>
@@ -7471,11 +7489,13 @@ window.submitManualOrder=async(modo='pending')=>{
     const mnPctInp=overlay.querySelector('#mn-deudor-pct');
     const updateDiscDetail=()=>{
       const active=mnDiscCheck.checked;
+      const montoBase=Math.max(0,Number(mnMontoInp?.value)||total);
       const p=Math.min(100,Math.max(1,Number(mnPctInp.value)||10));
       mnDiscDetail.style.display=active?'flex':'none';
       if(active){
         overlay.querySelector('#mn-deudor-pct-label').textContent=`-${p}%`;
-        overlay.querySelector('#mn-deudor-total').textContent=`$${(total-Math.round(total*(p/100))).toLocaleString()}`;
+        overlay.querySelector('#mn-deudor-orig').textContent=`$${montoBase.toLocaleString()}`;
+        overlay.querySelector('#mn-deudor-total').textContent=`$${(montoBase-Math.round(montoBase*(p/100))).toLocaleString()}`;
       }
     };
     mnDiscCheck.addEventListener('change',updateDiscDetail);
@@ -7484,10 +7504,12 @@ window.submitManualOrder=async(modo='pending')=>{
     overlay.querySelector('#mn-deudor-ok').onclick=async()=>{
       const nombre=(mnInp.value||'').trim();
       if(!nombre){mnInp.focus();return;}
+      // Tomar el monto editable en vez del total de ítems
+      const montoBase=total;
       const conDesc=mnDiscCheck.checked;
       const pct=conDesc?Math.min(100,Math.max(1,Number(mnPctInp.value)||10)):0;
-      const descuento=conDesc?Math.round(total*(pct/100)):0;
-      let saldoPendiente=total-descuento;
+      const descuento=conDesc?Math.round(montoBase*(pct/100)):0;
+      let saldoPendiente=montoBase-descuento;
       // Aplicar crédito
       const creditoCli=findClienteByName(nombre);
       const creditoDisp=creditoCli?creditoCli.credito||0:0;
@@ -7504,8 +7526,8 @@ window.submitManualOrder=async(modo='pending')=>{
         const aplicar=confirm(`💚 ${nombre} tiene $${creditoDisp.toLocaleString()} de crédito a favor.\n¿Aplicarlo a esta deuda?\n\nDeuda: $${saldoPendiente.toLocaleString()}\nCon crédito: $${Math.max(0,saldoPendiente-creditoDisp).toLocaleString()}`);
         if(aplicar){creditoAplicado=Math.min(creditoDisp,saldoPendiente);saldoPendiente=Math.max(0,saldoPendiente-creditoAplicado);}
       }
-      document.body.removeChild(overlay);
-      await push(ref(db,'orders'),{
+      overlay.remove();
+      const newDeudorRef=await push(ref(db,'orders'),{
         ...orderBase,status:'deudor',
         deudorNombre:nombre,deudorApellido:'',
         personName:nombre,orderMode:'individual',
@@ -7514,8 +7536,10 @@ window.submitManualOrder=async(modo='pending')=>{
       if(creditoAplicado>0&&creditoCli){
         await update(ref(db,`clientes/${creditoCli.key}`),{credito:Math.max(0,creditoDisp-creditoAplicado)});
       }
-      await descontarStockOrders([newOrderRef?.key].filter(Boolean));
-      C.adminTab='deudores';clearManualOrder();
+      await descontarStockOrders([newDeudorRef?.key].filter(Boolean));
+      C.adminTab='orders';
+      C.manualOrder=null;C.manualOrderSearch='';C.manualOrderPicker=null;
+      render();
     };
   }
 };
