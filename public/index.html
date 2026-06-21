@@ -432,6 +432,7 @@ onValue(ref(db,'kioskItems'), snap=>{ DB.kioskItems = snap.val()||{}; _markLoade
 onValue(ref(db,'clientes'), snap=>{ DB.clientes = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'proveedores'), snap=>{ DB.proveedores = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'compras'), snap=>{ DB.compras = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'deudores'), snap=>{ DB.deudoresDB = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'estadisticasMensuales'), snap=>{ DB.estadisticasMensuales = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'cajaHistorial'), snap=>{ DB.cajaHistorial = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'config'), snap=>{ DB.config = snap.val()||{}; if(!firstLoad) render(); });
@@ -5521,9 +5522,14 @@ window.deleteProveedor=async(key)=>{
 function renderDeudoresTab(){
   window._deudorKeys=[];
   window._deudorSaldos=[];
-  const deudores=Object.entries(DB.orders)
-    .map(([k,v])=>({...v,_key:k}))
-    .filter(o=>o.status==='deudor')
+  // Combinar orders de DB.orders + DB.deudoresDB (nodo separado para deudores archivados)
+  const fromOrders=Object.entries(DB.orders)
+    .map(([k,v])=>({...v,_key:k,_src:'orders'}))
+    .filter(o=>o.status==='deudor');
+  const fromDeudoresDB=Object.entries(DB.deudoresDB||{})
+    .map(([k,v])=>({...v,_key:k,_src:'deudores'}))
+    .filter(o=>o.status==='deudor'&&!DB.orders[k]); // no duplicar si ya está en orders
+  const deudores=[...fromOrders,...fromDeudoresDB]
     .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 
   const totalDeuda=deudores.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
@@ -6174,7 +6180,11 @@ window.marcarDeudor=async key=>{
     cleanup();
     // El pedido pasa a status 'deudor' con nombre/apellido guardados en el mismo registro
     const saldoInicial=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-    await update(ref(db,`orders/${key}`),{status:'deudor',deudorNombre:nombre,deudorApellido:apellido,deudorRegistradoAt:Date.now(),saldoPendiente:saldoInicial});
+    const deudorData={status:'deudor',deudorNombre:nombre,deudorApellido:apellido,deudorRegistradoAt:Date.now(),saldoPendiente:saldoInicial};
+    await update(ref(db,`orders/${key}`),deudorData);
+    // También guardar en /deudores
+    const existingOrder=DB.orders[key];
+    if(existingOrder)await set(ref(db,`deudores/${key}`),{...existingOrder,...deudorData});
     if(DB.orders[key])DB.orders[key].saldoPendiente=saldoInicial;
     C.adminTab='deudores';render();
   };
@@ -6303,6 +6313,8 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
       if(esSaldado){
         for(const k of keys){
           await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pmPrincipal,fromDeuda:true,cobradoAt:Date.now(),saldoPendiente:0});
+          // Si estaba en /deudores también actualizarlo
+          if(DB.deudoresDB?.[k])await update(ref(db,`deudores/${k}`),{status:'cobrado',paymentMethod:pmPrincipal,cobradoAt:Date.now(),saldoPendiente:0});
           if(DB.orders[k])DB.orders[k].saldoPendiente=0;
         }
       } else {
@@ -6322,6 +6334,8 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
             primerOrder=false;
           }
           await update(ref(db,`orders/${k}`),updateData);
+          // Si estaba en /deudores también actualizarlo
+          if(DB.deudoresDB?.[k])await update(ref(db,`deudores/${k}`),updateData);
           if(DB.orders[k])DB.orders[k].saldoPendiente=nuevoSaldoK;
           restante-=abono;
         }
@@ -7544,6 +7558,15 @@ window.submitManualOrder=async(modo='pending')=>{
         personName:nombre,orderMode:'individual',
         deudorRegistradoAt:Date.now(),saldoPendiente,descuento,pct
       });
+      // También guardar en /deudores para que no se archive
+      if(newDeudorRef?.key){
+        await set(ref(db,`deudores/${newDeudorRef.key}`),{
+          ...orderBase,status:'deudor',
+          deudorNombre:nombre,deudorApellido:'',
+          personName:nombre,orderMode:'individual',
+          deudorRegistradoAt:Date.now(),saldoPendiente,descuento,pct
+        });
+      }
       if(creditoAplicado>0&&creditoCli){
         await update(ref(db,`clientes/${creditoCli.key}`),{credito:Math.max(0,creditoDisp-creditoAplicado)});
       }
