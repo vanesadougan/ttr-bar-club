@@ -5546,7 +5546,11 @@ function renderDeudoresTab(){
 
     Object.values(grupos).sort((a,b)=>(a.nombre||'').localeCompare(b.nombre||'','es')).forEach(g=>{
       const keys=g.orders.map(o=>o._key);
-      const totalOriginal=g.orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
+      // totalOriginal = suma de items bruto (sin descuento)
+      const totalBruto=g.orders.reduce((s,o)=>(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,s),0);
+      // totalConDesc = total con descuento aplicado (si hay descuento en el order)
+      const totalDescuento=g.orders.reduce((s,o)=>s+(o.descuento||0),0);
+      const totalOriginal=Math.max(0,totalBruto-totalDescuento);
       // Sumar _historialPagos de todos los orders — es la fuente más confiable
       const pagadoParcial=(()=>{
         let suma=0;
@@ -5564,10 +5568,12 @@ function renderDeudoresTab(){
         });
         return suma;
       })();
-      // saldoMostrar: usar saldoPendiente de Firebase (ya tiene descuentos aplicados)
-      // Solo como fallback usar totalOriginal - pagado
-      const saldoFirebase=g.orders.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
-      const saldoMostrar=saldoFirebase;
+      // saldoMostrar: si hay pagos registrados, calcular desde saldoPendiente actual de Firebase
+      // saldoPendiente ya refleja descuentos y pagos anteriores
+      const saldoFirebase=g.orders.reduce((s,o)=>s+(o.saldoPendiente!=null?Number(o.saldoPendiente):(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
+      // "Ya pagó" es la suma del historial — fuente de verdad
+      // Debe = totalOriginal - pagadoParcial (si hay historial) o saldoFirebase (si no hay historial)
+      const saldoMostrar=pagadoParcial>0?Math.max(0,totalOriginal-pagadoParcial):saldoFirebase;
       const _dIdx=window._deudorKeys.push(keys)-1;
       if(!window._deudorSaldos)window._deudorSaldos=[];
       window._deudorSaldos[_dIdx]=saldoMostrar;
@@ -9869,6 +9875,8 @@ async function archivarPedidosViejos(){
   const limite=Date.now()-DIAS*24*60*60*1000;
   const viejos=Object.entries(DB.orders).filter(([,o])=>{
     const ts=o.createdAt||0;
+    // Nunca archivar deudores pendientes
+    if(o.status==='deudor')return false;
     return ts>0&&ts<limite;
   });
   if(viejos.length===0)return;
