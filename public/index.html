@@ -9871,6 +9871,7 @@ async function limpiarAlertsViejas(){
 // ── ARCHIVADO AUTOMÁTICO DE PEDIDOS ──────────────
 // Mueve pedidos con más de 60 días a /archivo/YYYY-MM y los elimina de /orders
 async function archivarPedidosViejos(){
+  // v2-fix-deudores
   const DIAS=60;
   const limite=Date.now()-DIAS*24*60*60*1000;
   const viejos=Object.entries(DB.orders).filter(([,o])=>{
