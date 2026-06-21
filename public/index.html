@@ -5528,7 +5528,7 @@ function renderDeudoresTab(){
     .filter(o=>o.status==='deudor');
   const fromDeudoresDB=Object.entries(DB.deudoresDB||{})
     .map(([k,v])=>({...v,_key:k,_src:'deudores'}))
-    .filter(o=>o.status==='deudor'&&!DB.orders[k]); // no duplicar si ya está en orders
+    .filter(o=>o.status==='deudor'&&!DB.orders[o._key]); // no duplicar si ya está en orders
   const deudores=[...fromOrders,...fromDeudoresDB]
     .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 
