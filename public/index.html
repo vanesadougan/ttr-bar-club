@@ -9877,7 +9877,7 @@ async function archivarPedidosViejos(){
   const viejos=Object.entries(DB.orders).filter(([,o])=>{
     const ts=o.createdAt||0;
     // Nunca archivar deudores pendientes
-    if(o.status==='deudor')return false;
+    if(o.status==='deudor'){console.log('⛔ Saltando deudor:',o.deudorNombre||o.personName);return false;}
     return ts>0&&ts<limite;
   });
   if(viejos.length===0)return;
