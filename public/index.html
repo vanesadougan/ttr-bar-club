@@ -465,7 +465,12 @@ onValue(ref(db,'orders'), snap=>{
     });
   }
   if(firstLoad) { /* ya lo maneja _markLoaded */ }
-  if(C.mode==='admin') archivarPedidosViejos();
+  if(C.mode==='admin'){
+    if(!window._lastArchivar||Date.now()-window._lastArchivar>30000){
+      window._lastArchivar=Date.now();
+      archivarPedidosViejos();
+    }
+  }
   if(C.mode==='admin') limpiarAlertsViejas();
   if(isCocinaRoute){ render(); return; }
   if(C.mode==='admin' && C.adminTab==='orders' && !wasEmpty && Object.keys(DB.orders).length > prevKeys.size){
