@@ -6102,8 +6102,7 @@ window.agregarDeudaVieja=()=>{
     const pct=conDesc?Math.min(100,Math.max(1,Number(dvPct.value)||10)):0;
     const descuento=conDesc?Math.round(monto*(pct/100)):0;
     const saldoPendiente=monto-descuento;
-    const item={name:desc||'Deuda vieja',qty:1,price:monto,finalPrice:monto,excluded:[],selectedType:null};
-    await push(ref(db,'orders'),{
+    const deudaViejaData={
       tableId:'sinmesa',
       items:[item],
       status:'deudor',
@@ -6117,7 +6116,9 @@ window.agregarDeudaVieja=()=>{
       descuento,pct,
       manualEntry:true,
       _deudaVieja:true,
-    });
+    };
+    const dvRef=await push(ref(db,'orders'),deudaViejaData);
+    if(dvRef?.key)await set(ref(db,`deudores/${dvRef.key}`),deudaViejaData);
     overlay.remove();
     C.adminTab='deudores';
     render();
@@ -7767,7 +7768,7 @@ window.submitKioskoOrder=async(modo)=>{
     const saldoInicial=ko.items.reduce((s,i)=>s+i.price*i.qty,0);
     const nombre=ko.personName.split(' ')[0]||ko.personName;
     const apellido=ko.personName.split(' ').slice(1).join(' ')||'';
-    await push(ref(db,'orders'),{
+    const kioskoDeudorData={
       tableId:'kiosko',items,status:'deudor',
       time:nowStr(),createdAt:Date.now(),
       orderMode:'individual',personName:ko.personName,
@@ -7775,7 +7776,9 @@ window.submitKioskoOrder=async(modo)=>{
       deudorRegistradoAt:Date.now(),
       saldoPendiente:saldoInicial,
       isKiosko:true
-    });
+    };
+    const kdRef=await push(ref(db,'orders'),kioskoDeudorData);
+    if(kdRef?.key)await set(ref(db,`deudores/${kdRef.key}`),kioskoDeudorData);
     C.kioskoOrder=null;C.kioskoSearch='';
     showNotif('order','Deuda Kiosko registrada',ko.personName);
     C.adminTab='deudores';
@@ -8109,12 +8112,16 @@ window.adminGroupDeudor=async(keys,saldoOverride)=>{
       const oSaldoBruto=Math.max(0,oTotal-oDesc);
       const proporcion=totalBase>0?oTotal/totalBase:1;
       const oSaldo=Math.max(0,Math.round(saldoPendiente*proporcion));
-      await update(ref(db,`orders/${k}`),{
+      const deudorUpdate={
         status:'deudor',deudorNombre:nombre,deudorApellido:'',
         deudorRegistradoAt:Date.now(),saldoPendiente:oSaldo,
         descuento:oDesc,pct,
         personName:nombre,orderMode:'individual'
-      });
+      };
+      await update(ref(db,`orders/${k}`),deudorUpdate);
+      // También guardar en /deudores
+      const oFull=DB.orders[k];
+      if(oFull)await set(ref(db,`deudores/${k}`),{...oFull,...deudorUpdate});
     }
     // Actualizar crédito del cliente
     if(creditoAplicado>0&&creditoCli){
