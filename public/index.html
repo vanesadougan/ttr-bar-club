@@ -5993,6 +5993,7 @@ window.eliminarDeuda=async(keys)=>{
           overlay.remove();
           for(const key of keys){
             await remove(ref(db,`orders/${key}`));
+            await remove(ref(db,`deudores/${key}`));
           }
           render();
         } else {
