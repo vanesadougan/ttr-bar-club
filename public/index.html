@@ -5655,6 +5655,7 @@ function renderDeudoresTab(){
         // Botones
         h+=`<div style="padding:10px 16px;border-top:0.5px solid var(--border);background:#fafafa;display:flex;gap:8px">`;
         h+=`<button onclick="cobrarDeuda(window._deudorKeys[${_dIdx}],window._deudorSaldos[${_dIdx}])" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #d97706;background:#fffbeb;color:#92400e;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">$ Pago Parcial/Total</button>`;
+        h+=`<button onclick="agregarDeudaViejaADeudor('${g.nombre.replace(/'/g,"\\'")}')" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #6366f1;background:#eef2ff;color:#3730a3;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">+ Deuda</button>`;
         h+=`<button onclick="imprimirDeuda(${_dIdx})" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:18px;cursor:pointer;font-family:inherit" title="Imprimir">🖨️</button>`;
         h+=`<button onclick="eliminarDeuda(window._deudorKeys[${_dIdx}])" style="padding:10px 14px;border-radius:8px;border:0.5px solid #dc2626;background:#fef2f2;color:#dc2626;font-size:18px;cursor:pointer;font-family:inherit" title="Eliminar">🗑️</button>`;
         h+=`</div>`;
@@ -6006,6 +6007,14 @@ window.eliminarDeuda=async(keys)=>{
   renderPin();
 };
 
+window.agregarDeudaViejaADeudor=(nombre)=>{
+  window.agregarDeudaVieja();
+  // Pre-fill nombre after modal opens
+  setTimeout(()=>{
+    const inp=document.getElementById('dv-nombre');
+    if(inp){inp.value=nombre;inp.dispatchEvent(new Event('input'));}
+  },50);
+};
 window.agregarDeudaVieja=()=>{
   const clientesList=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
   const overlay=document.createElement('div');
