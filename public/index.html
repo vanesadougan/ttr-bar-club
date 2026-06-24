@@ -6008,11 +6008,20 @@ window.eliminarDeuda=async(keys)=>{
 };
 
 window.agregarDeudaViejaADeudor=(nombre)=>{
+  window._deudaViejaFijo=nombre;
   window.agregarDeudaVieja();
-  // Pre-fill nombre after modal opens
   setTimeout(()=>{
     const inp=document.getElementById('dv-nombre');
-    if(inp){inp.value=nombre;inp.dispatchEvent(new Event('input'));}
+    if(inp){
+      inp.value=nombre;
+      inp.readOnly=true;
+      inp.style.background='#f3f4f6';
+      inp.style.color='#6b7280';
+      inp.style.cursor='default';
+      // Ocultar dropdown
+      const dd=document.getElementById('dv-nombre-dd');
+      if(dd)dd.style.display='none';
+    }
   },50);
 };
 window.agregarDeudaVieja=()=>{
