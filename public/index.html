@@ -5656,6 +5656,7 @@ function renderDeudoresTab(){
         // Botones
         h+=`<div style="padding:10px 16px;border-top:0.5px solid var(--border);background:#fafafa;display:flex;gap:8px">`;
         h+=`<button onclick="cobrarDeuda(window._deudorKeys[${_dIdx}],window._deudorSaldos[${_dIdx}])" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #d97706;background:#fffbeb;color:#92400e;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">$ Pago Parcial/Total</button>`;
+        h+=`<button onclick="agregarDeudaViejaADeudor('${g.nombre.replace(/'/g,"\\'")}')" style="flex:1;padding:10px;border-radius:8px;border:0.5px solid #6366f1;background:#eef2ff;color:#3730a3;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">+ Deuda</button>`;
         h+=`<button onclick="imprimirDeuda(${_dIdx})" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:18px;cursor:pointer;font-family:inherit" title="Imprimir">🖨️</button>`;
         h+=`<button onclick="eliminarDeuda(window._deudorKeys[${_dIdx}])" style="padding:10px 14px;border-radius:8px;border:0.5px solid #dc2626;background:#fef2f2;color:#dc2626;font-size:18px;cursor:pointer;font-family:inherit" title="Eliminar">🗑️</button>`;
         h+=`</div>`;
@@ -6007,17 +6008,23 @@ window.eliminarDeuda=async(keys)=>{
   renderPin();
 };
 
-window.agregarDeudaVieja=()=>{
+window.agregarDeudaViejaADeudor=(nombre)=>window.agregarDeudaVieja(nombre);
+
+window.agregarDeudaVieja=(nombreFijo='')=>{
   const clientesList=Object.values(DB.clientes||{}).map(c=>c.nombre).filter(Boolean).sort();
   const overlay=document.createElement('div');
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
   overlay.innerHTML=`<div style="background:var(--card);border-radius:16px;padding:1.5rem;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="font-size:16px;font-weight:600;margin-bottom:14px">💳 Agregar deuda vieja</div>
     <div class="form-group" style="margin-bottom:12px;position:relative">
-      <label>Nombre del deudor <span style="color:var(--danger)">*</span></label>
-      <input id="dv-nombre" placeholder="Nombre" autocomplete="off"
-        style="width:100%;padding:10px 12px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:16px;font-family:inherit;box-sizing:border-box">
-      <div id="dv-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:0.5px solid #e5e7eb;border-radius:8px;z-index:10;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>
+      <label>Nombre del deudor</label>
+      ${nombreFijo
+        ? `<div style="padding:10px 12px;background:#f3f4f6;border-radius:8px;font-size:16px;font-weight:600;color:var(--text)">${nombreFijo}</div>
+           <input id="dv-nombre" type="hidden" value="${nombreFijo}">`
+        : `<input id="dv-nombre" placeholder="Nombre" autocomplete="off"
+             style="width:100%;padding:10px 12px;border:0.5px solid #e5e7eb;border-radius:8px;font-size:16px;font-family:inherit;box-sizing:border-box">
+           <div id="dv-dd" style="display:none;position:absolute;left:0;right:0;top:100%;background:var(--card);border:0.5px solid #e5e7eb;border-radius:8px;z-index:10;max-height:160px;overflow-y:auto;box-shadow:0 4px 12px rgba(0,0,0,.1)"></div>`
+      }
     </div>
     <div class="form-group" style="margin-bottom:12px">
       <label>Monto de la deuda ($) <span style="color:var(--danger)">*</span></label>
@@ -6051,21 +6058,23 @@ window.agregarDeudaVieja=()=>{
   document.body.appendChild(overlay);
   overlay.addEventListener('click',e=>{if(e.target===overlay)overlay.remove();});
   overlay.querySelector('#dv-cancel').onclick=()=>overlay.remove();
-  // Autocomplete
+  // Autocomplete — solo si el nombre no es fijo
   const inp=overlay.querySelector('#dv-nombre');
   const dd=overlay.querySelector('#dv-dd');
-  const showDD=list=>{
-    dd.innerHTML=list.map(n=>`<div data-name="${n}" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6">${n}</div>`).join('');
-    dd.style.display=list.length?'block':'none';
-    dd.querySelectorAll('[data-name]').forEach(d=>{
-      d.onmouseover=()=>d.style.background='#f9fafb';
-      d.onmouseout=()=>d.style.background='';
-      d.onclick=()=>{inp.value=d.dataset.name;dd.style.display='none';};
-    });
-  };
-  inp.addEventListener('input',()=>{const q=inp.value.toLowerCase();showDD(q?clientesList.filter(n=>n.toLowerCase().includes(q)):clientesList);});
-  inp.addEventListener('focus',()=>{if(!inp.value)showDD(clientesList);});
-  setTimeout(()=>inp.focus(),50);
+  if(!nombreFijo && dd){
+    const showDD=list=>{
+      dd.innerHTML=list.map(n=>`<div data-name="${n}" style="padding:10px 14px;cursor:pointer;font-size:14px;border-bottom:0.5px solid #f3f4f6">${n}</div>`).join('');
+      dd.style.display=list.length?'block':'none';
+      dd.querySelectorAll('[data-name]').forEach(d=>{
+        d.onmouseover=()=>d.style.background='#f9fafb';
+        d.onmouseout=()=>d.style.background='';
+        d.onclick=()=>{inp.value=d.dataset.name;dd.style.display='none';};
+      });
+    };
+    inp.addEventListener('input',()=>{const q=inp.value.toLowerCase();showDD(q?clientesList.filter(n=>n.toLowerCase().includes(q)):clientesList);});
+    inp.addEventListener('focus',()=>{if(!inp.value)showDD(clientesList);});
+    setTimeout(()=>inp.focus(),50);
+  }
 
   // Discount logic
   const dvCheck=overlay.querySelector('#dv-disc-check');
@@ -9914,7 +9923,7 @@ async function archivarPedidosViejos(){
   const viejos=Object.entries(DB.orders).filter(([,o])=>{
     const ts=o.createdAt||0;
     // Nunca archivar deudores pendientes
-    if(o.status==='deudor'){console.log('⛔ Saltando deudor:',o.deudorNombre||o.personName);return false;}
+    if(o.status==='deudor')return false;
     return ts>0&&ts<limite;
   });
   if(viejos.length===0)return;
