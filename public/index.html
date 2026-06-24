@@ -431,6 +431,7 @@ onValue(ref(db,'kioskItems'), snap=>{ DB.kioskItems = snap.val()||{}; _markLoade
 onValue(ref(db,'clientes'), snap=>{ DB.clientes = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'proveedores'), snap=>{ DB.proveedores = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'compras'), snap=>{ DB.compras = snap.val()||{}; if(!firstLoad) render(); });
+onValue(ref(db,'deudores'), snap=>{ DB.deudoresDB = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'estadisticasMensuales'), snap=>{ DB.estadisticasMensuales = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'cajaHistorial'), snap=>{ DB.cajaHistorial = snap.val()||{}; if(!firstLoad) render(); });
 onValue(ref(db,'config'), snap=>{ DB.config = snap.val()||{}; if(!firstLoad) render(); });
@@ -464,7 +465,12 @@ onValue(ref(db,'orders'), snap=>{
     });
   }
   if(firstLoad) { /* ya lo maneja _markLoaded */ }
-  if(C.mode==='admin') archivarPedidosViejos();
+  if(C.mode==='admin'){
+    if(!window._lastArchivar||Date.now()-window._lastArchivar>30000){
+      window._lastArchivar=Date.now();
+      archivarPedidosViejos();
+    }
+  }
   if(C.mode==='admin') limpiarAlertsViejas();
   if(isCocinaRoute){ render(); return; }
   if(C.mode==='admin' && C.adminTab==='orders' && !wasEmpty && Object.keys(DB.orders).length > prevKeys.size){
@@ -5515,9 +5521,14 @@ window.deleteProveedor=async(key)=>{
 function renderDeudoresTab(){
   window._deudorKeys=[];
   window._deudorSaldos=[];
-  const deudores=Object.entries(DB.orders)
-    .map(([k,v])=>({...v,_key:k}))
-    .filter(o=>o.status==='deudor')
+  // Combinar orders de DB.orders + DB.deudoresDB (nodo separado para deudores archivados)
+  const fromOrders=Object.entries(DB.orders)
+    .map(([k,v])=>({...v,_key:k,_src:'orders'}))
+    .filter(o=>o.status==='deudor');
+  const fromDeudoresDB=Object.entries(DB.deudoresDB||{})
+    .map(([k,v])=>({...v,_key:k,_src:'deudores'}))
+    .filter(o=>o.status==='deudor'&&!DB.orders[o._key]); // no duplicar si ya está en orders
+  const deudores=[...fromOrders,...fromDeudoresDB]
     .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
 
   const totalDeuda=deudores.reduce((s,o)=>s+(o.saldoPendiente!=null?o.saldoPendiente:(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)),0);
@@ -5981,6 +5992,7 @@ window.eliminarDeuda=async(keys)=>{
           overlay.remove();
           for(const key of keys){
             await remove(ref(db,`orders/${key}`));
+            await remove(ref(db,`deudores/${key}`));
           }
           render();
         } else {
@@ -6090,8 +6102,7 @@ window.agregarDeudaVieja=()=>{
     const pct=conDesc?Math.min(100,Math.max(1,Number(dvPct.value)||10)):0;
     const descuento=conDesc?Math.round(monto*(pct/100)):0;
     const saldoPendiente=monto-descuento;
-    const item={name:desc||'Deuda vieja',qty:1,price:monto,finalPrice:monto,excluded:[],selectedType:null};
-    await push(ref(db,'orders'),{
+    const deudaViejaData={
       tableId:'sinmesa',
       items:[item],
       status:'deudor',
@@ -6105,7 +6116,9 @@ window.agregarDeudaVieja=()=>{
       descuento,pct,
       manualEntry:true,
       _deudaVieja:true,
-    });
+    };
+    const dvRef=await push(ref(db,'orders'),deudaViejaData);
+    if(dvRef?.key)await set(ref(db,`deudores/${dvRef.key}`),deudaViejaData);
     overlay.remove();
     C.adminTab='deudores';
     render();
@@ -6168,7 +6181,11 @@ window.marcarDeudor=async key=>{
     cleanup();
     // El pedido pasa a status 'deudor' con nombre/apellido guardados en el mismo registro
     const saldoInicial=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-    await update(ref(db,`orders/${key}`),{status:'deudor',deudorNombre:nombre,deudorApellido:apellido,deudorRegistradoAt:Date.now(),saldoPendiente:saldoInicial});
+    const deudorData={status:'deudor',deudorNombre:nombre,deudorApellido:apellido,deudorRegistradoAt:Date.now(),saldoPendiente:saldoInicial};
+    await update(ref(db,`orders/${key}`),deudorData);
+    // También guardar en /deudores
+    const existingOrder=DB.orders[key];
+    if(existingOrder)await set(ref(db,`deudores/${key}`),{...existingOrder,...deudorData});
     if(DB.orders[key])DB.orders[key].saldoPendiente=saldoInicial;
     C.adminTab='deudores';render();
   };
@@ -6297,6 +6314,8 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
       if(esSaldado){
         for(const k of keys){
           await update(ref(db,`orders/${k}`),{status:'cobrado',paymentMethod:pmPrincipal,fromDeuda:true,cobradoAt:Date.now(),saldoPendiente:0});
+          // Si estaba en /deudores también actualizarlo
+          if(DB.deudoresDB?.[k])await update(ref(db,`deudores/${k}`),{status:'cobrado',paymentMethod:pmPrincipal,cobradoAt:Date.now(),saldoPendiente:0});
           if(DB.orders[k])DB.orders[k].saldoPendiente=0;
         }
       } else {
@@ -6316,6 +6335,8 @@ window.cobrarDeuda=async(keys,saldoMostrado)=>{
             primerOrder=false;
           }
           await update(ref(db,`orders/${k}`),updateData);
+          // Si estaba en /deudores también actualizarlo
+          if(DB.deudoresDB?.[k])await update(ref(db,`deudores/${k}`),updateData);
           if(DB.orders[k])DB.orders[k].saldoPendiente=nuevoSaldoK;
           restante-=abono;
         }
@@ -7538,6 +7559,15 @@ window.submitManualOrder=async(modo='pending')=>{
         personName:nombre,orderMode:'individual',
         deudorRegistradoAt:Date.now(),saldoPendiente,descuento,pct
       });
+      // También guardar en /deudores para que no se archive
+      if(newDeudorRef?.key){
+        await set(ref(db,`deudores/${newDeudorRef.key}`),{
+          ...orderBase,status:'deudor',
+          deudorNombre:nombre,deudorApellido:'',
+          personName:nombre,orderMode:'individual',
+          deudorRegistradoAt:Date.now(),saldoPendiente,descuento,pct
+        });
+      }
       if(creditoAplicado>0&&creditoCli){
         await update(ref(db,`clientes/${creditoCli.key}`),{credito:Math.max(0,creditoDisp-creditoAplicado)});
       }
@@ -7738,7 +7768,7 @@ window.submitKioskoOrder=async(modo)=>{
     const saldoInicial=ko.items.reduce((s,i)=>s+i.price*i.qty,0);
     const nombre=ko.personName.split(' ')[0]||ko.personName;
     const apellido=ko.personName.split(' ').slice(1).join(' ')||'';
-    await push(ref(db,'orders'),{
+    const kioskoDeudorData={
       tableId:'kiosko',items,status:'deudor',
       time:nowStr(),createdAt:Date.now(),
       orderMode:'individual',personName:ko.personName,
@@ -7746,7 +7776,9 @@ window.submitKioskoOrder=async(modo)=>{
       deudorRegistradoAt:Date.now(),
       saldoPendiente:saldoInicial,
       isKiosko:true
-    });
+    };
+    const kdRef=await push(ref(db,'orders'),kioskoDeudorData);
+    if(kdRef?.key)await set(ref(db,`deudores/${kdRef.key}`),kioskoDeudorData);
     C.kioskoOrder=null;C.kioskoSearch='';
     showNotif('order','Deuda Kiosko registrada',ko.personName);
     C.adminTab='deudores';
@@ -8080,12 +8112,16 @@ window.adminGroupDeudor=async(keys,saldoOverride)=>{
       const oSaldoBruto=Math.max(0,oTotal-oDesc);
       const proporcion=totalBase>0?oTotal/totalBase:1;
       const oSaldo=Math.max(0,Math.round(saldoPendiente*proporcion));
-      await update(ref(db,`orders/${k}`),{
+      const deudorUpdate={
         status:'deudor',deudorNombre:nombre,deudorApellido:'',
         deudorRegistradoAt:Date.now(),saldoPendiente:oSaldo,
         descuento:oDesc,pct,
         personName:nombre,orderMode:'individual'
-      });
+      };
+      await update(ref(db,`orders/${k}`),deudorUpdate);
+      // También guardar en /deudores
+      const oFull=DB.orders[k];
+      if(oFull)await set(ref(db,`deudores/${k}`),{...oFull,...deudorUpdate});
     }
     // Actualizar crédito del cliente
     if(creditoAplicado>0&&creditoCli){
@@ -9870,10 +9906,13 @@ async function limpiarAlertsViejas(){
 // ── ARCHIVADO AUTOMÁTICO DE PEDIDOS ──────────────
 // Mueve pedidos con más de 60 días a /archivo/YYYY-MM y los elimina de /orders
 async function archivarPedidosViejos(){
+  // v2-fix-deudores
   const DIAS=60;
   const limite=Date.now()-DIAS*24*60*60*1000;
   const viejos=Object.entries(DB.orders).filter(([,o])=>{
     const ts=o.createdAt||0;
+    // Nunca archivar deudores pendientes
+    if(o.status==='deudor'){console.log('⛔ Saltando deudor:',o.deudorNombre||o.personName);return false;}
     return ts>0&&ts<limite;
   });
   if(viejos.length===0)return;
