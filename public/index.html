@@ -6139,8 +6139,8 @@ window.imprimirDeuda=async(dIdx)=>{
   const keys=window._deudorKeys[dIdx];
   const saldo=window._deudorSaldos[dIdx];
   if(!keys||!keys.length)return;
-  // Armar orden sintética con todos los items
-  const orders=keys.map(k=>DB.orders[k]).filter(Boolean);
+  // Armar orden sintética con todos los items (buscar en orders y deudoresDB)
+  const orders=keys.map(k=>DB.orders[k]||DB.deudoresDB?.[k]).filter(Boolean);
   if(!orders.length)return;
   const first=orders[0];
   const nombre=(first.deudorNombre||'').trim();
