@@ -1326,6 +1326,8 @@ window.cajaCierre=async()=>{
     }
   }
   // 5. Acumular en resumen mensual para estadísticas
+  // Resetear contador de comandas
+  await set(ref(db,'config/ultimaComanda'),0);
   const mes=hoy.slice(0,7); // YYYY-MM
   const ventasDia=movs.filter(m=>m.tipo==='venta').reduce((s,m)=>s+Math.abs(m.monto||0),0);
   const gastosDia=movs.filter(m=>m.tipo==='gasto'||m.monto<0).reduce((s,m)=>s+Math.abs(m.monto||0),0);
@@ -6128,8 +6130,8 @@ window.agregarDeudaVieja=(nombreFijo='')=>{
       manualEntry:true,
       _deudaVieja:true,
     };
-    const dvRef=await push(ref(db,'orders'),deudaViejaData);
-    if(dvRef?.key)await set(ref(db,`deudores/${dvRef.key}`),deudaViejaData);
+    const dvRef=await push(ref(db,'deudores'),deudaViejaData);
+    // Ya no se guarda en /orders — solo en /deudores para evitar archivado
     overlay.remove();
     C.adminTab='deudores';
     render();
@@ -6192,7 +6194,7 @@ window.marcarDeudor=async key=>{
     cleanup();
     // El pedido pasa a status 'deudor' con nombre/apellido guardados en el mismo registro
     const saldoInicial=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0);
-    const deudorData={status:'deudor',deudorNombre:nombre,deudorApellido:apellido,deudorRegistradoAt:Date.now(),saldoPendiente:saldoInicial};
+    const deudorData={status:'deudor',deudorNombre:nombre,deudorApellido:apellido,deudorRegistradoAt:Date.now(),saldoPendiente:saldoInicial,_noArchivar:true};
     await update(ref(db,`orders/${key}`),deudorData);
     // También guardar en /deudores
     const existingOrder=DB.orders[key];
@@ -7568,7 +7570,7 @@ window.submitManualOrder=async(modo='pending')=>{
         ...orderBase,status:'deudor',
         deudorNombre:nombre,deudorApellido:'',
         personName:nombre,orderMode:'individual',
-        deudorRegistradoAt:Date.now(),saldoPendiente,descuento,pct
+        deudorRegistradoAt:Date.now(),saldoPendiente,descuento,pct,_noArchivar:true
       });
       // También guardar en /deudores para que no se archive
       if(newDeudorRef?.key){
@@ -7788,8 +7790,8 @@ window.submitKioskoOrder=async(modo)=>{
       saldoPendiente:saldoInicial,
       isKiosko:true
     };
-    const kdRef=await push(ref(db,'orders'),kioskoDeudorData);
-    if(kdRef?.key)await set(ref(db,`deudores/${kdRef.key}`),kioskoDeudorData);
+    const kdRef=await push(ref(db,'deudores'),kioskoDeudorData);
+    // Ya no se guarda en /orders
     C.kioskoOrder=null;C.kioskoSearch='';
     showNotif('order','Deuda Kiosko registrada',ko.personName);
     C.adminTab='deudores';
@@ -8127,7 +8129,7 @@ window.adminGroupDeudor=async(keys,saldoOverride)=>{
         status:'deudor',deudorNombre:nombre,deudorApellido:'',
         deudorRegistradoAt:Date.now(),saldoPendiente:oSaldo,
         descuento:oDesc,pct,
-        personName:nombre,orderMode:'individual'
+        personName:nombre,orderMode:'individual',_noArchivar:true
       };
       await update(ref(db,`orders/${k}`),deudorUpdate);
       // También guardar en /deudores
@@ -9922,8 +9924,8 @@ async function archivarPedidosViejos(){
   const limite=Date.now()-DIAS*24*60*60*1000;
   const viejos=Object.entries(DB.orders).filter(([,o])=>{
     const ts=o.createdAt||0;
-    // Nunca archivar deudores pendientes
-    if(o.status==='deudor')return false;
+    // Nunca archivar deudores pendientes ni orders marcados explícitamente
+    if(o.status==='deudor'||o._noArchivar)return false;
     return ts>0&&ts<limite;
   });
   if(viejos.length===0)return;
