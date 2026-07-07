@@ -2399,7 +2399,7 @@ window.waiterMarkCobradoGroup=async(keys)=>{
     ((o.deudorNombre||'').toLowerCase().trim()===personName.toLowerCase().trim()||
      (o.personName||'').toLowerCase().trim()===personName.toLowerCase().trim())
   ):[];
-  const deudaTotalW=calcDeudaPersona(personName);
+  const deudaTotalW=(()=>{const nom=(personName||"").toLowerCase().trim();return [...Object.values(DB.orders||{}),...Object.values(DB.deudoresDB||{})].filter(o=>o.status==="deudor"&&((o.deudorNombre||"").toLowerCase().trim()===nom||(o.personName||"").toLowerCase().trim()===nom)).reduce((s,o)=>s+(o.saldoPendiente!=null?Number(o.saldoPendiente):0),0);})();
 
   // Elección total / parcial
   const eleccion=await new Promise(res=>{
@@ -7446,7 +7446,7 @@ window.submitManualOrder=async(modo='pending')=>{
       ((o.deudorNombre||'').toLowerCase().trim()===personName.toLowerCase().trim()||
        (o.personName||'').toLowerCase().trim()===personName.toLowerCase().trim())
     ):[];
-    const deudaTotalMO=calcDeudaPersona(personName);
+    const deudaTotalMO=(()=>{const nom=(personName||"").toLowerCase().trim();return [...Object.values(DB.orders||{}),...Object.values(DB.deudoresDB||{})].filter(o=>o.status==="deudor"&&((o.deudorNombre||"").toLowerCase().trim()===nom||(o.personName||"").toLowerCase().trim()===nom)).reduce((s,o)=>s+(o.saldoPendiente!=null?Number(o.saldoPendiente):0),0);})();
     if(deudaTotalMO>0){
       const irDeudores=await new Promise(res=>{
         const ov=document.createElement('div');
@@ -7944,7 +7944,7 @@ window.adminGroupCobrado=async keys=>{
     ((o.deudorNombre||'').toLowerCase().trim()===personName3.toLowerCase().trim()||
      (o.personName||'').toLowerCase().trim()===personName3.toLowerCase().trim())
   ):[];
-  const deudaTotal=calcDeudaPersona(personName3);
+  const deudaTotal=(()=>{const nom=(personName3||"").toLowerCase().trim();return [...Object.values(DB.orders||{}),...Object.values(DB.deudoresDB||{})].filter(o=>o.status==="deudor"&&((o.deudorNombre||"").toLowerCase().trim()===nom||(o.personName||"").toLowerCase().trim()===nom)).reduce((s,o)=>s+(o.saldoPendiente!=null?Number(o.saldoPendiente):0),0);})();
 
   const eleccion=await new Promise(res=>{
     const ov=document.createElement('div');
