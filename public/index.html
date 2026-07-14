@@ -237,7 +237,7 @@
     @keyframes pulse-border{0%,100%{border-color:var(--border)}50%{border-color:var(--accent);box-shadow:0 0 0 3px rgba(233,69,96,0.15)}}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <div style="display:flex;flex-direction:column;min-height:100vh">
@@ -1284,7 +1284,7 @@ window.cajaDescargar=()=>{
   a.click();
   URL.revokeObjectURL(a.href);
 };
-function descargarDeudoresExcel(){
+window.descargarDeudoresExcel=function descargarDeudoresExcel(){
   // Combinar deudores de orders y deudoresDB
   const fromOrders=Object.values(DB.orders||{}).filter(o=>o.status==='deudor');
   const fromDeudoresDB=Object.values(DB.deudoresDB||{}).filter(o=>o.status==='deudor'&&!DB.orders[o._key]);
@@ -1319,7 +1319,8 @@ function descargarDeudoresExcel(){
   if(resumen.length===0)return;
 
   try{
-    const XLSX=window.XLSX||require('xlsx');
+    const XLSX=window.XLSX;
+    if(!XLSX){console.warn('SheetJS no disponible, saltando Excel deudores');return;}
     const wb=XLSX.utils.book_new();
 
     // Hoja resumen
@@ -1387,8 +1388,8 @@ window.cajaCierre=async()=>{
   if(!ok)return;
   // 3. Descargar CSV de caja
   cajaDescargarArchivo(movs);
-  // 3b. Descargar Excel de deudores
-  descargarDeudoresExcel();
+  // 3b. Descargar Excel de deudores (con pequeño delay para que XLSX esté disponible)
+  setTimeout(()=>descargarDeudoresExcel(),500);
   // 4. Guardar movimientos completos en historial (30 días)
   if(movs.length>0){
     const cierreTs=Date.now();
@@ -5626,8 +5627,10 @@ function renderDeudoresTab(){
   let h='<div style="max-width:720px">';
   h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">`;
   h+=`<div><div style="font-size:18px;font-weight:600">💳 Deudores</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${nDeudores} deudor${nDeudores!==1?'es':''} · <strong style="color:#dc2626">$${totalDeuda.toLocaleString()}</strong> total</div></div>`;
+  h+=`<div style="display:flex;gap:8px">`;
+  h+=`<button onclick="descargarDeudoresExcel()" style="padding:8px 14px;border-radius:8px;border:0.5px solid #059669;background:#f0fdf4;color:#065f46;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">📥 Descargar</button>`;
   h+=`<button onclick="agregarDeudaVieja()" style="padding:8px 14px;border-radius:8px;border:0.5px solid #dc2626;background:#fef2f2;color:#dc2626;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Deuda vieja</button>`;
-  h+=`</div>`;
+  h+=`</div></div>`;
 
   if(deudores.length===0){
     h+=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px"><div style="font-size:40px;margin-bottom:12px">✅</div><div style="font-size:16px;font-weight:500">Sin deudas pendientes</div></div>`;
