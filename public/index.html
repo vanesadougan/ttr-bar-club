@@ -1285,6 +1285,8 @@ window.cajaDescargar=()=>{
   URL.revokeObjectURL(a.href);
 };
 window.descargarDeudoresExcel=function(){
+  // Usar los saldos ya calculados por renderDeudoresTab (fuente de verdad)
+  const saldoMap=window._deudorSaldoByNombre||{};
   const fromOrders=Object.values(DB.orders||{}).filter(o=>o.status==='deudor');
   const fromDeudoresDB=Object.values(DB.deudoresDB||{}).filter(o=>o.status==='deudor'&&!DB.orders[o._key]);
   const todos=[...fromOrders,...fromDeudoresDB];
@@ -1294,11 +1296,20 @@ window.descargarDeudoresExcel=function(){
     if(!grupos[nombre])grupos[nombre]={nombre,orders:[]};
     grupos[nombre].orders.push(o);
   });
+
   const resumen=Object.values(grupos).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')).map(g=>{
+    const nom=g.nombre.toLowerCase().trim();
+    // Usar saldo de la pantalla si está disponible
+    const saldo=saldoMap[nom]!=null?saldoMap[nom]:(()=>{
+      const totalBruto=g.orders.reduce((s,o)=>s+Math.max(0,(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0)),0);
+      const pagadoParcial=(()=>{let suma=0;const seen=new Set();g.orders.forEach(o=>{const hp=o._historialPagos;if(!hp)return;(Array.isArray(hp)?hp:Object.values(hp)).forEach(p=>{const k=String(p.ts||Math.random());if(seen.has(k))return;seen.add(k);suma+=Number(p.monto||0);});});return suma;})();
+      return Math.max(0,totalBruto-pagadoParcial);
+    })();
     const totalBruto=g.orders.reduce((s,o)=>s+Math.max(0,(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0)),0);
     const pagadoParcial=(()=>{let suma=0;const seen=new Set();g.orders.forEach(o=>{const hp=o._historialPagos;if(!hp)return;(Array.isArray(hp)?hp:Object.values(hp)).forEach(p=>{const k=String(p.ts||Math.random());if(seen.has(k))return;seen.add(k);suma+=Number(p.monto||0);});});return suma;})();
-    return{nombre:g.nombre,totalDeuda:totalBruto,pagado:pagadoParcial,saldo:Math.max(0,totalBruto-pagadoParcial),orders:g.orders};
+    return{nombre:g.nombre,totalDeuda:totalBruto,pagado:pagadoParcial,saldo,orders:g.orders};
   }).filter(r=>r.saldo>0);
+
   if(resumen.length===0){alert('No hay deudores con saldo pendiente');return;}
   const rows=['\uFEFFNombre,Deuda Total,Ya Pagó,Saldo Pendiente'];
   resumen.forEach(r=>rows.push(`"${r.nombre}",${r.totalDeuda},${r.pagado},${r.saldo}`));
