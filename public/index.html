@@ -1284,90 +1284,43 @@ window.cajaDescargar=()=>{
   a.click();
   URL.revokeObjectURL(a.href);
 };
-window.descargarDeudoresExcel=function descargarDeudoresExcel(){
-  // Combinar deudores de orders y deudoresDB
+window.descargarDeudoresExcel=function(){
   const fromOrders=Object.values(DB.orders||{}).filter(o=>o.status==='deudor');
   const fromDeudoresDB=Object.values(DB.deudoresDB||{}).filter(o=>o.status==='deudor'&&!DB.orders[o._key]);
   const todos=[...fromOrders,...fromDeudoresDB];
-
-  // Agrupar por nombre
   const grupos={};
   todos.forEach(o=>{
     const nombre=(o.deudorNombre||o.personName||'Sin nombre').trim();
     if(!grupos[nombre])grupos[nombre]={nombre,orders:[]};
     grupos[nombre].orders.push(o);
   });
-
-  // Calcular saldo real de cada grupo
   const resumen=Object.values(grupos).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')).map(g=>{
-    const totalBruto=g.orders.reduce((s,o)=>{
-      const bruto=(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0);
-      return s+Math.max(0,bruto-(o.descuento||0));
-    },0);
-    const pagadoParcial=(()=>{
-      let suma=0;const seen=new Set();
-      g.orders.forEach(o=>{
-        const hp=o._historialPagos;if(!hp)return;
-        const pagos=Array.isArray(hp)?hp:Object.values(hp);
-        pagos.forEach(p=>{const k=String(p.ts||Math.random());if(seen.has(k))return;seen.add(k);suma+=Number(p.monto||0);});
-      });
-      return suma;
-    })();
-    return{nombre:g.nombre,totalDeuda:totalBruto,pagado:pagadoParcial,saldo:Math.max(0,totalBruto-pagadoParcial)};
+    const totalBruto=g.orders.reduce((s,o)=>s+Math.max(0,(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0)),0);
+    const pagadoParcial=(()=>{let suma=0;const seen=new Set();g.orders.forEach(o=>{const hp=o._historialPagos;if(!hp)return;(Array.isArray(hp)?hp:Object.values(hp)).forEach(p=>{const k=String(p.ts||Math.random());if(seen.has(k))return;seen.add(k);suma+=Number(p.monto||0);});});return suma;})();
+    return{nombre:g.nombre,totalDeuda:totalBruto,pagado:pagadoParcial,saldo:Math.max(0,totalBruto-pagadoParcial),orders:g.orders};
   }).filter(r=>r.saldo>0);
-
-  if(resumen.length===0)return;
-
-  try{
-    const XLSX=window.XLSX;
-    if(!XLSX){console.warn('SheetJS no disponible, saltando Excel deudores');return;}
-    const wb=XLSX.utils.book_new();
-
-    // Hoja resumen
-    const resumenData=[
-      ['Deudores al cierre - '+new Date().toLocaleDateString('es-AR')],
-      [],
-      ['Nombre','Deuda Total','Ya Pagó','Saldo Pendiente'],
-      ...resumen.map(r=>[r.nombre,r.totalDeuda,r.pagado,r.saldo]),
-      [],
-      ['TOTAL','','',resumen.reduce((s,r)=>s+r.saldo,0)]
-    ];
-    const ws=XLSX.utils.aoa_to_sheet(resumenData);
-    ws['!cols']=[{wch:30},{wch:15},{wch:15},{wch:18}];
-    XLSX.utils.book_append_sheet(wb,'Resumen',ws);
-
-    // Una hoja por deudor con detalle de pedidos
-    Object.values(grupos).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')).forEach(g=>{
-      const r=resumen.find(r=>r.nombre===g.nombre);
-      if(!r)return; // ya saldado
-      const rows=[
-        [`Deudor: ${g.nombre}`],
-        [`Saldo pendiente: $${r.saldo.toLocaleString()}`],
-        [],
-        ['Fecha','Mesa','Items','Total pedido','Estado']
-      ];
-      g.orders.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).forEach(o=>{
-        const fecha=o.createdAt?new Date(o.createdAt).toLocaleDateString('es-AR'):(o.time||'—');
-        const oTable=DB.tables?.[o.tableId];
-        const mesa=oTable?oTable.label:(o.tableId==='sinmesa'?'Sin Mesa':(o.tableId||'—'));
-        const items=(o.items||[]).map(i=>`${i.qty}× ${i.name}`).join(', ');
-        const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0);
-        const estado=o._pagadoTotal?'Pagado':(o.saldoPendiente===0?'Pagado':'Pendiente');
-        rows.push([fecha,mesa,items,total,estado]);
-      });
-      const nombre=g.nombre.replace(/[/\\?*[\]:]/g,'').slice(0,31);
-      const wsD=XLSX.utils.aoa_to_sheet(rows);
-      wsD['!cols']=[{wch:12},{wch:12},{wch:40},{wch:14},{wch:10}];
-      XLSX.utils.book_append_sheet(wb,nombre,wsD);
+  if(resumen.length===0){alert('No hay deudores con saldo pendiente');return;}
+  const rows=['\uFEFFNombre,Deuda Total,Ya Pagó,Saldo Pendiente'];
+  resumen.forEach(r=>rows.push(`"${r.nombre}",${r.totalDeuda},${r.pagado},${r.saldo}`));
+  rows.push('',`TOTAL,,,${resumen.reduce((s,r)=>s+r.saldo,0)}`,'','--- DETALLE POR DEUDOR ---');
+  resumen.forEach(r=>{
+    rows.push('',`"${r.nombre}" - Saldo $${r.saldo.toLocaleString()}`,'Fecha,Mesa,Items,Total,Estado');
+    r.orders.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).forEach(o=>{
+      const fecha=o.createdAt?new Date(o.createdAt).toLocaleDateString('es-AR'):(o.time||'—');
+      const oTable=DB.tables?.[o.tableId];
+      const mesa=oTable?oTable.label:(o.tableId==='sinmesa'?'Sin Mesa':(o.tableId||'—'));
+      const items=(o.items||[]).map(i=>`${i.qty}x ${i.name}`).join(' / ');
+      const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0);
+      rows.push(`"${fecha}","${mesa}","${items}",${total},"${o._pagadoTotal?'Pagado':'Pendiente'}"`);
     });
+  });
+  const blob=new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`deudores_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+};
 
-    const fecha=new Date().toISOString().slice(0,10);
-    XLSX.writeFile(wb,`deudores_${fecha}.xlsx`);
-    console.log('✅ Excel de deudores descargado');
-  }catch(e){
-    console.error('Error generando Excel deudores:',e.message);
-  }
-}
 
 window.cajaCierre=async()=>{
   // 1. Verificar pedidos sin cobrar (los deudores no bloquean el cierre)
