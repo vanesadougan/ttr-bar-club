@@ -1311,6 +1311,8 @@ window.descargarDeudoresExcel=function(){
   }).filter(r=>r.saldo>0);
 
   if(resumen.length===0){alert('No hay deudores con saldo pendiente');return;}
+  // Debug temporal
+  resumen.forEach(r=>console.log(r.nombre,'| pagado:',r.pagado,'| saldo:',r.saldo,'| orders:',r.orders.length));
   const rows=['\uFEFFNombre,Deuda Total,Ya Pagó,Saldo Pendiente'];
   resumen.forEach(r=>rows.push(`"${r.nombre}",${r.totalDeuda},${r.pagado},${r.saldo}`));
   rows.push('',`TOTAL,,,${resumen.reduce((s,r)=>s+r.saldo,0)}`,'','--- DETALLE POR DEUDOR ---','Nombre,Saldo Pendiente');
