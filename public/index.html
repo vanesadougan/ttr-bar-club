@@ -1287,8 +1287,8 @@ window.cajaDescargar=()=>{
 window.descargarDeudoresExcel=function(){
   // Usar los saldos ya calculados por renderDeudoresTab (fuente de verdad)
   const saldoMap=window._deudorSaldoByNombre||{};
-  const fromOrders=Object.values(DB.orders||{}).filter(o=>o.status==='deudor');
-  const fromDeudoresDB=Object.values(DB.deudoresDB||{}).filter(o=>o.status==='deudor'&&!DB.orders[o._key]);
+  const fromOrders=Object.entries(DB.orders||{}).map(([k,v])=>({...v,_key:k})).filter(o=>o.status==='deudor');
+  const fromDeudoresDB=Object.entries(DB.deudoresDB||{}).map(([k,v])=>({...v,_key:k})).filter(o=>o.status==='deudor'&&!DB.orders[o._key]);
   const todos=[...fromOrders,...fromDeudoresDB];
   const grupos={};
   todos.forEach(o=>{
