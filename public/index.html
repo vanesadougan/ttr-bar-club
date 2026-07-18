@@ -5644,9 +5644,6 @@ function renderDeudoresTab(){
     window._deudorSaldos[_dIdx]=saldoMostrar;
     if(!window._deudorSaldoByNombre)window._deudorSaldoByNombre={};
     window._deudorSaldoByNombre[g.nombre.toLowerCase().trim()]=saldoMostrar;
-    // Guardar también los estados de pedidos para el CSV
-    if(!window._deudorEstadosByNombre)window._deudorEstadosByNombre={};
-    window._deudorEstadosByNombre[g.nombre.toLowerCase().trim()]=ordersConEstado.map(o=>({_key:o._key,_estadoPago:o._estadoPago}));
 
     // Estado de visibilidad tachados
     const mostrarTachados=C._deudorMostrarTachados?.[g.nombre]===true;
@@ -5666,6 +5663,9 @@ function renderDeudoresTab(){
     })();
 
     const tachados=ordersConEstado.filter(o=>o._estadoPago==='pagado');
+    // Guardar estados para el CSV
+    if(!window._deudorEstadosByNombre)window._deudorEstadosByNombre={};
+    window._deudorEstadosByNombre[g.nombre.toLowerCase().trim()]=ordersConEstado.map(o=>({_key:o._key,_estadoPago:o._estadoPago}));
     const visibles=ordersConEstado.filter(o=>o._estadoPago!=='pagado'||(mostrarTachados));
     const mostrarEnLista=ordersConEstado.filter(o=>o._estadoPago!=='pagado'||(mostrarTachados));
     // Ordenar del más nuevo al más viejo para mostrar
