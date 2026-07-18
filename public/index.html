@@ -1317,9 +1317,17 @@ window.descargarDeudoresExcel=function(){
   resumen.forEach(r=>{
     rows.push('',`"${r.nombre}",${r.saldo}`,'Fecha,Mesa,Items,Total,Estado');
     const nom=r.nombre.toLowerCase().trim();
-    const estadosPantalla=window._deudorEstadosByNombre?.[nom]||[];
+    // Calcular estados usando la misma lógica que la pantalla - sobre TODOS los orders del grupo
+    const ordenPago=[...r.orders].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+    let restante=r.pagado;
     const estadosMap={};
-    estadosPantalla.forEach(e=>estadosMap[e._key]=e._estadoPago==='pagado'?'Pagado':e._estadoPago==='parcial'?'Parcial':'Pendiente');
+    ordenPago.forEach(o=>{
+      if(o._pagadoTotal){estadosMap[o._key]='Pagado';return;}
+      const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0);
+      if(restante>=total){restante-=total;estadosMap[o._key]='Pagado';}
+      else if(restante>0){restante=0;estadosMap[o._key]='Parcial';}
+      else{estadosMap[o._key]='Pendiente';}
+    });
     r.orders.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).forEach(o=>{
       const fecha=o.createdAt?new Date(o.createdAt).toLocaleDateString('es-AR'):(o.time||'—');
       const oTable=DB.tables?.[o.tableId];
@@ -5663,7 +5671,7 @@ function renderDeudoresTab(){
     })();
 
     const tachados=ordersConEstado.filter(o=>o._estadoPago==='pagado');
-    // Guardar estados para el CSV
+    // Guardar TODOS los estados (incluyendo tachados) para el CSV
     if(!window._deudorEstadosByNombre)window._deudorEstadosByNombre={};
     window._deudorEstadosByNombre[g.nombre.toLowerCase().trim()]=ordersConEstado.map(o=>({_key:o._key,_estadoPago:o._estadoPago}));
     const visibles=ordersConEstado.filter(o=>o._estadoPago!=='pagado'||(mostrarTachados));
