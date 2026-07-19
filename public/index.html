@@ -1328,21 +1328,21 @@ window.descargarPdfDeudor=function(dIdx){
 
   // Header
   doc.setFillColor(220,38,38);
-  doc.rect(0,0,W,22,'F');
-  // Logo
+  doc.rect(0,0,W,26,'F');
+  // Logo a la derecha
   try{
     const logoEl=document.querySelector('.logo img');
     if(logoEl&&logoEl.src){
-      doc.addImage(logoEl.src,'JPEG',W-30,2,18,18);
+      doc.addImage(logoEl.src,'JPEG',W-26,3,20,20);
     }
   }catch(e){}
   doc.setTextColor(255,255,255);
   doc.setFontSize(16);doc.setFont(undefined,'bold');
-  doc.text('TTR Bar Club',margin,10);
+  doc.text('TTR Bar Club',margin,11);
   doc.setFontSize(10);doc.setFont(undefined,'normal');
-  doc.text('Estado de cuenta',margin,16);
-  doc.text(new Date().toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}),W-margin,16,{align:'right'});
-  y=30;
+  doc.text('Estado de cuenta',margin,18);
+  doc.text(new Date().toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}),W-30,18,{align:'right'});
+  y=34;
 
   // Nombre y saldo
   doc.setTextColor(30,30,30);
