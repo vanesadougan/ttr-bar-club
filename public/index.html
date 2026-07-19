@@ -237,6 +237,8 @@
     @keyframes pulse-border{0%,100%{border-color:var(--border)}50%{border-color:var(--accent);box-shadow:0 0 0 3px rgba(233,69,96,0.15)}}
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 </head>
 <body>
 <div style="display:flex;flex-direction:column;min-height:100vh">
@@ -1284,6 +1286,196 @@ window.cajaDescargar=()=>{
   a.click();
   URL.revokeObjectURL(a.href);
 };
+window.descargarPdfDeudor=function(dIdx){
+  const jsPDF=window.jspdf?.jsPDF;
+  if(!jsPDF){alert('Error: librería PDF no disponible. Recargá la página.');return;}
+  const keys=window._deudorKeys[dIdx];
+  const saldo=window._deudorSaldos[dIdx];
+  if(!keys||!keys.length)return;
+
+  // Obtener todos los orders del deudor
+  const orders=keys.map(k=>DB.orders[k]||DB.deudoresDB?.[k]).filter(Boolean).map((o,i)=>({...o,_key:keys[i]}));
+  if(!orders.length)return;
+  const nombre=orders[0].deudorNombre||orders[0].personName||'Deudor';
+
+  // Calcular pagado desde historial
+  const pagadoParcial=(()=>{
+    let suma=0;const seen=new Set();
+    orders.forEach(o=>{
+      const hp=o._historialPagos;if(!hp)return;
+      (Array.isArray(hp)?hp:Object.values(hp)).forEach(p=>{
+        const k=String(p.ts||Math.random());if(seen.has(k))return;seen.add(k);suma+=Number(p.monto||0);
+      });
+    });
+    return suma;
+  })();
+
+  // Estados de cada pedido
+  const ordenPago=[...orders].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+  let restante=pagadoParcial;
+  const estadosMap={};
+  ordenPago.forEach(o=>{
+    if(o._pagadoTotal){estadosMap[o._key]='Pagado';return;}
+    const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0);
+    if(restante>=total){restante-=total;estadosMap[o._key]='Pagado';}
+    else if(restante>0){restante=0;estadosMap[o._key]='Parcial';}
+    else{estadosMap[o._key]='Pendiente';}
+  });
+
+  const doc=new jsPDF({unit:'mm',format:'a4'});
+  const W=210,margin=14;
+  let y=margin;
+
+  // Header
+  doc.setFillColor(220,38,38);
+  doc.rect(0,0,W,22,'F');
+  doc.setTextColor(255,255,255);
+  doc.setFontSize(16);doc.setFont(undefined,'bold');
+  doc.text('TTR Bar Club',margin,10);
+  doc.setFontSize(10);doc.setFont(undefined,'normal');
+  doc.text('Estado de cuenta',margin,16);
+  doc.text(new Date().toLocaleDateString('es-AR'),W-margin,16,{align:'right'});
+  y=30;
+
+  // Nombre y saldo
+  doc.setTextColor(30,30,30);
+  doc.setFontSize(14);doc.setFont(undefined,'bold');
+  doc.text(`Deudor: ${nombre}`,margin,y);y+=7;
+  doc.setFontSize(11);doc.setFont(undefined,'normal');
+  doc.setTextColor(220,38,38);
+  doc.text(`Saldo pendiente: $${saldo.toLocaleString('es-AR')}`,margin,y);
+  doc.setTextColor(5,150,105);
+  doc.text(`Ya pagó: $${pagadoParcial.toLocaleString('es-AR')}`,W-margin,y,{align:'right'});
+  y+=4;
+  doc.setDrawColor(200,200,200);doc.line(margin,y,W-margin,y);y+=6;
+
+  // Pedidos
+  doc.setFontSize(9);
+  const colFecha=margin,colMesa=44,colItems=66,colTotal=162,colEstado=182;
+  doc.setFillColor(245,245,245);
+  doc.rect(margin,y-4,W-margin*2,6,'F');
+  doc.setFont(undefined,'bold');doc.setTextColor(80,80,80);
+  doc.text('Fecha',colFecha,y);
+  doc.text('Mesa',colMesa,y);
+  doc.text('Items',colItems,y);
+  doc.text('Total',colTotal,y,{align:'right'});
+  doc.text('Estado',colEstado,y);
+  y+=5;doc.line(margin,y,W-margin,y);y+=4;
+  doc.setFont(undefined,'normal');
+
+  orders.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).forEach(o=>{
+    if(y>270){doc.addPage();y=margin;}
+    const fecha=o.createdAt?new Date(o.createdAt).toLocaleDateString('es-AR'):(o.time||'—');
+    const oTable=DB.tables?.[o.tableId];
+    const mesa=oTable?oTable.label:(o.tableId==='sinmesa'?'Sin Mesa':(o.tableId||'—'));
+    const items=(o.items||[]).map(i=>`${i.qty}x ${i.name}`).join(', ');
+    const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0);
+    const estado=estadosMap[o._key]||'Pendiente';
+    const isPagado=estado==='Pagado';
+
+    if(isPagado)doc.setTextColor(160,160,160);
+    else if(estado==='Pendiente')doc.setTextColor(220,38,38);
+    else doc.setTextColor(217,119,6);
+
+    const itemsText=doc.splitTextToSize(items,88);
+    doc.text(fecha,colFecha,y);
+    doc.text(mesa,colMesa,y);
+    doc.text(itemsText,colItems,y);
+    doc.text(`$${total.toLocaleString('es-AR')}`,colTotal,y,{align:'right'});
+    doc.text(estado,colEstado,y);
+    if(isPagado){
+      doc.setDrawColor(160,160,160);
+      doc.line(colFecha,y-1,colTotal+10,y-1);
+    }
+    y+=itemsText.length>1?itemsText.length*4+2:6;
+    doc.setTextColor(30,30,30);
+  });
+
+  // Pagos registrados
+  const allPagos=orders.flatMap(o=>{const hp=o._historialPagos;if(!hp)return[];return Array.isArray(hp)?hp:Object.values(hp);});
+  if(allPagos.length>0){
+    y+=4;
+    if(y>250){doc.addPage();y=margin;}
+    doc.setFillColor(240,249,255);doc.rect(margin,y-4,W-margin*2,8,'F');
+    doc.setFont(undefined,'bold');doc.setTextColor(3,105,161);doc.setFontSize(9);
+    doc.text('Pagos registrados',margin,y);y+=6;
+    doc.setFont(undefined,'normal');doc.setTextColor(30,30,30);
+    const pmL={efectivo:'Efectivo',debito:'Débito',credito:'Crédito',transferencia:'Transferencia',mercadopago:'Mercado Pago'};
+    const seen=new Set();
+    allPagos.filter(p=>{const k=String(p.ts||Math.random());if(seen.has(k))return false;seen.add(k);return true;})
+    .sort((a,b)=>(a.ts||0)-(b.ts||0)).forEach(p=>{
+      if(y>275){doc.addPage();y=margin;}
+      doc.text(`${p.fecha||''} · ${pmL[p.pm]||p.pm||''}`,margin,y);
+      doc.text(`$${Number(p.monto||0).toLocaleString('es-AR')}`,W-margin,y,{align:'right'});
+      y+=5;
+    });
+  }
+
+  doc.save(`deuda_${nombre.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.pdf`);
+};
+
+window.descargarDeudoresExcel=function(){
+  // Usar los saldos ya calculados por renderDeudoresTab (fuente de verdad)
+  const saldoMap=window._deudorSaldoByNombre||{};
+  const fromOrders=Object.entries(DB.orders||{}).map(([k,v])=>({...v,_key:k})).filter(o=>o.status==='deudor');
+  const fromDeudoresDB=Object.entries(DB.deudoresDB||{}).map(([k,v])=>({...v,_key:k})).filter(o=>o.status==='deudor'&&!DB.orders[o._key]);
+  const todos=[...fromOrders,...fromDeudoresDB];
+  const grupos={};
+  todos.forEach(o=>{
+    const nombre=(o.deudorNombre||o.personName||'Sin nombre').trim();
+    if(!grupos[nombre])grupos[nombre]={nombre,orders:[]};
+    grupos[nombre].orders.push(o);
+  });
+
+  const resumen=Object.values(grupos).sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')).map(g=>{
+    const nom=g.nombre.toLowerCase().trim();
+    // Usar saldo de la pantalla si está disponible
+    const saldo=saldoMap[nom]!=null?saldoMap[nom]:(()=>{
+      const totalBruto=g.orders.reduce((s,o)=>s+Math.max(0,(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0)),0);
+      const pagadoParcial=(()=>{let suma=0;const seen=new Set();g.orders.forEach(o=>{const hp=o._historialPagos;if(!hp)return;(Array.isArray(hp)?hp:Object.values(hp)).forEach(p=>{const k=String(p.ts||Math.random());if(seen.has(k))return;seen.add(k);suma+=Number(p.monto||0);});});return suma;})();
+      return Math.max(0,totalBruto-pagadoParcial);
+    })();
+    const totalBruto=g.orders.reduce((s,o)=>s+Math.max(0,(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0)),0);
+    const pagadoParcial=(()=>{let suma=0;const seen=new Set();g.orders.forEach(o=>{const hp=o._historialPagos;if(!hp)return;(Array.isArray(hp)?hp:Object.values(hp)).forEach(p=>{const k=String(p.ts||Math.random());if(seen.has(k))return;seen.add(k);suma+=Number(p.monto||0);});});return suma;})();
+    return{nombre:g.nombre,totalDeuda:totalBruto,pagado:pagadoParcial,saldo,orders:g.orders};
+  }).filter(r=>r.saldo>0);
+
+  if(resumen.length===0){alert('No hay deudores con saldo pendiente');return;}
+  const rows=['\uFEFFNombre,Deuda Total,Ya Pagó,Saldo Pendiente'];
+  resumen.forEach(r=>rows.push(`"${r.nombre}",${r.totalDeuda},${r.pagado},${r.saldo}`));
+  rows.push('',`TOTAL,,,${resumen.reduce((s,r)=>s+r.saldo,0)}`,'','--- DETALLE POR DEUDOR ---','Nombre,Saldo Pendiente');
+  resumen.forEach(r=>{
+    rows.push('',`"${r.nombre}",${r.saldo}`,'Fecha,Mesa,Items,Total,Estado');
+    const nom=r.nombre.toLowerCase().trim();
+    // Calcular estados usando la misma lógica que la pantalla - sobre TODOS los orders del grupo
+    const ordenPago=[...r.orders].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+    let restante=r.pagado;
+    const estadosMap={};
+    ordenPago.forEach(o=>{
+      if(o._pagadoTotal){estadosMap[o._key]='Pagado';return;}
+      const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0);
+      if(restante>=total){restante-=total;estadosMap[o._key]='Pagado';}
+      else if(restante>0){restante=0;estadosMap[o._key]='Parcial';}
+      else{estadosMap[o._key]='Pendiente';}
+    });
+    r.orders.sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).forEach(o=>{
+      const fecha=o.createdAt?new Date(o.createdAt).toLocaleDateString('es-AR'):(o.time||'—');
+      const oTable=DB.tables?.[o.tableId];
+      const mesa=oTable?oTable.label:(o.tableId==='sinmesa'?'Sin Mesa':(o.tableId||'—'));
+      const items=(o.items||[]).map(i=>`${i.qty}x ${i.name}`).join(' / ');
+      const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0);
+      const estado=estadosMap[o._key]||'Pendiente';
+      rows.push(`"${fecha}","${mesa}","${items}",${total},"${estado}"`);
+    });
+  });
+  const blob=new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`deudores_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+};
+
+
 window.cajaCierre=async()=>{
   // 1. Verificar pedidos sin cobrar (los deudores no bloquean el cierre)
   const hoy=new Date().toISOString().slice(0,10);
@@ -1301,8 +1493,10 @@ window.cajaCierre=async()=>{
   const saldo=movs.reduce((s,m)=>s+(m.monto||0),0);
   const ok=confirm(`¿Cerrar la caja del día?\n\nSaldo final: $${saldo.toLocaleString('es-AR')}\n\nSe descargará el resumen y se eliminarán los movimientos de la base de datos. Esta acción no se puede deshacer.`);
   if(!ok)return;
-  // 3. Descargar CSV
+  // 3. Descargar CSV de caja
   cajaDescargarArchivo(movs);
+  // 3b. Descargar Excel de deudores (con pequeño delay para que XLSX esté disponible)
+  setTimeout(()=>descargarDeudoresExcel(),500);
   // 4. Guardar movimientos completos en historial (30 días)
   if(movs.length>0){
     const cierreTs=Date.now();
@@ -5540,8 +5734,10 @@ function renderDeudoresTab(){
   let h='<div style="max-width:720px">';
   h+=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem">`;
   h+=`<div><div style="font-size:18px;font-weight:600">💳 Deudores</div><div style="font-size:13px;color:var(--muted);margin-top:2px">${nDeudores} deudor${nDeudores!==1?'es':''} · <strong style="color:#dc2626">$${totalDeuda.toLocaleString()}</strong> total</div></div>`;
+  h+=`<div style="display:flex;gap:8px">`;
+  h+=`<button onclick="descargarDeudoresExcel()" style="padding:8px 14px;border-radius:8px;border:0.5px solid #059669;background:#f0fdf4;color:#065f46;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">📥 Descargar</button>`;
   h+=`<button onclick="agregarDeudaVieja()" style="padding:8px 14px;border-radius:8px;border:0.5px solid #dc2626;background:#fef2f2;color:#dc2626;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">+ Deuda vieja</button>`;
-  h+=`</div>`;
+  h+=`</div></div>`;
 
   if(deudores.length===0){
     h+=`<div style="text-align:center;padding:3rem 1rem;color:var(--muted);border:1.5px dashed var(--border);border-radius:14px"><div style="font-size:40px;margin-bottom:12px">✅</div><div style="font-size:16px;font-weight:500">Sin deudas pendientes</div></div>`;
@@ -5605,6 +5801,9 @@ function renderDeudoresTab(){
     })();
 
     const tachados=ordersConEstado.filter(o=>o._estadoPago==='pagado');
+    // Guardar TODOS los estados (incluyendo tachados) para el CSV
+    if(!window._deudorEstadosByNombre)window._deudorEstadosByNombre={};
+    window._deudorEstadosByNombre[g.nombre.toLowerCase().trim()]=ordersConEstado.map(o=>({_key:o._key,_estadoPago:o._estadoPago}));
     const visibles=ordersConEstado.filter(o=>o._estadoPago!=='pagado'||(mostrarTachados));
     const mostrarEnLista=ordersConEstado.filter(o=>o._estadoPago!=='pagado'||(mostrarTachados));
     // Ordenar del más nuevo al más viejo para mostrar
@@ -5690,6 +5889,7 @@ function renderDeudoresTab(){
       h+=`<button onclick="cobrarDeuda(window._deudorKeys[${_dIdx}],window._deudorSaldos[${_dIdx}])" style="flex:1;min-width:120px;padding:10px;border-radius:8px;border:0.5px solid #d97706;background:#fffbeb;color:#92400e;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">$ Registrar pago</button>`;
       h+=`<button onclick="agregarDeudaViejaADeudor('${g.nombre.replace(/'/g,"\\'")}') " style="flex:1;min-width:100px;padding:10px;border-radius:8px;border:0.5px solid #6366f1;background:#eef2ff;color:#3730a3;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit">+ Deuda</button>`;
       h+=`<button onclick="imprimirDeuda(${_dIdx})" style="padding:10px 14px;border-radius:8px;border:0.5px solid var(--border);background:var(--bg);color:var(--muted);font-size:18px;cursor:pointer;font-family:inherit" title="Imprimir">🖨️</button>`;
+      h+=`<button onclick="descargarPdfDeudor(${_dIdx})" style="padding:10px 14px;border-radius:8px;border:0.5px solid #0ea5e9;background:#f0f9ff;color:#0369a1;font-size:18px;cursor:pointer;font-family:inherit" title="Descargar PDF">📄</button>`;
       h+=`<button onclick="eliminarDeuda(window._deudorKeys[${_dIdx}])" style="padding:10px 14px;border-radius:8px;border:0.5px solid #dc2626;background:#fef2f2;color:#dc2626;font-size:18px;cursor:pointer;font-family:inherit" title="Eliminar">🗑️</button>`;
       h+=`</div>`;
     }
