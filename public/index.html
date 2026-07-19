@@ -1383,17 +1383,18 @@ window.descargarPdfDeudor=function(dIdx){
     doc.text(itemsText,colItems,y);
     doc.text(`$${total.toLocaleString('es-AR')}`,colTotal,y,{align:'right'});
     doc.text(estado,colEstado,y);
+    const lineH=itemsText.length>1?itemsText.length*4+2:6;
     if(isPagado){
       doc.setDrawColor(160,160,160);
       doc.line(colFecha,y-1,colTotal+10,y-1);
     }
+    y+=lineH;
     if(o.descuento>0){
       doc.setTextColor(5,150,105);doc.setFontSize(8);
       doc.text(`Descuento ${o.pct||0}% -$${o.descuento.toLocaleString('es-AR')}`,colItems,y);
       doc.setFontSize(9);
       y+=4;
     }
-    y+=itemsText.length>1?itemsText.length*4+2:6;
     doc.setTextColor(30,30,30);
   });
 
