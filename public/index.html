@@ -1425,6 +1425,23 @@ window.descargarPdfDeudor=function(dIdx){
     });
   }
 
+  // Footer con info de pago
+  const footerY=doc.internal.pageSize.height-30;
+  doc.setDrawColor(220,38,38);
+  doc.line(margin,footerY-4,W-margin,footerY-4);
+  doc.setFontSize(9);doc.setFont(undefined,'normal');doc.setTextColor(60,60,60);
+  doc.text('Si querés realizar el pago por transferencia te dejamos las 2 cuentas vigentes:',margin,footerY);
+  doc.setFont(undefined,'bold');
+  doc.text('Emiliano1943',margin,footerY+5);
+  doc.setFont(undefined,'normal');doc.setTextColor(100,100,100);
+  doc.text('(Naranja X)',margin+22,footerY+5);
+  doc.setFont(undefined,'bold');doc.setTextColor(60,60,60);
+  doc.text('Emiliano1941',margin+65,footerY+5);
+  doc.setFont(undefined,'normal');doc.setTextColor(100,100,100);
+  doc.text('(Mercado Pago)',margin+87,footerY+5);
+  doc.setFont(undefined,'normal');doc.setTextColor(220,38,38);
+  doc.text('No te olvides de enviarnos el comprobante por WhatsApp.',margin,footerY+11);
+
   doc.save(`deuda_${nombre.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.pdf`);
 };
 
@@ -6393,13 +6410,44 @@ window.imprimirDeuda=async(dIdx)=>{
   // Armar orden sintética con todos los items (buscar en orders y deudoresDB)
   const orders=keys.map(k=>DB.orders[k]||DB.deudoresDB?.[k]).filter(Boolean);
   if(!orders.length)return;
-  const first=orders[0];
+
+  // Calcular estados de cada pedido para excluir los pagados
+  const pagadoParcial=(()=>{
+    let suma=0;const seen=new Set();
+    orders.forEach(o=>{
+      const hp=o._historialPagos;if(!hp)return;
+      (Array.isArray(hp)?hp:Object.values(hp)).forEach(p=>{
+        const k=String(p.ts||Math.random());if(seen.has(k))return;seen.add(k);suma+=Number(p.monto||0);
+      });
+    });
+    return suma;
+  })();
+  const ordenPago=[...orders].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+  let restante=pagadoParcial;
+  const estadosMap={};
+  ordenPago.forEach(o=>{
+    if(o._pagadoTotal){estadosMap[o._key||keys[orders.indexOf(o)]]='pagado';return;}
+    const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0);
+    const k=o._key||keys[orders.indexOf(o)];
+    if(restante>=total){restante-=total;estadosMap[k]='pagado';}
+    else if(restante>0){restante=0;estadosMap[k]='parcial';}
+    else{estadosMap[k]='pendiente';}
+  });
+
+  // Solo imprimir orders NO pagados
+  const ordersPendientes=orders.filter(o=>{
+    const k=o._key||keys[orders.indexOf(o)];
+    return estadosMap[k]!=='pagado';
+  });
+  if(!ordersPendientes.length){alert('No hay deudas pendientes para imprimir.');return;}
+
+  const first=ordersPendientes[0];
   const nombre=(first.deudorNombre||'').trim();
   const table=DB.tables[first.tableId];
   const tLabel=table?table.label:(first.tableId==='sinmesa'?'Sin Mesa':(first.tableId||'Mesa'));
-  // Agrupar todos los items
+  // Agrupar todos los items de orders pendientes/parciales
   const itemMap={};
-  orders.forEach(o=>{
+  ordersPendientes.forEach(o=>{
     (o.items||[]).forEach(i=>{
       const k=i.name+(i.selectedType?'|'+i.selectedType:'');
       if(!itemMap[k])itemMap[k]={name:i.name,selectedType:i.selectedType||null,price:i.finalPrice||i.price,qty:0};
