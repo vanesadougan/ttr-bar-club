@@ -1344,6 +1344,25 @@ window.descargarPdfDeudor=function(dIdx){
   doc.text(new Date().toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}),W-30,18,{align:'right'});
   y=34;
 
+  // Info de pago arriba
+  doc.setFillColor(255,248,240);
+  doc.rect(margin,y-3,W-margin*2,20,'F');
+  doc.setDrawColor(220,38,38);
+  doc.rect(margin,y-3,W-margin*2,20,'S');
+  doc.setFontSize(9);doc.setFont(undefined,'normal');doc.setTextColor(60,60,60);
+  doc.text('Si querés realizar el pago por transferencia te dejamos las 2 cuentas vigentes:',margin+3,y+2);
+  doc.setFont(undefined,'bold');doc.setTextColor(30,30,30);
+  doc.text('Emiliano1943',margin+3,y+8);
+  doc.setFont(undefined,'normal');doc.setTextColor(100,100,100);
+  doc.text('(Naranja X)',margin+25,y+8);
+  doc.setFont(undefined,'bold');doc.setTextColor(30,30,30);
+  doc.text('Emiliano1941',margin+68,y+8);
+  doc.setFont(undefined,'normal');doc.setTextColor(100,100,100);
+  doc.text('(Mercado Pago)',margin+90,y+8);
+  doc.setFont(undefined,'bold');doc.setTextColor(220,38,38);
+  doc.text('No te olvides de enviarnos el comprobante por WhatsApp.',margin+3,y+14);
+  y+=24;
+
   // Nombre y saldo
   doc.setTextColor(30,30,30);
   doc.setFontSize(14);doc.setFont(undefined,'bold');
@@ -1424,23 +1443,6 @@ window.descargarPdfDeudor=function(dIdx){
       y+=5;
     });
   }
-
-  // Footer con info de pago
-  const footerY=doc.internal.pageSize.height-30;
-  doc.setDrawColor(220,38,38);
-  doc.line(margin,footerY-4,W-margin,footerY-4);
-  doc.setFontSize(9);doc.setFont(undefined,'normal');doc.setTextColor(60,60,60);
-  doc.text('Si querés realizar el pago por transferencia te dejamos las 2 cuentas vigentes:',margin,footerY);
-  doc.setFont(undefined,'bold');
-  doc.text('Emiliano1943',margin,footerY+5);
-  doc.setFont(undefined,'normal');doc.setTextColor(100,100,100);
-  doc.text('(Naranja X)',margin+22,footerY+5);
-  doc.setFont(undefined,'bold');doc.setTextColor(60,60,60);
-  doc.text('Emiliano1941',margin+65,footerY+5);
-  doc.setFont(undefined,'normal');doc.setTextColor(100,100,100);
-  doc.text('(Mercado Pago)',margin+87,footerY+5);
-  doc.setFont(undefined,'normal');doc.setTextColor(220,38,38);
-  doc.text('No te olvides de enviarnos el comprobante por WhatsApp.',margin,footerY+11);
 
   doc.save(`deuda_${nombre.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.pdf`);
 };
