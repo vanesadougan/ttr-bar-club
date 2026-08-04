@@ -5830,9 +5830,9 @@ function renderDeudoresTab(){
     })();
 
     const totalOriginal=g.orders.reduce((s,o)=>{
+      if(o._pagadoTotal&&Number(o.saldoPendiente||0)===0)return s;
       const bruto=(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0);
-      const desc=o.descuento||0;
-      return s+Math.max(0,bruto-desc);
+      return s+Math.max(0,bruto-(o.descuento||0));
     },0);
     const saldoMostrar=Math.max(0,totalOriginal-pagadoParcial);
     window._deudorSaldos[_dIdx]=saldoMostrar;
