@@ -5829,14 +5829,18 @@ function renderDeudoresTab(){
     })();
 
     const totalOriginal=g.orders.reduce((s,o)=>{
-      // Excluir orders ya completamente pagados (tienen _pagadoTotal y saldoPendiente=0)
-      if(o._pagadoTotal&&Number(o.saldoPendiente||0)===0)return s;
       const bruto=(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0);
-      const desc=o.descuento||0;
-      return s+Math.max(0,bruto-desc);
+      return s+Math.max(0,bruto-(o.descuento||0));
     },0);
-    // Para orders sin historial pero con pago parcial, usar saldoPendiente
-    const saldoMostrar=Math.max(0,totalOriginal-pagadoParcial);
+
+    // saldoPendiente de Firebase es la fuente más confiable — se actualiza en cada cobro
+    const saldoFirebase=g.orders.reduce((s,o)=>{
+      if(o._pagadoTotal)return s;
+      return s+(o.saldoPendiente!=null?Number(o.saldoPendiente):(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0));
+    },0);
+    // Usar el mínimo entre historial y saldoFirebase para mayor precisión
+    const saldoCalculado=Math.max(0,totalOriginal-pagadoParcial);
+    const saldoMostrar=saldoFirebase>0?Math.min(saldoCalculado,saldoFirebase):saldoCalculado;
     window._deudorSaldos[_dIdx]=saldoMostrar;
     if(!window._deudorSaldoByNombre)window._deudorSaldoByNombre={};
     window._deudorSaldoByNombre[g.nombre.toLowerCase().trim()]=saldoMostrar;
