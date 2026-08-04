@@ -5817,27 +5817,25 @@ function renderDeudoresTab(){
     const pagadoParcial=(()=>{
       let suma=0;const seen=new Set();
       g.orders.forEach(o=>{
-        const hp=o._historialPagos;
-        if(hp){
-          const pagos=Array.isArray(hp)?hp:Object.values(hp);
-          pagos.forEach(p=>{
-            const k=String(p.ts||p.fecha||Math.random());
-            if(seen.has(k))return;seen.add(k);
-            suma+=Number(p.monto||0);
-          });
-        } else {
-          // Sin historial nuevo: usar _yaPago (campo viejo)
-          suma+=Number(o._yaPago||0);
-        }
+        const hp=o._historialPagos;if(!hp)return;
+        const pagos=Array.isArray(hp)?hp:Object.values(hp);
+        pagos.forEach(p=>{
+          const k=String(p.ts||p.fecha||Math.random());
+          if(seen.has(k))return;seen.add(k);
+          suma+=Number(p.monto||0);
+        });
       });
       return suma;
     })();
 
     const totalOriginal=g.orders.reduce((s,o)=>{
+      // Excluir orders ya completamente pagados (tienen _pagadoTotal y saldoPendiente=0)
+      if(o._pagadoTotal&&Number(o.saldoPendiente||0)===0)return s;
       const bruto=(o.items||[]).reduce((si,i)=>si+(i.finalPrice||i.price)*i.qty,0);
       const desc=o.descuento||0;
       return s+Math.max(0,bruto-desc);
     },0);
+    // Para orders sin historial pero con pago parcial, usar saldoPendiente
     const saldoMostrar=Math.max(0,totalOriginal-pagadoParcial);
     window._deudorSaldos[_dIdx]=saldoMostrar;
     if(!window._deudorSaldoByNombre)window._deudorSaldoByNombre={};
