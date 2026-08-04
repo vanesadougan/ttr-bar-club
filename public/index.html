@@ -5816,20 +5816,27 @@ function renderDeudoresTab(){
     // Calcular totales reales desde historial de pagos
     const pagadoParcial=(()=>{
       let suma=0;const seen=new Set();
+      let tienePagosNuevos=false;
       g.orders.forEach(o=>{
         const hp=o._historialPagos;
         if(hp){
+          tienePagosNuevos=true;
           const pagos=Array.isArray(hp)?hp:Object.values(hp);
           pagos.forEach(p=>{
             const k=String(p.ts||p.fecha||Math.random());
             if(seen.has(k))return;seen.add(k);
             suma+=Number(p.monto||0);
           });
-        } else if(o._yaPago){
-          // Fallback para pagos registrados antes del historial
-          suma+=Number(o._yaPago||0);
         }
       });
+      // Si no hay historial nuevo, calcular pagado desde saldoPendiente
+      if(!tienePagosNuevos){
+        g.orders.forEach(o=>{
+          const bruto=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0);
+          const saldo=o.saldoPendiente!=null?Number(o.saldoPendiente):bruto;
+          suma+=Math.max(0,bruto-saldo);
+        });
+      }
       return suma;
     })();
 
