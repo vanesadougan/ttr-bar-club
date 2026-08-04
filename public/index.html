@@ -1327,14 +1327,40 @@ window.descargarPdfDeudor=function(dIdx){
 
   // Header
   doc.setFillColor(220,38,38);
-  doc.rect(0,0,W,22,'F');
+  doc.rect(0,0,W,26,'F');
+  // Logo a la derecha
+  try{
+    const logoEl=document.querySelector('.logo img');
+    if(logoEl&&logoEl.src){
+      doc.addImage(logoEl.src,'JPEG',W-26,3,20,20);
+    }
+  }catch(e){}
   doc.setTextColor(255,255,255);
   doc.setFontSize(16);doc.setFont(undefined,'bold');
-  doc.text('TTR Bar Club',margin,10);
+  doc.text('TTR Bar Club',margin,11);
   doc.setFontSize(10);doc.setFont(undefined,'normal');
-  doc.text('Estado de cuenta',margin,16);
-  doc.text(new Date().toLocaleDateString('es-AR'),W-margin,16,{align:'right'});
-  y=30;
+  doc.text('Estado de cuenta',margin,18);
+  doc.text(new Date().toLocaleString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}),W-30,18,{align:'right'});
+  y=34;
+
+  // Info de pago arriba
+  doc.setFillColor(255,248,240);
+  doc.rect(margin,y-3,W-margin*2,20,'F');
+  doc.setDrawColor(220,38,38);
+  doc.rect(margin,y-3,W-margin*2,20,'S');
+  doc.setFontSize(9);doc.setFont(undefined,'normal');doc.setTextColor(60,60,60);
+  doc.text('Si querés realizar el pago por transferencia te dejamos las 2 cuentas vigentes:',margin+3,y+2);
+  doc.setFont(undefined,'bold');doc.setTextColor(30,30,30);
+  doc.text('Emiliano1943',margin+3,y+8);
+  doc.setFont(undefined,'normal');doc.setTextColor(100,100,100);
+  doc.text('(Naranja X)',margin+25,y+8);
+  doc.setFont(undefined,'bold');doc.setTextColor(30,30,30);
+  doc.text('Emiliano1941',margin+68,y+8);
+  doc.setFont(undefined,'normal');doc.setTextColor(100,100,100);
+  doc.text('(Mercado Pago)',margin+90,y+8);
+  doc.setFont(undefined,'bold');doc.setTextColor(220,38,38);
+  doc.text('No te olvides de enviarnos el comprobante por WhatsApp.',margin+3,y+14);
+  y+=24;
 
   // Nombre y saldo
   doc.setTextColor(30,30,30);
@@ -1382,11 +1408,18 @@ window.descargarPdfDeudor=function(dIdx){
     doc.text(itemsText,colItems,y);
     doc.text(`$${total.toLocaleString('es-AR')}`,colTotal,y,{align:'right'});
     doc.text(estado,colEstado,y);
+    const lineH=itemsText.length>1?itemsText.length*4+2:6;
     if(isPagado){
       doc.setDrawColor(160,160,160);
       doc.line(colFecha,y-1,colTotal+10,y-1);
     }
-    y+=itemsText.length>1?itemsText.length*4+2:6;
+    y+=lineH;
+    if(o.descuento>0){
+      doc.setTextColor(5,150,105);doc.setFontSize(8);
+      doc.text(`Descuento ${o.pct||0}% -$${o.descuento.toLocaleString('es-AR')}`,colItems,y);
+      doc.setFontSize(9);
+      y+=4;
+    }
     doc.setTextColor(30,30,30);
   });
 
@@ -1411,6 +1444,22 @@ window.descargarPdfDeudor=function(dIdx){
   }
 
   doc.save(`deuda_${nombre.replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.pdf`);
+};
+
+window.descargarVentasCSV=function(){
+  const foods=window._lastCountsFoods||{};
+  const drinks=window._lastCountsDrinks||{};
+  if(!Object.keys(foods).length&&!Object.keys(drinks).length){alert('Sin datos de ventas');return;}
+
+  const rows=['\uFEFFProducto,Tipo,Cantidad vendida (30 días)'];
+  Object.entries(foods).sort((a,b)=>b[1]-a[1]).forEach(([n,q])=>rows.push(`"${n}","Plato",${q}`));
+  Object.entries(drinks).sort((a,b)=>b[1]-a[1]).forEach(([n,q])=>rows.push(`"${n}","Bebida",${q}`));
+
+  const blob=new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`ventas_30dias_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
 };
 
 window.descargarDeudoresExcel=function(){
@@ -5014,7 +5063,14 @@ function renderTop5Platos(){
   const top3drinks=Object.entries(countsDrinks).sort((a,b)=>b[1]-a[1]).slice(0,3);
   const medals=['🥇','🥈','🥉','4°','5°'];
 
+  // Guardar los conteos para la descarga
+  window._lastCountsFoods=countsFoods;
+  window._lastCountsDrinks=countsDrinks;
+
   let h='';
+  h+=`<div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+    <button onclick="descargarVentasCSV()" style="padding:8px 14px;border-radius:8px;border:0.5px solid #059669;background:#f0fdf4;color:#065f46;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">📥 Descargar ventas 30 días</button>
+  </div>`;
 
   // Top 5 platos
   if(top5.length){
@@ -5761,13 +5817,18 @@ function renderDeudoresTab(){
     const pagadoParcial=(()=>{
       let suma=0;const seen=new Set();
       g.orders.forEach(o=>{
-        const hp=o._historialPagos;if(!hp)return;
-        const pagos=Array.isArray(hp)?hp:Object.values(hp);
-        pagos.forEach(p=>{
-          const k=String(p.ts||p.fecha||Math.random());
-          if(seen.has(k))return;seen.add(k);
-          suma+=Number(p.monto||0);
-        });
+        const hp=o._historialPagos;
+        if(hp){
+          const pagos=Array.isArray(hp)?hp:Object.values(hp);
+          pagos.forEach(p=>{
+            const k=String(p.ts||p.fecha||Math.random());
+            if(seen.has(k))return;seen.add(k);
+            suma+=Number(p.monto||0);
+          });
+        } else if(o._yaPago){
+          // Fallback para pagos registrados antes del historial
+          suma+=Number(o._yaPago||0);
+        }
       });
       return suma;
     })();
@@ -6378,13 +6439,44 @@ window.imprimirDeuda=async(dIdx)=>{
   // Armar orden sintética con todos los items (buscar en orders y deudoresDB)
   const orders=keys.map(k=>DB.orders[k]||DB.deudoresDB?.[k]).filter(Boolean);
   if(!orders.length)return;
-  const first=orders[0];
+
+  // Calcular estados de cada pedido para excluir los pagados
+  const pagadoParcial=(()=>{
+    let suma=0;const seen=new Set();
+    orders.forEach(o=>{
+      const hp=o._historialPagos;if(!hp)return;
+      (Array.isArray(hp)?hp:Object.values(hp)).forEach(p=>{
+        const k=String(p.ts||Math.random());if(seen.has(k))return;seen.add(k);suma+=Number(p.monto||0);
+      });
+    });
+    return suma;
+  })();
+  const ordenPago=[...orders].sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
+  let restante=pagadoParcial;
+  const estadosMap={};
+  ordenPago.forEach(o=>{
+    if(o._pagadoTotal){estadosMap[o._key||keys[orders.indexOf(o)]]='pagado';return;}
+    const total=(o.items||[]).reduce((s,i)=>s+(i.finalPrice||i.price)*i.qty,0)-(o.descuento||0);
+    const k=o._key||keys[orders.indexOf(o)];
+    if(restante>=total){restante-=total;estadosMap[k]='pagado';}
+    else if(restante>0){restante=0;estadosMap[k]='parcial';}
+    else{estadosMap[k]='pendiente';}
+  });
+
+  // Solo imprimir orders NO pagados
+  const ordersPendientes=orders.filter(o=>{
+    const k=o._key||keys[orders.indexOf(o)];
+    return estadosMap[k]!=='pagado';
+  });
+  if(!ordersPendientes.length){alert('No hay deudas pendientes para imprimir.');return;}
+
+  const first=ordersPendientes[0];
   const nombre=(first.deudorNombre||'').trim();
   const table=DB.tables[first.tableId];
   const tLabel=table?table.label:(first.tableId==='sinmesa'?'Sin Mesa':(first.tableId||'Mesa'));
-  // Agrupar todos los items
+  // Agrupar todos los items de orders pendientes/parciales
   const itemMap={};
-  orders.forEach(o=>{
+  ordersPendientes.forEach(o=>{
     (o.items||[]).forEach(i=>{
       const k=i.name+(i.selectedType?'|'+i.selectedType:'');
       if(!itemMap[k])itemMap[k]={name:i.name,selectedType:i.selectedType||null,price:i.finalPrice||i.price,qty:0};
